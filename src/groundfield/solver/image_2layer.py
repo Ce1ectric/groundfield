@@ -86,6 +86,7 @@ from groundfield.solver._kernels import (
 )
 from groundfield.solver._line_kernel import (
     LineSegments,
+    SparseCorrection,
     _point_values,
     galerkin_pairs,
     near_pairs,
@@ -184,7 +185,7 @@ class _TwoLayerKernel:
     @property
     def materialised(self) -> bool:
         """Whether repeated calls reuse stored matrices."""
-        return bool(self._cross_cache) or self.in_layer.materialised
+        return "phi_hom_matrix" in self._cross_cache or self.in_layer.materialised
 
     @property
     def assemblies(self) -> int:
@@ -196,6 +197,14 @@ class _TwoLayerKernel:
     ) -> np.ndarray:
         """Reaction matrix in Ω, bit-identical to v0.15.0's ``kernel(eye)``."""
         if self._cross_layer(seg_points):
+            if not self.in_layer.fits(seg_points.shape[0]):
+                # Beyond the matrix budget nothing is kept (10.56): the two
+                # matrices are summed in place and returned.
+                phi_hom_matrix, delta_Z = _CrossLayerParts(
+                    seg_points, seg_lengths, wire_radii, soil=self.soil, line=self.line
+                ).matrices()
+                phi_hom_matrix += delta_Z
+                return phi_hom_matrix
             phi_hom_matrix, delta_Z = _layered_green_matrices(
                 seg_points,
                 seg_lengths,
@@ -215,16 +224,41 @@ class _TwoLayerKernel:
         currents: np.ndarray,
     ) -> np.ndarray:
         if self._cross_layer(seg_points):
-            return _layered_green_kernel(
-                seg_points,
-                seg_lengths,
-                wire_radii,
-                currents,
-                soil=self.soil,
-                cache=self._cross_cache,
-                line=self.line,
+            if self.in_layer.fits(seg_points.shape[0]):
+                return _layered_green_kernel(
+                    seg_points,
+                    seg_lengths,
+                    wire_radii,
+                    currents,
+                    soil=self.soil,
+                    cache=self._cross_cache,
+                    line=self.line,
+                )
+            # Beyond the matrix budget (16 N² bytes, as the series path):
+            # row blocks with O(N · block) memory (10.56).
+            parts = self._cross_parts(seg_points, seg_lengths, wire_radii)
+            self._cross_cache["assemblies"] = (
+                int(self._cross_cache.get("assemblies", 0)) + 1
             )
+            return parts.product(currents)
         return self.in_layer(seg_points, seg_lengths, wire_radii, currents)
+
+    def _cross_parts(
+        self, seg_points: np.ndarray, seg_lengths: np.ndarray, wire_radii: np.ndarray
+    ) -> _CrossLayerParts:
+        """The cross-layer pieces of this geometry (kept across calls)."""
+        key = (
+            seg_points.shape[0],
+            hash(seg_points.tobytes()),
+            hash(seg_lengths.tobytes()),
+            self.line is not None,
+        )
+        if self._cross_cache.get("parts_key") != key:
+            self._cross_cache["parts"] = _CrossLayerParts(
+                seg_points, seg_lengths, wire_radii, soil=self.soil, line=self.line
+            )
+            self._cross_cache["parts_key"] = key
+        return self._cross_cache["parts"]
 
 
 def _two_layer_self_kernel_factory(
@@ -319,27 +353,7 @@ def _layered_green_matrices(
     this path is only invoked when at least one segment crosses the
     interface.
     """
-    from groundfield.coupling.layered_green import (
-        two_layer_layered_correction_real_space,
-    )
-
-    rho_1 = soil.rho_1
-    rho_2 = soil.rho_2
-    h_1 = soil.h_1
-
     n = seg_points.shape[0]
-    # ADR-0007 Phase A.1: per-segment baseline rho. Each source
-    # segment j gets its layer-local rho as the homogeneous-soil
-    # baseline; the layered correction is then the *smooth*
-    # deviation from that baseline (no residual 1/r divergence
-    # from a rho mismatch). For pure-upper-layer worlds this
-    # collapses to the historic rho_1 baseline.
-    rho_per_segment = np.where(
-        seg_points[:, 2] < h_1,
-        rho_1,
-        rho_2,
-    )
-
     # Both matrices below are independent of ``currents`` — reuse
     # them across the per-excitation / per-frequency kernel calls of
     # one solve (keyed by the geometry buffer).
@@ -354,137 +368,315 @@ def _layered_green_matrices(
         if cache.get("key") == cache_key:
             return cache["phi_hom_matrix"], cache["delta_Z"]
 
-    # Step 1: build phi_hom matrix that uses rho_at_source(j) for
-    # each column (source segment). This generalises
-    # _self_corrected_kernel: the diagonal still uses the line-
-    # self formula with rho_local(i), and off-diagonal entries use
-    # the point-source 1/r + 1/r_image formula with rho_local(j).
-    phi_hom_matrix = _build_phi_hom_per_source_rho(
-        seg_points,
-        seg_lengths,
-        wire_radii,
-        rho_per_segment,
-        line=line,
-        transmitted_rho=2.0 * rho_1 * rho_2 / (rho_1 + rho_2),
-        lower=seg_points[:, 2] >= h_1,
-    )
-
-    # Step 2: layered correction. The baseline rho per source is
-    # rho_at_source(j). For the diagonal (i = j) we still need to
-    # handle the residual line-self peak by 3×3 Gauss-Legendre
-    # averaging along the segment axis — this is small but
-    # important for short segments in highly contrasting soils.
-    #
-    # Off-diagonal assembly is grouped by the (z_i, z_j, baseline)
-    # combination and evaluated with ONE spectral-amplitude solve per
-    # group (audit 2026-07-08, WP-D performance note): the historic
-    # per-entry scalar quadrature made the cross-layer reaction
-    # matrix O(n²) BVP solves, which dominated multi-electrode
-    # cross-layer worlds after the WP-B1 oscillation-resolved grids.
-    from groundfield.coupling.layered_green import (
-        two_layer_layered_correction_group,
-    )
-
-    delta_Z = np.zeros((n, n), dtype=float)
-    z_keys = np.round(seg_points[:, 2] / 1e-9).astype(np.int64)
-    for zi_key in np.unique(z_keys):
-        rows = np.where(z_keys == zi_key)[0]
-        z_i = float(seg_points[rows[0], 2])
-        for zj_key in np.unique(z_keys):
-            cols = np.where(z_keys == zj_key)[0]
-            z_j = float(seg_points[cols[0], 2])
-            rho_baseline_j = float(rho_per_segment[cols[0]])
-            # Horizontal distances component-wise (10.56): bit-identical
-            # to the former (rows, cols, 2) difference tensor and
-            # ``einsum``, two instead of four ``rows × cols`` arrays.
-            s_grid = np.subtract.outer(seg_points[rows, 0], seg_points[cols, 0])
-            s_grid *= s_grid
-            dy2 = np.subtract.outer(seg_points[rows, 1], seg_points[cols, 1])
-            dy2 *= dy2
-            s_grid += dy2
-            del dy2
-            np.sqrt(s_grid, out=s_grid)
-            # The closed-form 1/R terms regularised at the 1 mm of the
-            # point forms they combine with (audit A3S-01), not at the
-            # h_1/200 of the truncation plan.
-            vals = two_layer_layered_correction_group(
-                s_grid.ravel(),
-                z_i,
-                z_j,
-                rho_1=rho_1,
-                rho_2=rho_2,
-                h_1=h_1,
-                rho_baseline=rho_baseline_j,
-                min_distance=_MIN_DISTANCE,
-            )
-            delta_Z[np.ix_(rows, cols)] = vals.reshape(s_grid.shape) / (2.0 * np.pi)
-
-    if line is not None:
-        # Exact line sources (10.28): the near-singular interface image
-        # of the layered correction as a Galerkin integral, the rest of
-        # it in point form (diagonal included).
-        _add_line_interface_images(
-            delta_Z,
-            line,
-            rho_per_segment,
-            seg_points[:, 2] >= h_1,
-            soil,
-        )
-        if cache is not None:
-            cache["key"] = cache_key
-            cache["phi_hom_matrix"] = phi_hom_matrix
-            cache["delta_Z"] = delta_Z
-            cache["assemblies"] = int(cache.get("assemblies", 0)) + 1
-        return phi_hom_matrix, delta_Z
-
-    # Diagonal: 3×3 Gauss-Legendre along the segment axis (line-self
-    # peak regularised at the wire radius: evaluated at s = a, whose
-    # 1/R terms need no further clamp — audit A3S-01, the h_1/200 clamp
-    # of the truncation plan took 68-84 % of the interface image of a
-    # part touching h_1). Identical segments (same depth, length,
-    # radius, baseline) share one evaluation.
-    gl3_nodes, gl3_weights = np.polynomial.legendre.leggauss(3)
-    gl3_nodes = 0.5 * (gl3_nodes + 1.0)
-    gl3_weights = 0.5 * gl3_weights
-    diag_cache: dict = {}
-    for i in range(n):
-        z_i = float(seg_points[i, 2])
-        L_i = float(seg_lengths[i])
-        a_i = float(wire_radii[i])
-        rho_baseline_i = float(rho_per_segment[i])
-        key = (round(z_i, 9), round(L_i, 9), round(a_i, 9), round(rho_baseline_i, 9))
-        if key in diag_cache:
-            delta_Z[i, i] = diag_cache[key]
-            continue
-        z_lo = z_i - 0.5 * L_i
-        delta_G = 0.0
-        for a, w_a in zip(gl3_nodes, gl3_weights, strict=True):
-            z_a = z_lo + a * L_i
-            for b, w_b in zip(gl3_nodes, gl3_weights, strict=True):
-                z_b = z_lo + b * L_i
-                delta_G += (
-                    w_a
-                    * w_b
-                    * two_layer_layered_correction_real_space(
-                        s=a_i,
-                        z=z_a,
-                        z_s=z_b,
-                        rho_1=rho_1,
-                        rho_2=rho_2,
-                        h_1=h_1,
-                        rho_baseline=rho_baseline_i,
-                        min_distance=a_i,
-                    )
-                )
-        diag_cache[key] = delta_G / (2.0 * np.pi)
-        delta_Z[i, i] = diag_cache[key]
-
+    parts = _CrossLayerParts(seg_points, seg_lengths, wire_radii, soil=soil, line=line)
+    phi_hom_matrix, delta_Z = parts.matrices()
     if cache is not None:
         cache["key"] = cache_key
         cache["phi_hom_matrix"] = phi_hom_matrix
         cache["delta_Z"] = delta_Z
         cache["assemblies"] = int(cache.get("assemblies", 0)) + 1
     return phi_hom_matrix, delta_Z
+
+
+class _CrossLayerParts:
+    """The pieces of the ADR-0007 cross-layer reaction matrix of one geometry.
+
+    ``phi = Φ_hom + ΔZ`` (see :func:`_layered_green_matrices`). The object
+    serves the two evaluation modes of the image family (review pass 10,
+    10.56):
+
+    * :meth:`matrices` assembles both ``N × N`` matrices once per solve —
+      within :data:`~groundfield.solver._kernels.MATRIX_BUDGET_BYTES` — with
+      the arithmetic of the historic assembly (bit-identical);
+    * :meth:`product` applies them row block by row block beyond the budget,
+      with ``O(N · block)`` memory; the depth groups of ``ΔZ`` are planned
+      once from their whole range of distances and kept, so a block costs
+      the evaluation of its entries only. Results differ from the
+      materialised evaluation by BLAS round-off only, as on the within-layer
+      path.
+
+    Parameters
+    ----------
+    seg_points, seg_lengths, wire_radii
+        Segment midpoints (m), lengths (m) and wire radii (m).
+    soil
+        The two-layer soil.
+    line
+        Segment geometry of the exact line-source kernel, or ``None``
+        (point kernel).
+    """
+
+    def __init__(
+        self,
+        seg_points: np.ndarray,
+        seg_lengths: np.ndarray,
+        wire_radii: np.ndarray,
+        *,
+        soil: TwoLayerSoil,
+        line: LineSegments | None,
+    ) -> None:
+        self.seg_points = seg_points
+        self.seg_lengths = seg_lengths
+        self.wire_radii = wire_radii
+        self.soil = soil
+        self.line = line
+        h_1 = soil.h_1
+        # ADR-0007 Phase A.1: per-segment baseline rho. Each source
+        # segment j gets its layer-local rho as the homogeneous-soil
+        # baseline; the layered correction is then the *smooth*
+        # deviation from that baseline (no residual 1/r divergence
+        # from a rho mismatch). For pure-upper-layer worlds this
+        # collapses to the historic rho_1 baseline.
+        self.rho_per_segment = np.where(seg_points[:, 2] < h_1, soil.rho_1, soil.rho_2)
+        self.lower = seg_points[:, 2] >= h_1
+        self.groups = _depth_groups(seg_points)
+        self._phi_rows: _PhiHomRows | None = None
+        self._diagonal: np.ndarray | None = None
+        self._sparse: SparseCorrection | None = None
+        self._plans: dict = {}
+
+    # ------------------------------------------------------------------
+    # Shared pieces
+    # ------------------------------------------------------------------
+
+    def phi_rows(self) -> _PhiHomRows:
+        """Row provider of ``Φ_hom`` (built once)."""
+        if self._phi_rows is None:
+            soil = self.soil
+            # The homogeneous part uses rho_at_source(j) for each column
+            # (source segment); this generalises _self_corrected_kernel:
+            # the diagonal still uses the line-self formula with
+            # rho_local(i), and off-diagonal entries use the point-source
+            # 1/r + 1/r_image formula with rho_local(j).
+            self._phi_rows = _PhiHomRows(
+                self.seg_points,
+                self.seg_lengths,
+                self.wire_radii,
+                self.rho_per_segment,
+                line=self.line,
+                transmitted_rho=2.0
+                * soil.rho_1
+                * soil.rho_2
+                / (soil.rho_1 + soil.rho_2),
+                lower=self.lower,
+            )
+        return self._phi_rows
+
+    def diagonal(self) -> np.ndarray:
+        """Diagonal of ``ΔZ`` in Ω (built once)."""
+        if self._diagonal is None:
+            self._diagonal = _layered_diagonal(
+                self.seg_points,
+                self.seg_lengths,
+                self.wire_radii,
+                self.rho_per_segment,
+                self.lower,
+                self.soil,
+                self.line,
+            )
+        return self._diagonal
+
+    def sparse(self) -> SparseCorrection:
+        """Off-diagonal line-kernel corrections of ``ΔZ`` (built once)."""
+        if self._sparse is None:
+            if self.line is None:
+                empty = np.zeros(0, dtype=int)
+                self._sparse = SparseCorrection(empty, empty, np.zeros(0))
+            else:
+                self._sparse = _interface_image_corrections(
+                    self.line, self.lower, self.soil
+                )
+        return self._sparse
+
+    # ------------------------------------------------------------------
+    # Materialised mode
+    # ------------------------------------------------------------------
+
+    def matrices(self) -> tuple[np.ndarray, np.ndarray]:
+        """``(Φ_hom, ΔZ)`` as ``N × N`` arrays in Ω."""
+        n = self.seg_points.shape[0]
+        phi_hom_matrix = self.phi_rows().matrix()
+        # Layered correction. The baseline rho per source is
+        # rho_at_source(j). Off-diagonal assembly is grouped by the
+        # (z_i, z_j, baseline) combination and evaluated with ONE
+        # spectral-amplitude solve per group (audit 2026-07-08, WP-D
+        # performance note): the historic per-entry scalar quadrature made
+        # the cross-layer reaction matrix O(n²) BVP solves.
+        delta_Z = np.zeros((n, n), dtype=float)
+        _fill_layered_correction(
+            delta_Z, self.seg_points, self.rho_per_segment, self.soil
+        )
+        # Exact line sources (10.28): the near-singular interface image of
+        # the layered correction as a Galerkin integral.
+        self.sparse().add_to_rows(delta_Z, 0)
+        diag = np.arange(n)
+        delta_Z[diag, diag] = self.diagonal()
+        return phi_hom_matrix, delta_Z
+
+    # ------------------------------------------------------------------
+    # Blocked mode
+    # ------------------------------------------------------------------
+
+    def _plan(self, gi: int, gj: int):
+        """Plan of depth group ``(gi, gj)`` from its whole range (kept)."""
+        key = (gi, gj)
+        if key not in self._plans:
+            from groundfield.coupling.layered_green import layered_correction_group_plan
+
+            rows, cols = self.groups[gi], self.groups[gj]
+            chunk = _block_rows(cols.size)
+            s_min, s_max = np.inf, -np.inf
+            for r0 in range(0, rows.size, chunk):
+                s = _horizontal_distances(self.seg_points, rows[r0 : r0 + chunk], cols)
+                s_min = min(s_min, float(s.min()))
+                s_max = max(s_max, float(s.max()))
+            soil = self.soil
+            self._plans[key] = layered_correction_group_plan(
+                float(self.seg_points[rows[0], 2]),
+                float(self.seg_points[cols[0], 2]),
+                rho_1=soil.rho_1,
+                rho_2=soil.rho_2,
+                h_1=soil.h_1,
+                rho_baseline=float(self.rho_per_segment[cols[0]]),
+                s_min=s_min,
+                s_max=s_max,
+                n_pairs=rows.size * cols.size,
+                min_distance=_MIN_DISTANCE,
+            )
+        return self._plans[key]
+
+    def delta_rows(self, i0: int, i1: int) -> np.ndarray:
+        """Rows ``i0:i1`` of ``ΔZ`` in Ω."""
+        n = self.seg_points.shape[0]
+        out = np.zeros((i1 - i0, n), dtype=float)
+        for gi, rows in enumerate(self.groups):
+            lo, hi = np.searchsorted(rows, [i0, i1])
+            if hi <= lo:
+                continue
+            sub = rows[lo:hi]
+            for gj, cols in enumerate(self.groups):
+                plan = self._plan(gi, gj)
+                if plan is None:
+                    continue
+                s = _horizontal_distances(self.seg_points, sub, cols)
+                out[np.ix_(sub - i0, cols)] = plan(s.ravel()).reshape(s.shape) / (
+                    2.0 * np.pi
+                )
+        self.sparse().add_to_rows(out, i0)
+        idx = np.arange(i0, i1)
+        out[idx - i0, idx] = self.diagonal()[i0:i1]
+        return out
+
+    def product(self, currents: np.ndarray) -> np.ndarray:
+        """``(Φ_hom + ΔZ) @ currents`` row block by row block."""
+        n = self.seg_points.shape[0]
+        cur = np.asarray(currents)
+        out = np.empty((n,) + cur.shape[1:], dtype=np.result_type(cur, float))
+        rows = _block_rows(n)
+        phi = self.phi_rows()
+        for i0 in range(0, n, rows):
+            i1 = min(n, i0 + rows)
+            out[i0:i1] = phi.rows(i0, i1) @ cur + self.delta_rows(i0, i1) @ cur
+        return out
+
+
+def _horizontal_distances(seg_points: np.ndarray, rows, cols) -> np.ndarray:
+    """``rows × cols`` horizontal distances in m, component-wise.
+
+    Bit-identical to the former ``(rows, cols, 2)`` difference tensor and
+    ``einsum`` (10.56), with two instead of four ``rows × cols`` arrays.
+    """
+    s_grid = np.subtract.outer(seg_points[rows, 0], seg_points[cols, 0])
+    s_grid *= s_grid
+    dy2 = np.subtract.outer(seg_points[rows, 1], seg_points[cols, 1])
+    dy2 *= dy2
+    s_grid += dy2
+    del dy2
+    np.sqrt(s_grid, out=s_grid)
+    return s_grid
+
+
+def _depth_groups(seg_points: np.ndarray) -> list[np.ndarray]:
+    """Segment indices per depth (rounded to 1 nm), in increasing depth order."""
+    z_keys = np.round(seg_points[:, 2] / 1e-9).astype(np.int64)
+    return [np.where(z_keys == key)[0] for key in np.unique(z_keys)]
+
+
+def _fill_layered_correction(
+    delta_Z: np.ndarray,
+    seg_points: np.ndarray,
+    rho_per_segment: np.ndarray,
+    soil: TwoLayerSoil,
+) -> None:
+    """Off-diagonal layered correction ``ΔZ`` (point form, Ω), in place.
+
+    One spectral evaluation per ``(z_i, z_j)`` depth group (audit 2026-07-08,
+    WP-D performance note; the historic per-entry quadrature made the matrix
+    O(n²) boundary-value solves). A group larger than one block of
+    :data:`~groundfield.solver._kernels.BLOCK_BYTES` is planned once from the
+    range of its distances and then evaluated row chunk by row chunk
+    (review pass 10, 10.56): its temporaries — the distances, their
+    logarithm, the interpolated values and the closed-form image terms —
+    then take O(block) memory instead of several ``rows × cols`` arrays, and
+    the entries are those of the one-piece evaluation (the interpolation is
+    evaluated point by point; groups contracted pair by pair are small and
+    always evaluated in one piece).
+    """
+    from groundfield.coupling.layered_green import (
+        layered_correction_group_plan,
+        two_layer_layered_correction_group,
+    )
+
+    rho_1, rho_2, h_1 = soil.rho_1, soil.rho_2, soil.h_1
+    groups = _depth_groups(seg_points)
+    for rows in groups:
+        z_i = float(seg_points[rows[0], 2])
+        for cols in groups:
+            z_j = float(seg_points[cols[0], 2])
+            rho_baseline_j = float(rho_per_segment[cols[0]])
+            chunk = _block_rows(cols.size)
+            if rows.size <= chunk:
+                s_grid = _horizontal_distances(seg_points, rows, cols)
+                # The closed-form 1/R terms regularised at the 1 mm of the
+                # point forms they combine with (audit A3S-01), not at the
+                # h_1/200 of the truncation plan.
+                vals = two_layer_layered_correction_group(
+                    s_grid.ravel(),
+                    z_i,
+                    z_j,
+                    rho_1=rho_1,
+                    rho_2=rho_2,
+                    h_1=h_1,
+                    rho_baseline=rho_baseline_j,
+                    min_distance=_MIN_DISTANCE,
+                )
+                delta_Z[np.ix_(rows, cols)] = vals.reshape(s_grid.shape) / (2.0 * np.pi)
+                continue
+            # Large group: the range of its distances first, chunk by chunk.
+            s_min, s_max = np.inf, -np.inf
+            for r0 in range(0, rows.size, chunk):
+                s_grid = _horizontal_distances(seg_points, rows[r0 : r0 + chunk], cols)
+                s_min = min(s_min, float(s_grid.min()))
+                s_max = max(s_max, float(s_grid.max()))
+            group = layered_correction_group_plan(
+                z_i,
+                z_j,
+                rho_1=rho_1,
+                rho_2=rho_2,
+                h_1=h_1,
+                rho_baseline=rho_baseline_j,
+                s_min=s_min,
+                s_max=s_max,
+                n_pairs=rows.size * cols.size,
+                min_distance=_MIN_DISTANCE,
+            )
+            if group is None:
+                continue  # delta_Z is zero there already
+            for r0 in range(0, rows.size, chunk):
+                sub = rows[r0 : r0 + chunk]
+                s_grid = _horizontal_distances(seg_points, sub, cols)
+                vals = group(s_grid.ravel())
+                delta_Z[np.ix_(sub, cols)] = vals.reshape(s_grid.shape) / (2.0 * np.pi)
 
 
 def _layered_green_kernel(
@@ -508,14 +700,10 @@ def _layered_green_kernel(
     return phi_hom_matrix @ currents + delta_Z @ currents
 
 
-def _add_line_interface_images(
-    delta_Z: np.ndarray,
-    line: LineSegments,
-    rho_per_segment: np.ndarray,
-    lower: np.ndarray,
-    soil: TwoLayerSoil,
-) -> None:
-    r"""Line-exact interface image of the layered correction, in place.
+def _interface_image_corrections(
+    line: LineSegments, lower: np.ndarray, soil: TwoLayerSoil
+) -> SparseCorrection:
+    r"""Line-exact interface image of the layered correction (off-diagonal).
 
     For two points in the same layer the layered correction
     :math:`\Delta G` contains the image of the source mirrored in the
@@ -527,10 +715,7 @@ def _add_line_interface_images(
     the rest of :math:`\Delta G`; here it is replaced by the Galerkin
     integral of the segment and the mirrored source segment for every
     pair nearer than :data:`~groundfield.solver._line_kernel.NEAR_FACTOR`
-    segment lengths. The diagonal becomes the point value of
-    :math:`\Delta G` at :math:`s = a` plus the same exchange of its
-    interface-image term (the self image of a segment touching the
-    interface is a touching collinear pair).
+    segment lengths.
 
     The image term keeps the reaction matrix symmetric: the integral of
     segment :math:`i` against the image of :math:`j` equals that of
@@ -538,62 +723,243 @@ def _add_line_interface_images(
 
     Parameters
     ----------
-    delta_Z
-        Layered correction in Ω with point-form off-diagonal entries,
-        shape ``(N, N)``; modified in place (the diagonal is replaced).
     line
         Segment geometry.
-    rho_per_segment
-        Resistivity of the layer of each segment in Ω·m (the baseline).
     lower
         Whether each segment lies in the lower layer.
     soil
         The two-layer soil.
+
+    Returns
+    -------
+    SparseCorrection
+        ``c_j (exact − point)`` in Ω for the near off-diagonal pairs.
+    """
+    coeff = _interface_image_coefficients(lower, soil)
+    image = line.image(2.0 * soil.h_1, -1.0)
+    i, j = near_pairs(line.mid, line.length, image.mid, image.length)
+    keep = (lower[i] == lower[j]) & (i != j)
+    i, j = i[keep], j[keep]
+    if not i.size:
+        empty = np.zeros(0, dtype=int)
+        return SparseCorrection(empty, empty, np.zeros(0))
+    exact = galerkin_pairs(line, i, image, j)
+    point = _point_values(line.mid, image.mid, i, j, _MIN_DISTANCE)
+    return SparseCorrection(i, j, coeff[j] * (exact - point))
+
+
+def _interface_image_coefficients(lower: np.ndarray, soil: TwoLayerSoil) -> np.ndarray:
+    """Coefficient ``c_j / (4π)`` of the interface image per source segment, in Ω·m."""
+    rho_1, rho_2 = soil.rho_1, soil.rho_2
+    K = (rho_2 - rho_1) / (rho_2 + rho_1)
+    return np.where(lower, -rho_2 * K, rho_1 * K) / (4.0 * np.pi)
+
+
+def _layered_diagonal(
+    seg_points: np.ndarray,
+    seg_lengths: np.ndarray,
+    wire_radii: np.ndarray,
+    rho_per_segment: np.ndarray,
+    lower: np.ndarray,
+    soil: TwoLayerSoil,
+    line: LineSegments | None,
+) -> np.ndarray:
+    """Diagonal of the layered correction ``ΔZ`` in Ω.
+
+    Point kernel: 3×3 Gauss-Legendre along the segment axis (line-self
+    peak regularised at the wire radius: evaluated at s = a, whose 1/R
+    terms need no further clamp — audit A3S-01, the h_1/200 clamp of the
+    truncation plan took 68-84 % of the interface image of a part touching
+    h_1). Line kernel: the point value of ``ΔG`` at ``s = a`` plus the
+    exchange of its interface-image term for the Galerkin self image (the
+    self image of a segment touching the interface is a touching collinear
+    pair). Identical segments share one evaluation.
     """
     from groundfield.coupling.layered_green import (
         two_layer_layered_correction_real_space,
     )
 
     rho_1, rho_2, h_1 = soil.rho_1, soil.rho_2, soil.h_1
-    K = (rho_2 - rho_1) / (rho_2 + rho_1)
-    coeff = np.where(lower, -rho_2 * K, rho_1 * K) / (4.0 * np.pi)
-    image = line.image(2.0 * h_1, -1.0)
+    n = seg_points.shape[0]
+    out = np.empty(n)
+    if line is not None:
+        coeff = _interface_image_coefficients(lower, soil)
+        image = line.image(2.0 * h_1, -1.0)
+        diag = np.arange(n)
+        self_image = galerkin_pairs(line, diag, image, diag)
+        a = line.radius
+        d = 2.0 * np.abs(h_1 - line.mid[:, 2])
+        point_image = 1.0 / np.sqrt(a * a + d * d)
+        cache: dict = {}
+        for k in range(n):
+            key = (
+                round(float(line.mid[k, 2]), 9),
+                round(float(a[k]), 9),
+                bool(lower[k]),
+            )
+            if key not in cache:
+                # Evaluated at s = a without the h_1/200 clamp of the
+                # truncation plan (``min_distance = a``), so that it contains
+                # exactly the point image ``coeff / sqrt(a² + d²)`` exchanged
+                # below (audit A3S-01: the clamp took 68-84 % of the layered
+                # correction of every part within h_1/400 of the interface —
+                # a ring at h_1 = 5 m read -5.29 Ohm).
+                cache[key] = two_layer_layered_correction_real_space(
+                    s=float(a[k]),
+                    z=float(line.mid[k, 2]),
+                    z_s=float(line.mid[k, 2]),
+                    rho_1=rho_1,
+                    rho_2=rho_2,
+                    h_1=h_1,
+                    rho_baseline=float(rho_per_segment[k]),
+                    min_distance=float(a[k]),
+                ) / (2.0 * np.pi)
+            out[k] = cache[key] + coeff[k] * (self_image[k] - point_image[k])
+        return out
 
-    i, j = near_pairs(line.mid, line.length, image.mid, image.length)
-    keep = (lower[i] == lower[j]) & (i != j)
-    i, j = i[keep], j[keep]
-    if i.size:
-        exact = galerkin_pairs(line, i, image, j)
-        point = _point_values(line.mid, image.mid, i, j, _MIN_DISTANCE)
-        np.add.at(delta_Z, (i, j), coeff[j] * (exact - point))
+    gl3_nodes, gl3_weights = np.polynomial.legendre.leggauss(3)
+    gl3_nodes = 0.5 * (gl3_nodes + 1.0)
+    gl3_weights = 0.5 * gl3_weights
+    diag_cache: dict = {}
+    for i in range(n):
+        z_i = float(seg_points[i, 2])
+        L_i = float(seg_lengths[i])
+        a_i = float(wire_radii[i])
+        rho_baseline_i = float(rho_per_segment[i])
+        key = (round(z_i, 9), round(L_i, 9), round(a_i, 9), round(rho_baseline_i, 9))
+        if key in diag_cache:
+            out[i] = diag_cache[key]
+            continue
+        z_lo = z_i - 0.5 * L_i
+        delta_G = 0.0
+        for a, w_a in zip(gl3_nodes, gl3_weights, strict=True):
+            z_a = z_lo + a * L_i
+            for b, w_b in zip(gl3_nodes, gl3_weights, strict=True):
+                z_b = z_lo + b * L_i
+                delta_G += (
+                    w_a
+                    * w_b
+                    * two_layer_layered_correction_real_space(
+                        s=a_i,
+                        z=z_a,
+                        z_s=z_b,
+                        rho_1=rho_1,
+                        rho_2=rho_2,
+                        h_1=h_1,
+                        rho_baseline=rho_baseline_i,
+                        min_distance=a_i,
+                    )
+                )
+        diag_cache[key] = delta_G / (2.0 * np.pi)
+        out[i] = diag_cache[key]
+    return out
 
-    n = line.length.shape[0]
-    diag = np.arange(n)
-    self_image = galerkin_pairs(line, diag, image, diag)
-    a = line.radius
-    d = 2.0 * np.abs(h_1 - line.mid[:, 2])
-    point_image = 1.0 / np.sqrt(a * a + d * d)
-    cache: dict = {}
-    for k in range(n):
-        key = (round(float(line.mid[k, 2]), 9), round(float(a[k]), 9), bool(lower[k]))
-        if key not in cache:
-            # Evaluated at s = a without the h_1/200 clamp of the truncation
-            # plan (``min_distance = a``), so that it contains exactly the
-            # point image ``coeff / sqrt(a² + d²)`` exchanged below (audit
-            # A3S-01: the clamp took 68-84 % of the layered correction of
-            # every part within h_1/400 of the interface — a ring at h_1 =
-            # 5 m read -5.29 Ohm).
-            cache[key] = two_layer_layered_correction_real_space(
-                s=float(a[k]),
-                z=float(line.mid[k, 2]),
-                z_s=float(line.mid[k, 2]),
-                rho_1=rho_1,
-                rho_2=rho_2,
-                h_1=h_1,
-                rho_baseline=float(rho_per_segment[k]),
-                min_distance=float(a[k]),
-            ) / (2.0 * np.pi)
-        delta_Z[k, k] = cache[key] + coeff[k] * (self_image[k] - point_image[k])
+
+class _PhiHomRows:
+    """Rows of the reaction matrix for homog-with-per-source-rho soil.
+
+    ``M[i, j]`` is the potential at segment midpoint *i* due to a
+    uniform-line-current ``I_j`` distributed along segment *j*, computed in a
+    homogeneous half-space whose resistivity equals ``rho_per_segment[j]``.
+
+    This generalises :func:`_self_corrected_kernel`, which uses a single
+    global ``rho``. The line-self formula on the diagonal uses
+    ``rho_per_segment[i]`` (which equals ``[j]`` when ``i=j``); off-diagonal
+    entries use ``rho_per_segment[j]`` — i.e. the resistivity of the source
+    segment's layer — which gives the correct ``rho_local·1/r`` near-source
+    behaviour in each column.
+
+    With the exact line-source kernel (``line``), the difference between the
+    segment average and the point form of the direct and surface-image terms
+    is scaled, for a pair in different layers (``lower[i] != lower[j]``),
+    with ``transmitted_rho`` :math:`= 2\rho_1\rho_2/(\rho_1 + \rho_2)` instead
+    of the source resistivity: that is the coefficient of the transmitted
+    direct and surface-image terms of the two-layer Green's function, whose
+    point form the layered correction completes. Scaling it with the source
+    resistivity made the reaction matrix of a rod through the interface
+    3.8 % asymmetric and a two-port with it non-reciprocal by up to 4.7 %
+    (finding of stream eng2 on the 2026.11 work).
+
+    Rows are built component-wise (10.56): entries bit-identical to the
+    former ``(N, N, 3)`` difference tensors, 8 instead of 96 bytes per
+    segment pair.
+    """
+
+    def __init__(
+        self,
+        seg_points: np.ndarray,
+        seg_lengths: np.ndarray,
+        wire_radii: np.ndarray,
+        rho_per_segment: np.ndarray,
+        *,
+        line: LineSegments | None = None,
+        transmitted_rho: float | None = None,
+        lower: np.ndarray | None = None,
+    ) -> None:
+        self.n = seg_points.shape[0]
+        self.xyz = _xyz(seg_points)
+        # Diagonal: line-self + image-point. The image term is guarded
+        # instead of clamped (audit 2026-07-28, F26/F29): a segment whose
+        # mirror image touches the conductor has no finite self-image
+        # term, and the historic ``_MIN_DISTANCE`` clamp turned that into
+        # a silently mesh-dependent, far too large impedance.
+        diag_direct = point_self_term(seg_lengths, wire_radii)
+        _require_image_separation(
+            seg_points, wire_radii, where="_build_phi_hom_per_source_rho"
+        )
+        diag_image = 1.0 / (2.0 * np.abs(seg_points[:, 2]))
+        self.diag = diag_direct + diag_image
+        self.rho_per_segment = rho_per_segment
+        self.scale = rho_per_segment[None, :] / (4.0 * np.pi)
+        self.line = line
+        self.transmitted_rho = transmitted_rho
+        self.lower = lower
+        # Exact line-source kernel (10.28): near-pair corrections of the
+        # direct and surface-image terms (sparse, once).
+        self.corrections = (
+            reaction_corrections(line, _MIN_DISTANCE) if line is not None else None
+        )
+
+    def rows(self, i0: int, i1: int, out: np.ndarray | None = None) -> np.ndarray:
+        """Rows ``i0:i1`` in Ω (into ``out`` when given)."""
+        xyz = self.xyz
+        obs = (xyz[0][i0:i1], xyz[1][i0:i1], xyz[2][i0:i1])
+        blk, _ = _half_space_block(obs, xyz, _MIN_DISTANCE, out=out)
+        idx = np.arange(i0, i1)
+        blk[idx - i0, idx] = self.diag[i0:i1]
+        if self.line is None:
+            # Apply rho_per_segment per column (source segment), in place:
+            # M[i, j] = rho_per_segment[j] / (4π) · kernel[i, j]
+            blk *= self.scale
+            return blk
+        # Far-field and near-pair corrections of the direct and surface-image
+        # terms, with the transmitted resistivity for pairs in different
+        # layers.
+        corr = reaction_quadrupole_rows(self.line, i0, i1)
+        self.corrections.add_to_rows(corr, i0)
+        blk += corr
+        blk *= self.scale
+        if self.transmitted_rho is not None and self.lower is not None:
+            cross = self.lower[i0:i1, None] != self.lower[None, :]
+            blk += np.where(
+                cross,
+                corr
+                * (
+                    (self.transmitted_rho - self.rho_per_segment[None, :])
+                    / (4.0 * np.pi)
+                ),
+                0.0,
+            )
+        return blk
+
+    def matrix(self) -> np.ndarray:
+        """The full ``N × N`` matrix in Ω."""
+        kernel = np.empty((self.n, self.n))
+        rows = _block_rows(self.n)
+        for i0 in range(0, self.n, rows):
+            i1 = min(self.n, i0 + rows)
+            self.rows(i0, i1, out=kernel[i0:i1])
+        return kernel
 
 
 def _build_phi_hom_per_source_rho(
@@ -606,84 +972,16 @@ def _build_phi_hom_per_source_rho(
     transmitted_rho: float | None = None,
     lower: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Reaction matrix for homog-with-per-source-rho soil.
-
-    Returns a real ``(n, n)`` matrix ``M`` such that
-    ``phi[i] = sum_j M[i, j] · I_j`` is the potential at segment
-    midpoint *i* due to a uniform-line-current ``I_j`` distributed
-    along segment *j*, computed in a homogeneous half-space whose
-    resistivity equals ``rho_per_segment[j]``.
-
-    This generalises :func:`_self_corrected_kernel`, which uses a
-    single global ``rho``. The line-self formula on the diagonal
-    uses ``rho_per_segment[i]`` (which equals ``[j]`` when ``i=j``);
-    off-diagonal entries use ``rho_per_segment[j]`` — i.e. the
-    resistivity of the source segment's layer — which gives the
-    correct ``rho_local·1/r`` near-source behaviour in each
-    column.
-
-    With the exact line-source kernel (``line``), the difference between
-    the segment average and the point form of the direct and
-    surface-image terms is scaled, for a pair in different layers
-    (``lower[i] != lower[j]``), with ``transmitted_rho``
-    :math:`= 2\\rho_1\\rho_2/(\\rho_1 + \\rho_2)` instead of the source
-    resistivity: that is the coefficient of the transmitted direct and
-    surface-image terms of the two-layer Green's function, whose point
-    form the layered correction completes. Scaling it with the source
-    resistivity made the reaction matrix of a rod through the interface
-    3.8 % asymmetric and a two-port with it non-reciprocal by up to 4.7 %
-    (finding of stream eng2 on the 2026.11 work).
-    """
-    # Built component-wise in row blocks (10.56): entries bit-identical
-    # to the former (N, N, 3) difference tensors, 8 instead of 96 bytes
-    # per segment pair. Off-diagonal: 1/r + 1/r_image.
-    kernel = np.empty((seg_points.shape[0], seg_points.shape[0]))
-    xyz = _xyz(seg_points)
-    rows = _block_rows(seg_points.shape[0])
-    for i0 in range(0, seg_points.shape[0], rows):
-        i1 = min(seg_points.shape[0], i0 + rows)
-        obs = (xyz[0][i0:i1], xyz[1][i0:i1], xyz[2][i0:i1])
-        _half_space_block(obs, xyz, _MIN_DISTANCE, out=kernel[i0:i1])
-
-    # Diagonal: line-self + image-point. The image term is guarded
-    # instead of clamped (audit 2026-07-28, F26/F29): a segment whose
-    # mirror image touches the conductor has no finite self-image
-    # term, and the historic ``_MIN_DISTANCE`` clamp turned that into
-    # a silently mesh-dependent, far too large impedance.
-    diag_direct = point_self_term(seg_lengths, wire_radii)
-    _require_image_separation(
-        seg_points, wire_radii, where="_build_phi_hom_per_source_rho"
-    )
-    z_mid = seg_points[:, 2]
-    diag_image = 1.0 / (2.0 * np.abs(z_mid))
-    np.fill_diagonal(kernel, diag_direct + diag_image)
-    scale = rho_per_segment[None, :] / (4.0 * np.pi)
-    if line is not None:
-        # Exact line-source kernel (10.28): far-field and near-pair
-        # corrections of the direct and surface-image terms, with the
-        # transmitted resistivity for pairs in different layers.
-        corrections = reaction_corrections(line, _MIN_DISTANCE)
-        for i0 in range(0, kernel.shape[0], rows):
-            blk = kernel[i0 : i0 + rows]
-            corr = reaction_quadrupole_rows(line, i0, i0 + blk.shape[0])
-            corrections.add_to_rows(corr, i0)
-            blk += corr
-            blk *= scale
-            if transmitted_rho is not None and lower is not None:
-                cross = lower[i0 : i0 + blk.shape[0], None] != lower[None, :]
-                blk += np.where(
-                    cross,
-                    corr
-                    * ((transmitted_rho - rho_per_segment[None, :]) / (4.0 * np.pi)),
-                    0.0,
-                )
-        return kernel
-
-    # Apply rho_per_segment per column (source segment), in place
-    # (10.56; the product is commutative, so bit-identical):
-    # M[i, j] = rho_per_segment[j] / (4π) · kernel[i, j]
-    kernel *= scale
-    return kernel
+    """Reaction matrix for homog-with-per-source-rho soil (see :class:`_PhiHomRows`)."""
+    return _PhiHomRows(
+        seg_points,
+        seg_lengths,
+        wire_radii,
+        rho_per_segment,
+        line=line,
+        transmitted_rho=transmitted_rho,
+        lower=lower,
+    ).matrix()
 
 
 # ---------------------------------------------------------------------

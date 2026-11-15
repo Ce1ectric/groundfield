@@ -118,14 +118,16 @@ def test_solve_memory_peak_is_bounded() -> None:
 @pytest.mark.finding("10.56")
 def test_cross_layer_solve_memory_peak_is_bounded() -> None:
     """The ADR-0007 cross-layer path (house grids below h_1) stays below
-    48 B·N²: the reaction matrix, the layered correction and the
-    distance grid of one depth group, no ``(N, N, k)`` tensors."""
+    28 B·N²: the reaction matrix and the layered correction (16 B·N²), no
+    ``(N, N, k)`` tensors and no ``rows × cols`` temporaries of a depth
+    group (evaluated in row chunks since wave 3 of the 2026.11 work: 41.2
+    B·N² before, 21.9 now; the within-layer path 18.3)."""
     soil = gf.TwoLayerSoil(rho_1=500.0, rho_2=100.0, h_1=0.5)
     w = _houses_world(soil)
     _solve(w)  # warm-up
     n = 16 * 120
     peak = _peak_mb(lambda: _solve(w))
-    assert peak < 48 * n * n / 2**20, f"peak {peak:.1f} MB"
+    assert peak < 28 * n * n / 2**20, f"peak {peak:.1f} MB"
 
 
 @pytest.mark.finding("10.56")
