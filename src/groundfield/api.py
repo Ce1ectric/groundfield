@@ -774,6 +774,7 @@ def create_engine(
     image_max_terms: int | None = None,
     image_series_tol: float | None = None,
     kernel: KernelKind | None = None,
+    image_far_field: Literal["quadrupole", "point"] | None = None,
     options: Mapping[str, Any] | None = None,
     sommerfeld_assembly: Literal["exact", "tabulated"] | None = None,
     max_segments: int | None = None,
@@ -834,6 +835,10 @@ def create_engine(
         ``"point"`` reproduces the results of earlier releases,
         ``"line"`` integrates each segment as a uniform line source.
         ``None`` keeps the engine default.
+    image_far_field
+        Form of the far images of the line kernel in two-layer soil,
+        ``"quadrupole"`` (engine default) or ``"point"`` (faster)
+        (:attr:`Engine.image_far_field <groundfield.Engine.image_far_field>`).
     options
         Backend-specific settings, keyed by backend name, e.g.
         ``{"mom_sommerfeld": {"epsabs": 1e-8}}`` or option models such as
@@ -886,6 +891,7 @@ def create_engine(
         "earth_inductive_model": earth_inductive_model,
         "image_max_terms": image_max_terms,
         "image_series_tol": image_series_tol,
+        "image_far_field": image_far_field,
         "sommerfeld_assembly": sommerfeld_assembly,
         "max_segments": max_segments,
         "warn_segments": warn_segments,

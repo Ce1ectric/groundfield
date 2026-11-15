@@ -118,8 +118,8 @@ __all__ = [
 #: ``solve_time_s``
 #:     Wall time of the backend call in s.
 #: ``series``
-#:     Image-series controls of the engine, ``{"max_terms", "tol"}``,
-#:     for the post-solve field evaluation.
+#:     Image-series controls of the engine, ``{"max_terms", "tol",
+#:     "far_field"}``, for the post-solve field evaluation.
 #: ``max_segments``
 #:     Problem-size limit the solve was checked against
 #:     (:attr:`Engine.max_segments`, or
@@ -596,6 +596,18 @@ class Engine(BaseModel):
             "Stop tolerance for the image-charge series: iteration "
             "ends when the geometric tail bound |K|^(n+1)/(1-|K|) "
             "falls below this value."
+        ),
+    )
+    # The author's decision of 2026-11-15: the far images of the line kernel.
+    image_far_field: Literal["quadrupole", "point"] = Field(
+        default="quadrupole",
+        description=(
+            "Form of the far images of the line kernel in two-layer soil "
+            "(Tagg/Sunde images and images of the cross-layer correction "
+            "beyond the near-pair reach): 'quadrupole' (default; point value "
+            "plus the quadrupole term of the segment average) or 'point' "
+            "(point sources, the far-image treatment before 2026.11 wave 3; "
+            "faster). No effect with kernel='point' or in homogeneous soil."
         ),
     )
     # The annotation states the accepted input (option models or plain
@@ -1219,6 +1231,7 @@ class Engine(BaseModel):
             {
                 "max_terms": int(self.image_max_terms),
                 "tol": float(self.image_series_tol),
+                "far_field": str(self.image_far_field),
             },
         )
         md["max_segments"] = max_segments

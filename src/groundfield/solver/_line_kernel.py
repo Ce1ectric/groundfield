@@ -65,7 +65,7 @@ import numpy as np
 from numpy.polynomial.legendre import leggauss
 
 __all__ = [
-    "FAR_IMAGE_QUADRUPOLE",
+    "FAR_FIELD_FORMS",
     "FarImages",
     "add_symmetric",
     "IMAGE_QUADRUPOLE_REACH",
@@ -93,11 +93,13 @@ NEAR_FACTOR: float = 6.0
 #: 4.4e-7 (direct pairs) and 2.6e-5 (images) in the impedance.
 SWITCH_FACTOR: float = 7.5
 
-#: Far Tagg/Sunde images (``n >= 1``) and far images of the cross-layer
-#: correction carry the quadrupole term of the segment average like direct
-#: pairs (wave 3 of the 2026.11 work, 10.28). ``False`` restores the point
-#: form of far images (for comparisons only).
-FAR_IMAGE_QUADRUPOLE: bool = True
+#: Forms of the far images (``Engine.image_far_field``): far Tagg/Sunde
+#: images (``n >= 1``) and far images of the cross-layer correction carry the
+#: quadrupole term of the segment average like direct pairs (wave 3 of the
+#: 2026.11 work, 10.28), or the point form of the releases before
+#: (``"point"``, the author's decision of 2026-11-15; up to then a private
+#: flag ``FAR_IMAGE_QUADRUPOLE``).
+FAR_FIELD_FORMS: tuple[str, ...] = ("quadrupole", "point")
 
 #: ``(SWITCH_FACTOR / NEAR_FACTOR)²``: end of the blend in ``r² / lim²``.
 _SWITCH_U: float = (SWITCH_FACTOR / NEAR_FACTOR) ** 2
@@ -1495,7 +1497,10 @@ def _depth_gap(z_obs: np.ndarray, z_img_lo: float, z_img_hi: float) -> float:
 
 
 def series_corrections(
-    segs: LineSegments, images: list[tuple[float, float, float]], min_distance: float
+    segs: LineSegments,
+    images: list[tuple[float, float, float]],
+    min_distance: float,
+    quadrupole: bool = True,
 ) -> SparseCorrection:
     """Exact minus far-form value of near Tagg/Sunde image pairs.
 
@@ -1507,6 +1512,9 @@ def series_corrections(
         ``(weight, offset, sign)`` of the series images ``n >= 1``.
     min_distance
         Clamp of the point kernel in m.
+    quadrupole
+        The far form of the images carries the quadrupole term (``True``,
+        ``Engine.image_far_field = "quadrupole"``) or is the point form.
 
     Returns
     -------
@@ -1535,7 +1543,7 @@ def series_corrections(
             point = _point_values(segs.mid, img.mid, i, j, min_distance)
             values = _corrections(
                 segs, segs.mid, segs.length, img, i, j, w, far, point, min_distance,
-                with_quadrupole=FAR_IMAGE_QUADRUPOLE, image=True,
+                with_quadrupole=quadrupole, image=True,
             )  # fmt: skip
             parts.append(SparseCorrection(i, j, weight * values))
     return SparseCorrection.concatenate(parts)
@@ -1575,8 +1583,12 @@ def series_field_corrections(
     segs: LineSegments,
     images: list[tuple[float, float, float]],
     min_distance: float,
+    quadrupole: bool = True,
 ) -> SparseCorrection:
-    """Weighted exact-minus-far-form corrections of near series images at field points."""
+    """Weighted exact-minus-far-form corrections of near series images at field points.
+
+    ``quadrupole`` as in :func:`series_corrections`.
+    """
     zero = np.zeros(points.shape[0])
     z_pts = points[:, 2]
     z = segs.mid[:, 2]
@@ -1595,7 +1607,7 @@ def series_field_corrections(
             point = _point_values(points, img.mid, i, j, min_distance)
             values = _corrections(
                 None, points, zero, img, i, j, w, far, point, min_distance,
-                with_quadrupole=FAR_IMAGE_QUADRUPOLE,
+                with_quadrupole=quadrupole,
             )  # fmt: skip
             parts.append(SparseCorrection(i, j, weight * values))
     return SparseCorrection.concatenate(parts)

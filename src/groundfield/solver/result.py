@@ -1368,7 +1368,17 @@ class FieldResult(BaseModel):
         parts = [currents.real]
         if np.any(currents.imag):
             parts.append(currents.imag)
-        sums = _series_field(pts, sources, parts, series, min_distance, line=line)
+        from groundfield.solver._series import series_far_field
+
+        sums = _series_field(
+            pts,
+            sources,
+            parts,
+            series,
+            min_distance,
+            line=line,
+            far_field=series_far_field(self.metadata),
+        )
         phi_re = sums[0]
         phi_im = sums[1] if len(sums) > 1 else np.zeros_like(phi_re)
         return (rho_1 / (4.0 * np.pi)) * (phi_re + 1j * phi_im)

@@ -266,7 +266,11 @@ def test_series_default_is_one_documented_value() -> None:
 def test_series_controls_are_recorded_on_every_result(soil) -> None:
     engine = gf.Engine(segment_length=SEG, image_max_terms=123, image_series_tol=1e-8)
     res = _solve(engine, _rod_world(soil))
-    assert res.metadata["series"] == {"max_terms": 123, "tol": 1e-8}
+    assert res.metadata["series"] == {
+        "max_terms": 123,
+        "tol": 1e-8,
+        "far_field": "quadrupole",
+    }
 
 
 def test_backend_options_accessor_returns_defaults() -> None:

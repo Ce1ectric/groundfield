@@ -307,13 +307,14 @@ def _houses(soil, *, long_piece: bool = False) -> gf.World:
     return w
 
 
-def _image_work(world, monkeypatch) -> dict[str, int]:
+def _image_work(world, monkeypatch, **engine) -> dict[str, int]:
     """Far-image evaluations and Galerkin image pairs of one solve.
 
     The spy of auditor W3A: every call of ``image_quadrupole_rows`` counts
     ``rows × columns × images``, every Galerkin call its pairs, split by
     whether both segments of the pair are short (at most 1 m). Keyword
-    arguments pass through (the kernel accumulates into ``out``).
+    arguments pass through (the kernel accumulates into ``out``); ``engine``
+    are further :class:`Engine` fields.
     """
     from groundfield.solver import _kernels as K
     from groundfield.solver import _line_kernel as lk
@@ -347,7 +348,7 @@ def _image_work(world, monkeypatch) -> dict[str, int]:
                 mp.setattr(mod, "galerkin_pairs", gal_spy)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            gf.Engine(segment_length=0.5, frequencies=[50.0]).solve(world)
+            gf.Engine(segment_length=0.5, frequencies=[50.0], **engine).solve(world)
     return work
 
 

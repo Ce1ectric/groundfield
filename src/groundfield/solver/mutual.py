@@ -144,6 +144,7 @@ def _probe_potential_two_layer(
     max_terms: int,
     tol: float,
     line: LineSegments | None = None,
+    far_field: str = "quadrupole",
 ) -> np.ndarray:
     """Matrix form of :meth:`FieldResult._potential_two_layer`.
 
@@ -207,6 +208,7 @@ def _probe_potential_two_layer(
                 max_terms,
                 tol,
                 line=None if line is None else line.subset(src_l1),
+                far_field=far_field,
             )
         # Remaining blocks via the spectral kernel: layer-2 sources to
         # all probes, layer-1 sources to layer-2 probes.
@@ -239,7 +241,13 @@ def _probe_potential_two_layer(
     if np.any(currents.imag):
         parts.append(currents.imag)
     sums = _series_field(
-        probe_points, source_points, parts, series, min_distance, line=line
+        probe_points,
+        source_points,
+        parts,
+        series,
+        min_distance,
+        line=line,
+        far_field=far_field,
     )
     phi_re = sums[0]
     phi_im = sums[1] if len(sums) > 1 else np.zeros_like(phi_re)
@@ -268,6 +276,8 @@ class _MutualProblem:
     max_terms: int
     tol: float
     owners: _OwnerSplit
+    #: ``Engine.image_far_field`` of the call (the form of the far images).
+    far_field: str
     #: Local frame of the call (projected coordinates, since 2026.11): the
     #: discretisation lives in it, field and probe points are moved into it.
     frame: LocalFrame
@@ -432,6 +442,7 @@ def _prepare(
             float(engine.image_series_tol),
             allow_cross_layer=bool(z_max >= soil_two_layer.h_1),
             line=line,
+            far_field=engine.image_far_field,
         )
     else:
         kernel = HalfSpaceKernel(float(rho_homog), line=line)
@@ -468,6 +479,7 @@ def _prepare(
         tol=float(engine.image_series_tol),
         owners=owners,
         frame=frame,
+        far_field=str(engine.image_far_field),
     )
 
 
@@ -552,6 +564,7 @@ def _field_of_columns(
             max_terms=problem.max_terms if max_terms is None else int(max_terms),
             tol=problem.tol if tol is None else float(tol),
             line=problem.line,
+            far_field=problem.far_field,
         )
     K_probe = _probe_kernel_homogeneous(
         field_points, seg_points, float(problem.rho_homog), min_distance

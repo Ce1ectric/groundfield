@@ -85,6 +85,7 @@ from groundfield.solver._kernels import (
     _xyz,
 )
 from groundfield.solver._line_kernel import (
+    FarImages,
     LineSegments,
     SparseCorrection,
     _point_values,
@@ -166,12 +167,16 @@ class _TwoLayerKernel:
         *,
         allow_cross_layer: bool = False,
         line: LineSegments | None = None,
+        far_field: str = "quadrupole",
     ) -> None:
         self.soil = soil
         self.allow_cross_layer = allow_cross_layer
         self.line = line
+        self.far_field = far_field
         self.series = ImageSeries.for_soil(soil, max_terms, tol)
-        self.in_layer = TwoLayerSeriesKernel(soil.rho_1, self.series, line=line)
+        self.in_layer = TwoLayerSeriesKernel(
+            soil.rho_1, self.series, line=line, far_field=far_field
+        )
         # Cache for the (current-independent) cross-layer matrices: the
         # per-frequency and per-excitation kernel calls within one solve
         # share the identical geometry, so phi_hom_matrix and delta_Z
@@ -204,7 +209,12 @@ class _TwoLayerKernel:
                 # Beyond the matrix budget nothing is kept (10.56): the two
                 # matrices are summed in place and returned.
                 phi_hom_matrix, delta_Z = _CrossLayerParts(
-                    seg_points, seg_lengths, wire_radii, soil=self.soil, line=self.line
+                    seg_points,
+                    seg_lengths,
+                    wire_radii,
+                    soil=self.soil,
+                    line=self.line,
+                    far_field=self.far_field,
                 ).matrices()
                 phi_hom_matrix += delta_Z
                 return phi_hom_matrix
@@ -215,6 +225,7 @@ class _TwoLayerKernel:
                 soil=self.soil,
                 cache=self._cross_cache,
                 line=self.line,
+                far_field=self.far_field,
             )
             return phi_hom_matrix + delta_Z
         return self.in_layer.matrix(seg_points, seg_lengths, wire_radii)
@@ -236,6 +247,7 @@ class _TwoLayerKernel:
                     soil=self.soil,
                     cache=self._cross_cache,
                     line=self.line,
+                    far_field=self.far_field,
                 )
             # Beyond the matrix budget (16 N² bytes, as the series path):
             # row blocks with O(N · block) memory (10.56).
@@ -258,7 +270,12 @@ class _TwoLayerKernel:
         )
         if self._cross_cache.get("parts_key") != key:
             self._cross_cache["parts"] = _CrossLayerParts(
-                seg_points, seg_lengths, wire_radii, soil=self.soil, line=self.line
+                seg_points,
+                seg_lengths,
+                wire_radii,
+                soil=self.soil,
+                line=self.line,
+                far_field=self.far_field,
             )
             self._cross_cache["parts_key"] = key
         return self._cross_cache["parts"]
@@ -271,6 +288,7 @@ def _two_layer_self_kernel_factory(
     *,
     allow_cross_layer: bool = False,
     line: LineSegments | None = None,
+    far_field: str = "quadrupole",
 ) -> _TwoLayerKernel:
     """Build the self-action operator for the 2-layer case.
 
@@ -296,6 +314,10 @@ def _two_layer_self_kernel_factory(
     line
         Segment geometry for the exact line-source kernel
         (``Engine(kernel="line")``); ``None`` keeps the point kernel.
+    far_field
+        Form of the far images with the line kernel
+        (``Engine.image_far_field``): ``"quadrupole"`` (default) or
+        ``"point"``.
 
     Returns
     -------
@@ -305,7 +327,12 @@ def _two_layer_self_kernel_factory(
         matrix.
     """
     return _TwoLayerKernel(
-        soil, max_terms, tol, allow_cross_layer=allow_cross_layer, line=line
+        soil,
+        max_terms,
+        tol,
+        allow_cross_layer=allow_cross_layer,
+        line=line,
+        far_field=far_field,
     )
 
 
@@ -317,6 +344,7 @@ def _layered_green_matrices(
     soil: TwoLayerSoil,
     cache: dict | None = None,
     line: LineSegments | None = None,
+    far_field: str = "quadrupole",
 ) -> tuple[np.ndarray, np.ndarray]:
     """ADR-0007 cross-layer fallback using the rigorous Sommerfeld kernel.
 
@@ -367,11 +395,14 @@ def _layered_green_matrices(
             hash(seg_points.tobytes()),
             hash(seg_lengths.tobytes()),
             line is not None,
+            far_field,
         )
         if cache.get("key") == cache_key:
             return cache["phi_hom_matrix"], cache["delta_Z"]
 
-    parts = _CrossLayerParts(seg_points, seg_lengths, wire_radii, soil=soil, line=line)
+    parts = _CrossLayerParts(
+        seg_points, seg_lengths, wire_radii, soil=soil, line=line, far_field=far_field
+    )
     phi_hom_matrix, delta_Z = parts.matrices()
     if cache is not None:
         cache["key"] = cache_key
@@ -407,6 +438,9 @@ class _CrossLayerParts:
     line
         Segment geometry of the exact line-source kernel, or ``None``
         (point kernel).
+    far_field
+        Form of the far images with the line kernel
+        (``Engine.image_far_field``).
     """
 
     def __init__(
@@ -417,6 +451,7 @@ class _CrossLayerParts:
         *,
         soil: TwoLayerSoil,
         line: LineSegments | None,
+        far_field: str = "quadrupole",
     ) -> None:
         self.seg_points = seg_points
         self.seg_lengths = seg_lengths
@@ -441,7 +476,9 @@ class _CrossLayerParts:
         # 10.28, ADR-0007): its image families, dense far terms and sparse
         # near terms.
         self.families = (
-            _LayeredImageFamilies(line, self.lower, soil) if line is not None else None
+            _LayeredImageFamilies(line, self.lower, soil, far_field)
+            if line is not None
+            else None
         )
 
     # ------------------------------------------------------------------
@@ -498,7 +535,7 @@ class _CrossLayerParts:
 
     def add_far_rows(self, block: np.ndarray, i0: int) -> None:
         """Add the far-field terms of the layered images to rows ``i0 …``."""
-        if self.families is not None:
+        if self.families is not None and self.families.quadrupole:
             block += self.families.rows(i0, i0 + block.shape[0])
 
     # ------------------------------------------------------------------
@@ -522,7 +559,7 @@ class _CrossLayerParts:
         # Exact line sources (10.28): the layered correction in line form —
         # the far-field terms of its images over all pairs and the Galerkin
         # integrals of the near image pairs.
-        if self.families is not None:
+        if self.families is not None and self.families.quadrupole:
             # Symmetric (reciprocity): the upper half, mirrored (W3A-01).
             add_symmetric(
                 delta_Z,
@@ -710,6 +747,7 @@ def _layered_green_kernel(
     soil: TwoLayerSoil,
     cache: dict | None = None,
     line: LineSegments | None = None,
+    far_field: str = "quadrupole",
 ):
     """ADR-0007 cross-layer reaction kernel: ``(Φ_hom + ΔZ) · currents``.
 
@@ -717,7 +755,13 @@ def _layered_green_kernel(
     matrices are taken from ``cache`` when the geometry is unchanged.
     """
     phi_hom_matrix, delta_Z = _layered_green_matrices(
-        seg_points, seg_lengths, wire_radii, soil=soil, cache=cache, line=line
+        seg_points,
+        seg_lengths,
+        wire_radii,
+        soil=soil,
+        cache=cache,
+        line=line,
+        far_field=far_field,
     )
     return phi_hom_matrix @ currents + delta_Z @ currents
 
@@ -759,11 +803,27 @@ class _LayeredImageFamilies:
     The families are grouped by image geometry ``(offset, sign)``; each group
     carries one 2 × 2 table of coefficients indexed by the layers of observer
     and source.
+
+    With ``far_field = "point"`` (``Engine.image_far_field``, the author's
+    decision of 2026-11-15) the line form is that of the base of wave 3:
+    only the image in the interface of a pair in one layer (``ρ_1 K`` at
+    ``q - z_s`` for the upper layer, ``-ρ_2 K`` for the lower) is a Galerkin
+    integral, for the pairs within
+    :data:`~groundfield.solver._line_kernel.SWITCH_FACTOR` segment lengths
+    (blended, user decision D2) and on the diagonal at every distance; every
+    other image keeps the point form of the spectral quadrature.
     """
 
-    def __init__(self, line: LineSegments, lower: np.ndarray, soil: TwoLayerSoil):
+    def __init__(
+        self,
+        line: LineSegments,
+        lower: np.ndarray,
+        soil: TwoLayerSoil,
+        far_field: str = "quadrupole",
+    ):
         from groundfield.solver._line_kernel import IMAGE_QUADRUPOLE_REACH
 
+        self.quadrupole = far_field == "quadrupole"
         self.line = line
         self.layer = lower.astype(np.intp)
         rho_1, rho_2, h_1 = soil.rho_1, soil.rho_2, soil.h_1
@@ -803,19 +863,27 @@ class _LayeredImageFamilies:
             ([(1.0, 0.0, -1.0)], table(0.0, 0.0, 0.0, -rho_2 * K * K)),
         ]
         self.groups = [(images, tab) for images, tab in groups if images and tab.any()]
+        if not self.quadrupole:
+            # The interface image of pairs in one layer only (base of wave 3).
+            self.groups = [
+                ([(w, off, sgn) for w, off, sgn in images if off == q and sgn < 0], tab)
+                for images, tab in self.groups
+            ]
+            self.groups = [(images, tab) for images, tab in self.groups if images]
         z = line.mid[:, 2]
-        self.far = [far_images(z, line, images) for images, _ in self.groups]
+        self.far = [
+            far_images(z, line, images) if self.quadrupole else FarImages()
+            for images, _ in self.groups
+        ]
 
     def rows(self, i0: int, i1: int, c0: int = 0) -> np.ndarray:
         """Far-field terms of rows ``i0:i1`` against the segments ``c0 …``, in Ω.
 
         Shape ``(i1 - i0, N - c0)``.
         """
-        from groundfield.solver import _line_kernel
-
         line = self.line
         out = np.zeros((i1 - i0, line.mid.shape[0] - c0))
-        if not _line_kernel.FAR_IMAGE_QUADRUPOLE:
+        if not self.quadrupole:
             return out
         sl = slice(i0, i1)
         lay = self.layer
@@ -836,7 +904,6 @@ class _LayeredImageFamilies:
 
     def sparse(self) -> SparseCorrection:
         """Blended Galerkin corrections of the near off-diagonal image pairs, in Ω."""
-        from groundfield.solver import _line_kernel
         from groundfield.solver._line_kernel import (
             SWITCH_FACTOR,
             _corrections,
@@ -882,7 +949,7 @@ class _LayeredImageFamilies:
                     far,
                     point,
                     _MIN_DISTANCE,
-                    with_quadrupole=_line_kernel.FAR_IMAGE_QUADRUPOLE,
+                    with_quadrupole=self.quadrupole,
                     image=True,
                 )
                 parts.append(SparseCorrection(i, j, (weight * coef) * values))
@@ -902,6 +969,18 @@ class _LayeredImageFamilies:
         n = line.mid.shape[0]
         a = line.radius
         out = np.zeros(n)
+        if not self.quadrupole:
+            # The interface image at every distance, untapered (base of wave 3).
+            for images, tab in self.groups:
+                coef_diag = tab[self.layer, self.layer]
+                for weight, offset, sign in images:
+                    img = line.image(offset, sign)
+                    dz = line.mid[:, 2] - img.mid[:, 2]
+                    idx = np.arange(n)
+                    exact = galerkin_pairs(line, idx, img, idx, transverse=True)
+                    value = exact - 1.0 / np.sqrt(a * a + dz * dz)
+                    out += (weight * coef_diag) * value
+            return out
         for (_, tab), far in zip(self.groups, self.far, strict=True):
             coef_diag = tab[self.layer, self.layer]
             for (weight, offset, sign), shortest in zip(
@@ -1231,12 +1310,14 @@ class _TwoLayerGreen:
         tol: float,
         ds: float,
         kernel: str = "point",
+        far_field: str = "quadrupole",
     ):
         self.soil = soil
         self.max_terms = max_terms
         self.tol = tol
         self.ds = ds
         self.kernel = kernel
+        self.far_field = far_field
         # Wires are cut where the resistivity changes only, like in every
         # other backend: TwoLayerSoil(rho, rho, h) is cut nowhere, as
         # homogeneous soil (audit round 2, A2S-07).
@@ -1313,6 +1394,7 @@ class _TwoLayerGreen:
             self.tol,
             allow_cross_layer=cross_layer,
             line=line,
+            far_field=self.far_field,
         )
 
     def metadata(self, solution, *, stacklevel: int) -> dict:  # noqa: ANN001
@@ -1326,7 +1408,8 @@ class _TwoLayerGreen:
         10.50 / F43; before, such solves reported the term count of a
         series that never ran and warned about its truncation).
         ``series`` records the controls for the post-solve field
-        evaluation (:meth:`FieldResult.potential`).
+        evaluation (:meth:`FieldResult.potential`): ``max_terms``, ``tol``
+        and ``far_field`` (``Engine.image_far_field``).
         """
         soil = self.soil
         K = soil.reflection_coefficient
@@ -1350,7 +1433,11 @@ class _TwoLayerGreen:
             "n_terms_used": n_terms_used,
             "converged": converged,
             "series_used": series_used,
-            "series": {"max_terms": int(self.max_terms), "tol": float(self.tol)},
+            "series": {
+                "max_terms": int(self.max_terms),
+                "tol": float(self.tol),
+                "far_field": str(self.far_field),
+            },
         }
 
 
@@ -1360,6 +1447,7 @@ def solve_image_2layer(
     *,
     max_terms: int | None = None,
     tol: float | None = None,
+    far_field: str | None = None,
 ) -> FieldResult:
     """Image-charge solver for 2-layer soil (Tagg / Sunde).
 
@@ -1383,6 +1471,9 @@ def solve_image_2layer(
         Series truncation: stop as soon as the geometric tail bound
         $|K|^{n+1}/(1-|K|)$ falls below ``tol`` (dimensionless);
         ``None`` (default) takes ``engine.image_series_tol``.
+    far_field
+        Form of the far images with the line kernel, ``"quadrupole"`` or
+        ``"point"``; ``None`` (default) takes ``engine.image_far_field``.
 
     Returns
     -------
@@ -1443,10 +1534,14 @@ def solve_image_2layer(
         max_terms = engine.image_max_terms
     if tol is None:
         tol = engine.image_series_tol
+    if far_field is None:
+        far_field = engine.image_far_field
     if engine.kernel is None:
         # The backend's preferred kernel (Engine.kernel = None, 10.28).
         engine = engine._with(kernel=DEFAULT_KERNEL)
-    green = _TwoLayerGreen(soil, max_terms, tol, engine.segment_length, engine.kernel)
+    green = _TwoLayerGreen(
+        soil, max_terms, tol, engine.segment_length, engine.kernel, far_field
+    )
     owner_interfaces = None
     if _crosses_interface(world, _owner_interfaces(soil)):
         # One owner per (electrode, layer) for rods through h_1 (10.15), on

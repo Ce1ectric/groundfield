@@ -42,7 +42,6 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from groundfield.solver._guards import _MIN_DISTANCE, _require_image_separation
-from groundfield.solver import _line_kernel
 from groundfield.solver._line_kernel import (
     FarImages,
     LineSegments,
@@ -622,8 +621,12 @@ class TwoLayerSeriesKernel:
 
     ``phi = rho_1/(4π) · (K0 @ I) + (S @ I) · rho_1/(4π)``: the half-space
     part :class:`HalfSpaceKernel` with :math:`\\rho_1`, plus the Tagg/Sunde
-    images (``n >= 1``) as point sources — they are at least
-    :math:`2(h_1 - z)` away from every segment.
+    images (``n >= 1``), at least :math:`2(h_1 - z)` away from every
+    segment. With the point kernel they are point sources; with the line
+    kernel the near image pairs are Galerkin integrals (transverse distance,
+    audit W3A-02) and the far ones carry the quadrupole term of the segment
+    average (``far_field = "quadrupole"``, 10.28) or stay point sources
+    (``"point"``).
 
     The series matrix ``S`` is accumulated image by image *before* the
     product with the currents (10.58; v0.15.0 multiplied every image
@@ -641,12 +644,22 @@ class TwoLayerSeriesKernel:
     line
         Segment geometry for the exact line-source kernel; ``None``
         (default) keeps the point kernel.
+    far_field
+        Form of the far images with the line kernel
+        (``Engine.image_far_field``): ``"quadrupole"`` (default) or
+        ``"point"``.
     """
 
     def __init__(
-        self, rho_1: float, series: ImageSeries, *, line: LineSegments | None = None
+        self,
+        rho_1: float,
+        series: ImageSeries,
+        *,
+        line: LineSegments | None = None,
+        far_field: str = "quadrupole",
     ):
         self.rho_1 = rho_1
+        self.quadrupole = far_field == "quadrupole"
         self.pref = rho_1 / (4.0 * np.pi)
         self.series = series
         self.line = line
@@ -664,7 +677,7 @@ class TwoLayerSeriesKernel:
         """Exact-minus-far-form corrections of near series images (line kernel)."""
         if self._series_corrections is None:
             self._series_corrections = series_corrections(
-                self.line, self._images(), _MIN_DISTANCE
+                self.line, self._images(), _MIN_DISTANCE, quadrupole=self.quadrupole
             )
         return self._series_corrections
 
@@ -675,7 +688,7 @@ class TwoLayerSeriesKernel:
         (:func:`~groundfield.solver._line_kernel.image_quadrupole_rows`, wave 3
         of the 2026.11 work, 10.28), the near ones the sparse corrections.
         """
-        if _line_kernel.FAR_IMAGE_QUADRUPOLE:
+        if self.quadrupole:
             rows += self._far_rows(i0, i0 + rows.shape[0])
         self._line_series().add_to_rows(rows, i0)
 
@@ -702,7 +715,7 @@ class TwoLayerSeriesKernel:
         """``S`` (point images plus the line-kernel terms of the images)."""
         S = _series_matrix(seg_points, self.series)
         if self.line is not None:
-            if _line_kernel.FAR_IMAGE_QUADRUPOLE and self._far_images():
+            if self.quadrupole and self._far_images():
                 # The far-image terms are symmetric: the upper half, mirrored
                 # (audit W3A-01).
                 add_symmetric(
@@ -909,6 +922,7 @@ def _series_field(
     series: ImageSeries,
     min_distance: float,
     line: LineSegments | None = None,
+    far_field: str = "quadrupole",
 ) -> list[np.ndarray]:
     """Unscaled Tagg/Sunde sums of real current arrays at field points.
 
@@ -937,6 +951,9 @@ def _series_field(
     line
         Source segments for the exact line-source kernel (images per
         series term); ``None`` (default) evaluates point sources.
+    far_field
+        Form of the far images with the line kernel
+        (``Engine.image_far_field``, recorded in ``metadata["series"]``).
 
     Returns
     -------
@@ -981,7 +998,9 @@ def _series_field(
         images = _series_images(series)
         for out, corr in zip(
             outs,
-            _line_field_correction(points, line, real_parts, min_distance, images),
+            _line_field_correction(
+                points, line, real_parts, min_distance, images, far_field
+            ),
             strict=True,
         ):
             out += corr
@@ -994,20 +1013,23 @@ def _line_field_correction(
     real_parts: Sequence[np.ndarray],
     min_distance: float,
     images: list[tuple[float, float, float]] | None = None,
+    far_field: str = "quadrupole",
 ) -> list[np.ndarray]:
     """Line-kernel correction of point-kernel field sums (unscaled, A/m).
 
     Adds, per real current array, the dense far-field (quadrupole) term
     of the direct and surface-image sources and the sparse exact-minus-
     point corrections of near sources (and of near Tagg/Sunde images
-    when ``images`` are given) — see :mod:`groundfield.solver._line_kernel`.
+    when ``images`` are given, their far quadrupole terms with
+    ``far_field = "quadrupole"``) — see :mod:`groundfield.solver._line_kernel`.
     """
+    quadrupole = far_field == "quadrupole"
     from scipy.sparse import csr_matrix
 
     m, n = points.shape[0], line.mid.shape[0]
     outs = [np.zeros((m,) + c.shape[1:]) for c in real_parts]
     far = FarImages()
-    if images and _line_kernel.FAR_IMAGE_QUADRUPOLE:
+    if images and quadrupole:
         far = far_images(points[:, 2], line, images)
     for sl in _field_row_blocks(m, n, force_blocks=True):
         Q = field_quadrupole_rows(points[sl], line)
@@ -1022,7 +1044,11 @@ def _line_field_correction(
         pts = points[sl]
         corr = [field_corrections(pts, line, min_distance)]
         if images:
-            corr.append(series_field_corrections(pts, line, images, min_distance))
+            corr.append(
+                series_field_corrections(
+                    pts, line, images, min_distance, quadrupole=quadrupole
+                )
+            )
         sparse = SparseCorrection.concatenate(corr)
         if sparse.rows.size:
             C = csr_matrix(
