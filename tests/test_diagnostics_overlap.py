@@ -142,6 +142,49 @@ def test_a_branch_is_an_overlap_only_when_it_runs_along(angle_deg, flagged) -> N
         assert stretch == pytest.approx(0.012 / math.sin(t), rel=0.05)
 
 
+# audit W3B-03
+def test_w3b_03_cables_drawn_at_the_touching_distance_are_not_an_overlap() -> None:
+    """Base 098bbbc: two 40 m cables (5 mm) drawn 1e-14 m closer than
+    touching (round-off of a drawing at the touching distance) were reported
+    as overlapping over 40 m, although the inductance matrix evaluates them
+    the same either way; 6 of the 31 overlaps of the 80-house radial network
+    stayed when its drops were drawn side by side at the touching distance.
+    The check has a relative tolerance of 1e-9 at the touching distance."""
+    w = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    y0 = 1.234567
+    for k, y in enumerate((y0, y0 + 0.01 * (1.0 - 1e-12))):
+        gf.create_junction(w, name=f"a{k}", position=(0.0, y, 0.7))
+        gf.create_junction(w, name=f"b{k}", position=(40.0, y, 0.7))
+        w.add_conductor(
+            gf.Conductor(
+                name=f"c{k}",
+                start=(0.0, y, 0.7),
+                end=(40.0, y, 0.7),
+                start_electrode=f"a{k}",
+                end_electrode=f"b{k}",
+                wire_radius=0.005,
+                coupling_to_soil="isolated",
+                inductance_model="neumann",
+            )
+        )
+    assert not _overlaps(w)
+
+
+# audit W3B-03
+@pytest.mark.parametrize(
+    ("factor", "flagged"), [(1.0 - 1e-6, True), (1.0 - 1e-10, False)]
+)
+def test_w3b_03_the_tolerance_is_relative_and_tight(factor, flagged) -> None:
+    """1e-6 inside the touching distance is still an overlap; 1e-10 is
+    round-off (the tolerance is 1e-9 of the touching distance)."""
+    w = _two_rods()
+    for k, y in enumerate((0.0, 0.012 * factor)):
+        gf.create_junction(w, name=f"a{k}", position=(0.0, y, 0.7))
+        gf.create_junction(w, name=f"b{k}", position=(50.0, y, 0.7))
+        _cable(w, f"cable_{k}", f"a{k}", f"b{k}")
+    assert bool(_overlaps(w)) is flagged
+
+
 def _generated(n: int, topology) -> gf.World:
     cfg = TnNetworkConfig(
         soil=HomogeneousSoilSpec(rho=100.0),
