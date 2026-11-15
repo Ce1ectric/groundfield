@@ -20,7 +20,8 @@ matrix is reported as the error estimate (``metadata["fem_error_estimate"]``;
 ``NaN`` for a single level, audit W4A-02). It bounds the error of the
 extrapolated value while the error of the finer level is at most 1/2.5 of
 that of the coarser (observed: 1/3.9 away from interfaces); against the
-finer level itself it is about 0.97 of its error.
+finer level itself it is 0.88 ... 0.99 of its error in 36 cases of audit
+W4A, 0.80 ... 1.0 next to an interface cut into a ring's block.
 
 The classification (:func:`classify`) is cheap and raises
 :class:`NotAxisymmetric` without the remedy text, so ``model="auto"`` falls
