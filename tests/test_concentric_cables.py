@@ -759,3 +759,25 @@ def test_the_bundle_chunks_change_no_bit(monkeypatch) -> None:
         monkeypatch.setattr(ind, "_BUNDLE_CHUNK", chunk)
         got = build_inductance_matrix(seg, radii, image="none", conductors=labels)
         assert np.array_equal(got, ref)
+
+
+# ---------------------------------------------------------------------
+# Labels and shields (audit W1R2-08)
+# ---------------------------------------------------------------------
+
+
+# audit W1R2-08
+def test_without_labels_only_the_marked_shield_is_one_conductor() -> None:
+    """``conductors=None`` makes every segment a conductor of its own:
+    unmarked touching pieces then keep the per-piece rule (they do not add
+    up), while the inside reading of a marked shield needs no labels, for
+    parallel and for slightly tilted cores. The docstring says so."""
+    for tilt in (0.0, 1e-4):
+        lumped = _tilted_loop(1, tilt, True)
+        assert _tilted_loop(20, tilt, True, labels=False) == pytest.approx(
+            lumped, rel=1e-9
+        )
+        unmarked = _tilted_loop(1, tilt, False)
+        assert _tilted_loop(20, tilt, False, labels=False) < unmarked * (1 - 1e-3)
+    doc = " ".join(build_inductance_matrix.__doc__.split())
+    assert "not recognised as one conductor" in doc

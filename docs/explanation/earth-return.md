@@ -281,7 +281,9 @@ the surface plane are rejected under this image convention, as before.
   marker leaves the self terms alone, so a shield needs
   `include_internal=False` (else it keeps the 50 nH/m of a solid wire,
   31.97 µH), and `conductors` labels the pieces of each conductor (without
-  it every segment is a conductor of its own). The
+  it every segment is a conductor of its own: unmarked touching pieces of
+  one cable then do not add up, 40.34 instead of 43.47 µH in 0.25 m
+  pieces, while a marked shield needs no labels; audit W1R2-08). The
   value does not depend on the order or the direction of the segments,
   is continuous in the geometry, and leaves chain neighbours, bends
   turning by less than 90° and pairs farther apart unchanged. For unequal

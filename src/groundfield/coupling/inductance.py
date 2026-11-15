@@ -2910,7 +2910,13 @@ def build_inductance_matrix(
         single segments acts, with an error of about 1e-6 because the
         touching stretch is then about one segment long). Pieces of one
         conductor and conductors that only meet end to end keep the
-        filament integral.
+        filament integral. **Without labels**, unmarked touching pieces of
+        one cable are not recognised as one conductor: they keep the rule
+        of the single segments and do not add up (the 100 m pair of 5 and
+        15 mm wires reads 40.34 µH in 0.25 m pieces against 43.47 µH
+        lumped); the inside reading of a marked shield (``shields``) needs
+        no labels and adds up either way (audit W1R2-08). The solver
+        passes one label per conductor.
 
     Returns
     -------
