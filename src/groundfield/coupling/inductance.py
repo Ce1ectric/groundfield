@@ -3176,8 +3176,112 @@ def _carson_pair_plan(
                 d_perp_horiz = max(d_perp_horiz, float(radii[i] + radii[j]))
             elif overlap <= 0.0:
                 continue  # staggered/end-to-end: no local tiling
-            entries.append((i, j, d_perp_horiz, overlap, sign))
+            if np.array_equal(unit_axes[j], sign * unit_axes[i]):
+                entries.append((i, j, d_perp_horiz, overlap, sign))
+                continue
+            # A tilted pair: tiled per stretch (audit W1R3-07). Up to 2026.11.0
+            # the per-metre value at the mid-point distance was taken for the
+            # whole overlap, so a lumped pair and its pieces differed (core
+            # crossing its shield's axis, 1 kHz: 4.3e-4 of X at 2e-3 rad,
+            # 5.2e-2 at 4e-2 rad). Where the distance changes along the overlap
+            # the correction is integrated over it (Gauss-Legendre nodes);
+            # pairs parallel up to round-off keep the single entry.
+            entries.extend(
+                _tilted_stretch_entries(
+                    seg_endpoints,
+                    unit_axes,
+                    midpoints,
+                    radii,
+                    heights,
+                    i,
+                    j,
+                    u,
+                    ref,
+                    sign,
+                    max(lo_i, lo_j),
+                    min(hi_i, hi_j),
+                    d_perp_horiz,
+                )
+            )
     return heights, lengths, horizontal, entries, fallback
+
+
+#: Relative change of the axis distance along the overlap (of the overlap
+#: length) below which a near-parallel pair keeps one Carson entry at its
+#: mid-point distance: pairs parallel up to round-off stay bit-identical.
+_STRETCH_TOL = 1e-9
+#: Gauss-Legendre nodes of a tilted stretch: _STRETCH_MIN_NODES plus
+#: _STRETCH_NODES_PER_SCALE per change of the offset by the image distance
+#: h_i + h_j, at most _STRETCH_MAX_NODES.
+_STRETCH_MIN_NODES = 4
+_STRETCH_NODES_PER_SCALE = 8.0
+_STRETCH_MAX_NODES = 32
+
+
+def _tilted_stretch_entries(
+    seg_endpoints,
+    unit_axes,
+    midpoints,
+    radii,
+    heights,
+    i,
+    j,
+    u,
+    ref,
+    sign,
+    lo,
+    hi,
+    d_mid,
+) -> list[tuple[int, int, float, float, float]]:
+    """Carson entries of a tilted near-parallel pair, tiled per stretch.
+
+    The horizontal axis distance $d(t)$ of the two segments at the position
+    $t$ along the bisector ``u`` changes linearly along the overlap
+    $[t_\\text{lo}, t_\\text{hi}]$; the per-metre correction is integrated
+    over it with Gauss–Legendre nodes, $\\sum_k w_k\\,\\Delta Z'(d(t_k))$
+    (4 nodes plus 8 per change of the offset by the image distance
+    $h_i + h_j$, at most 32). A pair whose offset changes by less than
+    :data:`_STRETCH_TOL` of the overlap keeps the single entry at the
+    mid-point distance ``d_mid``. On one depth two wires are no closer than
+    touching, $r_i + r_j$, as for collinear conductors.
+    """
+    overlap = hi - lo
+    e_i, e_j = unit_axes[i], unit_axes[j]
+    t_mid_i = float((midpoints[i] - ref) @ u)
+    t_mid_j = float((midpoints[j] - ref) @ u)
+    c_i, c_j = float(e_i @ u), float(e_j @ u)
+
+    def offset(t: np.ndarray) -> np.ndarray:
+        p_i = midpoints[i][None, :] + ((t - t_mid_i) / c_i)[:, None] * e_i[None, :]
+        p_j = midpoints[j][None, :] + ((t - t_mid_j) / c_j)[:, None] * e_j[None, :]
+        v = p_j - p_i
+        return v - (v @ u)[:, None] * u[None, :]
+
+    # change of the horizontal offset vector along the overlap (a pair crossing
+    # at mid-length has equal distances at both ends)
+    ends = offset(np.array([lo, hi]))
+    change = math.hypot(*(ends[1, :2] - ends[0, :2]))
+    if change <= _STRETCH_TOL * max(overlap, d_mid):
+        return [(i, j, d_mid, overlap, sign)]
+    scale = max(float(heights[i] + heights[j]), 1e-3)
+    n = int(
+        min(
+            _STRETCH_MAX_NODES,
+            _STRETCH_MIN_NODES + math.ceil(_STRETCH_NODES_PER_SCALE * change / scale),
+        )
+    )
+    x, w = np.polynomial.legendre.leggauss(n)
+    t = 0.5 * (lo + hi) + 0.5 * overlap * x
+    v = offset(t)
+    d = np.hypot(v[:, 0], v[:, 1])
+    # wires on one depth are no closer than touching (continuous along the
+    # stretch, unlike the threshold of the single entry)
+    side = np.abs(v[:, 2]) < 1e-6
+    d = np.where(side, np.maximum(d, float(radii[i] + radii[j])), d)
+    return [
+        (i, j, float(d_k), float(0.5 * overlap * w_k), sign)
+        for d_k, w_k in zip(d, w, strict=True)
+    ]
 
 
 def _direct_mutual_matrix(
@@ -3374,7 +3478,9 @@ def build_carson_correction_matrices(
                     horizontal_distance=d_h,
                     sigma_earth=sigma_earth,
                 )
-            dZ[i, j] = dZ[j, i] = sign * dz_per_m * factor
+            # += : a tilted pair has one entry per node of its stretch
+            dZ[i, j] += sign * dz_per_m * factor
+            dZ[j, i] = dZ[i, j]
         for (i, j), vals in fallback_values.items():
             dZ[i, j] = dZ[j, i] = vals[k]
         if M_conv is not None:
