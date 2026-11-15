@@ -171,7 +171,11 @@ def test_w2r2_01_worlds_pickled_by_8c83d7c_check_and_solve(pre_d1, name):
             pre_d1["input_impedance"][name][src.name],
             strict=True,
         ):
-            assert _close(z, z_old), (src.name, z, z_old)
+            # The stored value is the line-kernel solve of 8c83d7c; the
+            # continuous switch and the far images of stream w3xl moved it
+            # by 6.8e-7 (declared up to 6.0e-4 in golden), which is not
+            # what this test checks.
+            assert _close(z, z_old, rtol=1e-5), (src.name, z, z_old)
     # The world pickles again with the fields and loads unchanged.
     again = pickle.loads(pickle.dumps(world))
     assert again.sources == from_json.sources
