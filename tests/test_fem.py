@@ -1286,3 +1286,38 @@ def test_w4r2a_07_tutorial_t09_says_that_fem_has_no_source_kernel() -> None:
     assert "no source kernel of its own" in before
     out = "".join("".join(o.get("text", "")) for o in cells[i].get("outputs", []))
     assert "'fem' (experimental)" in out  # the registry's list, explained above
+
+
+def test_mesh_lines_that_differ_by_round_off_are_one_line() -> None:
+    """Two features computed two ways (a block's centre line at
+    0.30000000000000004 m, an interface at 0.3 m) were two lines 5.6e-17 m
+    apart: a row of cells of zero height across the mesh (found by this
+    stream's reach study, evidence ``fw4r2a/e03_reach_c.out``)."""
+    # stream fw4r2a (self-check of W4R2A-02/04)
+    from groundfield.solver.fem._mesh import graded_lines
+
+    lines = graded_lines(
+        [(0.0, math.inf), (0.3, 1e-3), (0.1 + 0.2, 2e-3), (1.0, math.inf)], 0.2
+    )
+    assert np.diff(lines).min() > 1e-6
+    assert int(np.sum(np.abs(lines - 0.3) < 1e-12)) == 1
+
+
+def test_a_ring_on_an_interface_and_a_rod_tip_on_it_survive_round_off() -> None:
+    """A ring with its axis exactly on an interface at 0.3 m (r0 = 0.5 m,
+    a = 10 mm) raised ``RuntimeError: Factor is exactly singular``; a rod
+    from 0.1 m of length 0.2 m (tip at 0.30000000000000004 m) with the
+    interface at 0.3 m read 6809 Ohm instead of 647 Ohm (levels 646 / 2012),
+    silently. Both had mesh lines 5.6e-17 m apart."""
+    # stream fw4r2a (self-check of W4R2A-02/04)
+    soil = _two(100.0, 100.0 / 1.3, 0.3)
+    on = _z(_ring_world(soil, r0=0.5, depth=0.3, radius=0.01))
+    hankel = ref.ring_layered_hankel([100.0, 100.0 / 1.3], [0.3], 0.5, 0.3, 0.01)
+    assert abs(on / hankel - 1.0) < 2e-3, (on, hankel)
+    beside = _z(_ring_world(soil, r0=0.5, depth=0.3 + 1e-9, radius=0.01))
+    assert abs(on / beside - 1.0) < 1e-5
+    tips = [
+        _z(_rod_world(_two(1000.0, 30.0, h), top=0.1, length=0.2), segment_length=0.05)
+        for h in (0.3, 0.1 + 0.2, 0.3 + 1e-9)
+    ]
+    assert max(tips) / min(tips) - 1.0 < 1e-5, tips

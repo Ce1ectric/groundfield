@@ -62,6 +62,12 @@ __all__: list[str] = []
 # ---------------------------------------------------------------------
 
 
+#: Coordinates of mesh features closer than this, relative to the larger of
+#: 1 m and the coordinate, are one line (round-off; the tolerance of the line
+#: look-up :func:`_index`).
+_SAME_LINE = 1e-12
+
+
 def graded_lines(features: list[tuple[float, float]], growth: float) -> np.ndarray:
     """Node coordinates through every feature, graded away from them.
 
@@ -71,7 +77,9 @@ def graded_lines(features: list[tuple[float, float]], growth: float) -> np.ndarr
         ``(x, h)`` pairs: a coordinate in m that must be a node and the
         node spacing in m wanted there (``math.inf`` for a line without
         its own size, e.g. a domain boundary). At least one size must be
-        finite. Duplicates keep the smallest size.
+        finite. Duplicates keep the smallest size; so do coordinates that
+        differ by round-off only (:data:`_SAME_LINE`), which become the
+        line of the first of them.
     growth
         Growth $g > 0$ of the spacing per unit distance: the spacing at
         $x$ is $h(x) = \\min_f (h_f + g\\,|x - x_f|)$.
@@ -80,7 +88,8 @@ def graded_lines(features: list[tuple[float, float]], growth: float) -> np.ndarr
     -------
     numpy.ndarray
         Sorted node coordinates in m. Every feature coordinate is a node
-        (bit for bit); between two neighbouring features the nodes follow
+        (bit for bit, or within :data:`_SAME_LINE` for one merged into its
+        neighbour); between two neighbouring features the nodes follow
         $h(x)$, with at least one interval.
     """
     if growth <= 0.0:
@@ -89,8 +98,21 @@ def graded_lines(features: list[tuple[float, float]], growth: float) -> np.ndarr
     for x, h in features:
         x, h = float(x), float(h)
         merged[x] = min(merged.get(x, math.inf), h)
-    xs = np.array(sorted(merged))
-    hs = np.array([merged[x] for x in xs])
+    # One line for coordinates computed two ways (a block's centre line at
+    # 0.30000000000000004 m and an interface at 0.3 m; a rod tip at 0.1 + 0.2):
+    # two lines 5.6e-17 m apart were a row of cells of zero height, which made
+    # the stiffness matrix singular or the resistance wrong by a factor of ten.
+    xs_all = sorted(merged)
+    xs_list: list[float] = []
+    hs_list: list[float] = []
+    for x in xs_all:
+        if xs_list and x - xs_list[-1] <= _SAME_LINE * max(1.0, abs(xs_list[-1])):
+            hs_list[-1] = min(hs_list[-1], merged[x])
+            continue
+        xs_list.append(x)
+        hs_list.append(merged[x])
+    xs = np.array(xs_list)
+    hs = np.array(hs_list)
     finite = np.isfinite(hs)
     if not finite.any():
         raise ValueError("graded_lines needs at least one feature with a finite size.")
@@ -327,7 +349,7 @@ def mesh_lines(
 def _index(lines: np.ndarray, value: float) -> int:
     """Index of the line at ``value`` (it is a feature, hence exact)."""
     k = int(np.argmin(np.abs(lines - value)))
-    if abs(float(lines[k]) - value) > 1e-12 * max(1.0, abs(value)):
+    if abs(float(lines[k]) - value) > _SAME_LINE * max(1.0, abs(value)):
         raise AssertionError(f"mesh line {value!r} missing")  # pragma: no cover
     return k
 
