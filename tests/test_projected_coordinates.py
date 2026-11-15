@@ -20,8 +20,11 @@ The count rule now allows the round-off of coordinates of the size of the
 edge's own (the straight-run test of audit W1A-01 does the same), and the
 solvers compute in a local frame — the world shifted by a reference point
 of its own — whenever a coordinate exceeds 10 km; results are reported in
-the user's coordinates. Worlds within 10 km of the origin are solved
-bit-identically to before.
+the user's coordinates. Worlds within 10 km of the origin are not shifted;
+their electrodes are discretised as before, while a distributed conductor
+whose length exceeds a whole number of pieces only by round-off now gets
+that whole number at any position (audit W2B-03,
+``test_w2b_03_local_counterpoise_gets_whole_pieces``).
 
 The yardstick is the round-off of local coordinates: the same world moved
 by local offsets of 0.1 m to 8.8 km. With the point kernel (``image``
@@ -30,9 +33,11 @@ UTM solve now lies 3e-11 from the local one (the rounding of the input
 vertices themselves, about 1e-9 m). The line kernel switches from the exact
 Galerkin integral to its far form at a midpoint distance of six segment
 lengths, where the pairs six segments apart on a straight wire sit exactly:
-round-off decides their form at any position, and its impedances spread by
-up to 2.4e-7 over the local offsets. The UTM solves lie within that spread
-(they were up to 1.5e-6 off).
+round-off decides their form at any position, and the impedances of the
+worlds here spread by up to 2.4e-7 over the local offsets (audit W2B-01:
+up to 5.4e-7 for direct pairs, 8e-6 ... 2.6e-5 in two-layer soil where an
+image distance is six segment lengths). The UTM solves lie within that
+spread (they were up to 1.5e-6 off).
 """
 
 from __future__ import annotations
@@ -255,6 +260,30 @@ def test_segment_counts_do_not_depend_on_the_position(build) -> None:
     assert np.allclose(lengths_utm, lengths_local, rtol=1e-8, atol=0.0)
     # The electrode's own count (diagnostics) agrees with the solver's.
     assert sum(e.segment_count(0.5) for e in utm.electrodes) == len(lengths_utm)
+
+
+# audit W2B-03
+def test_w2b_03_local_counterpoise_gets_whole_pieces() -> None:
+    """The count rule allows round-off at any position, near the origin too.
+
+    A 60 m counterpoise in 10 m pieces from (3, 0, 0.5) m at 0.1 deg has the
+    computed length 60.00000000000001 m. Up to the projected-coordinate fix
+    (base 1579ed8) it got 7 pieces, as in 876 of 3600 directions at 0.1 deg
+    steps, now 6 in every one (audit W2B-03; Z -0.30 % ``image``, -2.54 %
+    ``mom``, evidence ``w2b03_counterpoise.py`` of stream fw2mom). Pins the
+    new behaviour; *Units and conventions* says so.
+    """
+    a = math.radians(0.1)
+    c = gf.Conductor(
+        name="cp",
+        start=(3.0, 0.0, 0.5),
+        end=(3.0 + 60.0 * math.cos(a), 60.0 * math.sin(a), 0.5),
+        cross_section=50e-6,
+        discretize_segment_length=10.0,
+        coupling_to_soil="galvanic",
+    )
+    assert c.length > 60.0
+    assert c.n_segments == 6
 
 
 @pytest.mark.finding("10.32")

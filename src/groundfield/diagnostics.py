@@ -9,10 +9,11 @@ cross-engine check):
 
 * :func:`diagnose` — one structured, aggregated report
   (:class:`DiagnosticsReport`) of everything that limits the accuracy
-  or the meaning of a solve: discretisation quality, segment budget,
-  close or interpenetrating wires, inert configuration and, after the
-  solve, series truncation. One line per cause, not per electrode
-  (review finding 10.70).
+  or the meaning of a solve: coordinates that mix local and projected
+  systems, discretisation quality, segment budget, close or
+  interpenetrating wires, inert configuration and, after the solve,
+  series truncation. One line per cause, not per electrode (review
+  finding 10.70).
 * :func:`world_statistics` — aggregate counts and lengths,
   bounding box, footprint area, conductor-length statistics.
 * :func:`expected_segments` — predicts the number of point-source
@@ -130,6 +131,7 @@ __all__ = [
     "Diagnostic",
     "DiagnosticsReport",
     "DiagnosticsWarning",
+    "MixedCoordinatesWarning",
     "ResourceLimitError",
     "MIN_THINWIRE_RATIO",
     "SOFT_LIMIT",
@@ -217,6 +219,27 @@ class DiagnosticsWarning(UserWarning):
     """One aggregated warning with the findings of :func:`diagnose`."""
 
 
+class MixedCoordinatesWarning(UserWarning):
+    """The world mixes local and projected coordinates (user decision D5).
+
+    Emitted once per solve by every solve in a local frame (the image
+    family, ``mom``, ``mom_sommerfeld`` and ``solve_mutual_*``), before
+    anything is discretised, when points of the world lie both within
+    10 km of the origin and beyond 1000 km from it: electrodes at UTM or
+    Gauss-Krüger coordinates and a node or electrode near (0, 0), almost
+    always given in the wrong system by mistake. The world is solved as
+    given, its two groups some 33 000 km apart (audit W2B-04, measured with
+    a 12 m × 7 m outline and a 3 m rod at UTM coordinates: a return rod given
+    at local (80, 15) m raises Z_in by 0.43 %, a PEN cable to a cabinet at local coordinates
+    becomes a 33 118 km conductor, Z_in 7494 + j25396 Ω instead of
+    5.39 + j0.19 Ω at 50 Hz with Carson's earth return, and the Sommerfeld
+    earth return does not finish).
+    :func:`diagnose` reports the same world under ``coordinates``.
+
+    Remedy: give every point in one coordinate system.
+    """
+
+
 Severity = Literal["info", "warning"]
 
 
@@ -227,9 +250,9 @@ class Diagnostic:
     Attributes
     ----------
     category
-        Cause: ``"thin_wire"``, ``"resolution"``, ``"budget"``,
-        ``"proximity"``, ``"interface_contact"``, ``"inert"`` or
-        ``"series"``.
+        Cause: ``"coordinates"``, ``"thin_wire"``, ``"resolution"``,
+        ``"budget"``, ``"proximity"``, ``"interface_contact"``, ``"inert"``
+        or ``"series"``.
     severity
         ``"warning"`` (the result is likely biased or the setting has no
         effect) or ``"info"`` (worth knowing, usually harmless).
@@ -905,6 +928,59 @@ def check_segment_budget(
 # ---------------------------------------------------------------------
 
 
+def _coordinate_findings(world: "World") -> list[Diagnostic]:
+    """Mixed local / projected coordinates and very wide worlds (decision D5)."""
+    from groundfield.solver._frame import (
+        LOCAL_RADIUS_M,
+        MAX_EXTENT_M,
+        PROJECTED_RADIUS_M,
+        _km,
+        coordinate_span,
+    )
+
+    span = coordinate_span(world)
+    if span is None:
+        return []
+    data: dict[str, Any] = {
+        "extent_m": span.extent_m,
+        "bounds_xy_m": span.bounds_xy,
+    }
+    if span.mixed:
+        data.update(
+            near=list(span.near),
+            far=list(span.far),
+            spanning=list(span.spanning),
+            spanning_lengths_m=list(span.spanning_lengths_m),
+            local_radius_m=LOCAL_RADIUS_M,
+            projected_radius_m=PROJECTED_RADIUS_M,
+        )
+        return [
+            Diagnostic(
+                "coordinates",
+                "warning",
+                (world.name,),
+                span.message() + " The solve warns with MixedCoordinatesWarning.",
+                data,
+            )
+        ]
+    if span.extent_m > MAX_EXTENT_M:
+        data["max_extent_m"] = MAX_EXTENT_M
+        return [
+            Diagnostic(
+                "coordinates",
+                "info",
+                (world.name,),
+                f"the horizontal extent of the world is {_km(span.extent_m)} "
+                "(the diagonal of its bounding box), more than "
+                f"{MAX_EXTENT_M / 1e3:g} km: check that every point is given in "
+                "metres and in one coordinate system (two UTM zones, or the "
+                "zone prefix on some eastings only).",
+                data,
+            )
+        ]
+    return []
+
+
 def _resolution_findings(world: "World", engine: "Engine") -> list[Diagnostic]:
     ds = _check_ds(engine)
     out: list[Diagnostic] = []
@@ -1327,6 +1403,18 @@ def diagnose(
     -----
     Categories:
 
+    ``coordinates``
+        The world mixes local and projected coordinates: points lie both
+        within 10 km of the origin and beyond 1000 km from it (horizontal
+        distance; warning, user decision D5, audit W2B-04). The world is
+        solved as given, its two groups some 33 000 km apart, and the solve
+        warns with :class:`MixedCoordinatesWarning`. A world that does not
+        mix but whose horizontal extent (the diagonal of its bounding box)
+        exceeds 100 km is reported as information (two UTM zones, a zone
+        prefix on some eastings only, a geometry in millimetres). The data
+        name the elements of each group (``near``, ``far``), the conductors
+        between them (``spanning``, ``spanning_lengths_m``) and the extent
+        (``extent_m``, ``bounds_xy_m``).
     ``thin_wire``
         ``segment_length / wire_radius`` below :data:`MIN_THINWIRE_RATIO`
         (electrodes; ``discretize_segment_length`` for distributed
@@ -1376,6 +1464,7 @@ def diagnose(
             "proximity_rel_threshold": PROXIMITY_REL_THRESHOLD,
         }
     )
+    report.findings.extend(_coordinate_findings(world))
     if engine is not None:
         report.context["segment_length_m"] = _check_ds(engine)
         report.context["max_segments"] = _hard_limit(engine)
