@@ -242,13 +242,18 @@ an LV network. For the generated star, radial and grid networks of
 5 … 100 houses with an insulated Neumann PEN (100 Ω·m and two-layer soils
 of 30 … 200 Ω·m), against `sommerfeld` with a refined discretisation (PEN
 in 2.5 m pieces, 1 m segments; the default `sommerfeld` agrees with it to
-4e-4), `carson_series` reads the input reactance 4 … 21 % and the
-resistance 2 … 11 % high at 1 kHz, and the reactance 21 … 44 % high at
-50 Hz (the 10-house radial network +20 % / +41 %, the 30-house star
-+17 % / +44 % at 1 kHz / 50 Hz; audit W3B-02). At 50 Hz `carson_series` is
-then no closer than the diagnostic `perfect_mirror` (+40 % / +37 % there);
-the resistance at 50 Hz is within 0.4 %. The error changes with the
-geometry. A change of such a network is
+1e-3 for the 5-house radial network and to 4e-5 for the 80- and 100-house
+ones), `carson_series` reads the input reactance 4 … 21 % and the
+resistance up to 11 % high at 1 kHz, and the reactance 21 … 50 % and the
+resistance up to 0.9 % high at 50 Hz (the 5-house radial network
++13 % / +31 %, the 10-house radial network +20 % / +41 %, the 30-house
+star +17 % / +44 %, the 80-house radial network +19 % / +50 % at 1 kHz /
+50 Hz; the 100-house radial network R +11 % / +0.9 %; audits W3B-02,
+W3R2B-03). At 50 Hz `carson_series` is then no closer than the diagnostic
+`perfect_mirror` for the 10-house radial network, the 30-house star and the
+80- and 100-house radial networks (`perfect_mirror` +40 / +37 / +41 / +41 %
+there), but closer for the 5-house radial network (`perfect_mirror`
++45 %). The error changes with the geometry. A change of such a network is
 therefore reproduced by `carson_series` only within that error, possibly
 with the opposite sign: across the cabinet fix of audit W1B-01/02 the
 star's reactance moves by +1.18 % under `carson_series` and −3.54 % under

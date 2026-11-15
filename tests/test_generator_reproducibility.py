@@ -286,3 +286,87 @@ def test_mask_works_where_md5_is_blocked_for_security(
     monkeypatch.setattr(penetration.hashlib, "md5", fips_md5)
     bits = "".join("1" if m else "0" for m in _osm_layout().foundation_mask(0.3))
     assert bits == "01101001100111001000"
+
+
+# ---------------------------------------------------------------------
+# plan() and build() of one generator (audit W3R2B, outside the round)
+# ---------------------------------------------------------------------
+
+
+def _jitter_config(jitter: float = 0.5) -> TnNetworkConfig:
+    from groundfield.generators import ManhattanGridPlacement
+
+    return TnNetworkConfig(
+        building_counts={"residential": 6},
+        placement=ManhattanGridPlacement(n_per_row=3, jitter_m=jitter),
+    )
+
+
+# audit W3R2B (outside the round): plan() and build()
+def test_build_after_plan_gives_the_world_of_the_plan() -> None:
+    """Base 06580ea: with placement jitter, ``plan()`` followed by
+    ``build()`` on the same generator drew the jitter twice, so the built
+    world was not the world of the plan (``materialise_plan(plan)`` was).
+    ``build()`` now materialises the plan the generator returned last when
+    nothing has drawn from its RNG since and the configuration is the
+    same."""
+    from groundfield.generators.materialise import materialise_plan
+
+    gen = TnNetworkGenerator(_jitter_config(), seed=3)
+    plan = gen.plan()
+    assert _world_json(gen.build()) == _world_json(materialise_plan(plan))
+
+
+# audit W3R2B (outside the round): plan() and build()
+def test_the_generator_stream_still_gives_new_realisations() -> None:
+    """Successive ``build()`` (or ``plan()``) calls still draw successive
+    realisations from the generator's stream, the first ``build()`` of a
+    generator is the one of 06580ea, and a ``build()`` after the plan has
+    been used, after another draw from the RNG, with another configuration
+    or with an explicit ``rng`` plans anew."""
+    from groundfield.generators.materialise import materialise_plan
+
+    cfg = _jitter_config()
+    first = _world_json(TnNetworkGenerator(cfg, seed=3).build())
+    gen = TnNetworkGenerator(cfg, seed=3)
+    plan = gen.plan()
+    assert _world_json(materialise_plan(plan)) == first
+    assert _world_json(gen.build()) == first  # the plan's world
+    second = _world_json(gen.build())  # the plan was used: the next one
+    assert second != first
+    # another plan, then a draw from the generator's RNG: plan anew
+    gen = TnNetworkGenerator(cfg, seed=3)
+    p1 = gen.plan()
+    gen.rng.random()
+    assert _world_json(gen.build()) != _world_json(materialise_plan(p1))
+    # another configuration: plan anew, from the stream after the plan
+    gen = TnNetworkGenerator(cfg, seed=3)
+    gen.plan()
+    other = _jitter_config(0.25)
+    ref = TnNetworkGenerator(cfg, seed=3)
+    ref.plan()
+    assert _world_json(gen.build(other)) == _world_json(
+        materialise_plan(ref.plan(other))
+    )
+    # an explicit rng plans from it and leaves the generator's own stream
+    # alone: the plan of that stream is still the next world
+    gen = TnNetworkGenerator(cfg, seed=3)
+    p2 = gen.plan()
+    assert _world_json(gen.build(rng=11)) == _world_json(
+        TnNetworkGenerator(cfg, seed=0).build(rng=11)
+    )
+    assert _world_json(gen.build()) == _world_json(materialise_plan(p2))
+
+
+# audit W3R2B (outside the round): plan() and build()
+def test_without_jitter_plan_and_build_agree_as_before() -> None:
+    """A configuration without per-site randomness gives the same world from
+    every call, as in 06580ea."""
+    from groundfield.generators.materialise import materialise_plan
+
+    cfg = TnNetworkConfig(building_counts={"residential": 6})
+    gen = TnNetworkGenerator(cfg, seed=3)
+    reference = _world_json(TnNetworkGenerator(cfg, seed=3).build())
+    assert _world_json(materialise_plan(gen.plan())) == reference
+    assert _world_json(gen.build()) == reference
+    assert _world_json(gen.build()) == reference

@@ -334,7 +334,118 @@ def test_w3b_06_the_reader_takes_any_object_with_a_description() -> None:
     assert read(NS(description="text\ngroundfield rho_preset: station")) == "station"
     # only the last line is the record
     assert read(NS(description="groundfield rho_preset: station\nmore")) is None
-    with pytest.raises(ValueError, match="rho_preset"):
-        read(NS(description="groundfield rho_preset: "))
+    # a line that names no known preset is the user's text (audit W3R2B-06;
+    # until then it raised ValueError)
+    assert read(NS(description="groundfield rho_preset: ")) is None
     with pytest.raises(TypeError, match="description"):
         read(42)
+
+
+# ---------------------------------------------------------------------
+# audit W3R2B-06: robustness of the preset line
+# ---------------------------------------------------------------------
+
+
+# audit W3R2B-06 (the auditor's test)
+@pytest.mark.parametrize(
+    "odd", ["station\nfoo", " station ", "not_a_preset", "Station"]
+)
+def test_w3r2b_06_a_document_preset_that_the_description_cannot_carry_is_refused(
+    odd,
+) -> None:
+    """Base 06580ea: the loader refused only blank presets. A document
+    preset with a line break ("station\\nfoo") gave a live BusType whose
+    last description line was "foo" (bustype_rho_preset -> None, the preset
+    lost silently); " station " was read back as "station" while the spec
+    said " station "; an unknown name was carried as is, although the
+    exporters accept only EFFECTIVE_RESISTIVITY_PRESETS. The loader checks
+    the preset as the exporters do."""
+    from groundfield.io.groundinsight import to_bustype_dict
+
+    payload = to_bustype_dict(
+        _make_rho_f_fit(),
+        name="doc",
+        system_type="TN",
+        voltage_level=0.4,
+        rho_preset="station",
+    )
+    payload["metadata"]["rho_preset"] = odd
+    with pytest.raises(ValueError, match="rho_preset"):
+        BusTypeSpec.from_dict(payload)
+
+
+# audit W3R2B-06 (the auditor's test)
+def test_w3r2b_06_user_text_that_only_starts_like_the_marker_is_kept(
+    groundinsight,
+) -> None:
+    """Base 06580ea: without a preset, every line of the given description
+    that started with "groundfield rho_preset:" was dropped, anywhere in the
+    text and whatever followed: the description "groundfield rho_preset: is
+    what we record" became None. Only the exact preset line
+    ``groundfield rho_preset: <known preset>`` is the record."""
+    from groundfield.io.groundinsight import to_bustype
+
+    desc = "groundfield rho_preset: is what we record"
+    bt = to_bustype(
+        _make_rho_f_fit(),
+        name="x",
+        system_type="TN",
+        voltage_level=0.4,
+        description=desc,
+    )
+    assert bt.description == desc
+    assert gf.bustype_rho_preset(bt) is None
+
+
+# audit W3R2B-06
+def test_w3r2b_06_only_the_preset_line_is_replaced(groundinsight) -> None:
+    """Base 06580ea: with a preset, the description was split into lines and
+    joined with "\\n" (CRLF and U+2028 became "\\n"), and every line that
+    started with the marker was dropped. Now the given text keeps its
+    lines and line breaks; only exact preset lines are removed or replaced,
+    and the preset line is appended as the last line."""
+    from groundfield.io.groundinsight import to_bustype
+
+    fit = _make_rho_f_fit()
+
+    def live(description, preset):
+        return to_bustype(
+            fit,
+            name="x",
+            system_type="TN",
+            voltage_level=0.4,
+            description=description,
+            rho_preset=preset,
+        ).description
+
+    assert live("a\r\nb", "station") == "a\r\nb\ngroundfield rho_preset: station"
+    assert live("a b\n", "station") == "a b\ngroundfield rho_preset: station"
+    note = "groundfield rho_preset: is a user note"
+    assert (
+        live(f"{note}\r\ngroundfield rho_preset: lv_network", "station")
+        == f"{note}\r\ngroundfield rho_preset: station"
+    )
+    # a stale preset line without a preset: only that line goes
+    assert live(f"{note}\r\ngroundfield rho_preset: lv_network", None) == note
+    assert live("x\ngroundfield rho_preset: station\ny", None) == "x\ny"
+    assert live("groundfield rho_preset: station", None) is None
+    assert live("a\r\nb", None) == "a\r\nb"
+
+
+# audit W3R2B-06
+def test_w3r2b_06_the_reader_takes_only_the_exact_preset_line() -> None:
+    """The reader agrees with the writer: the last line is a record only
+    when it is exactly ``groundfield rho_preset: <known preset>``; any other
+    line is the user's text."""
+    from types import SimpleNamespace as NS
+
+    read = gf.bustype_rho_preset
+    assert read(NS(description="a\r\ngroundfield rho_preset: station")) == "station"
+    for text in (
+        "groundfield rho_preset: is what we record",
+        "groundfield rho_preset:  station",
+        "groundfield rho_preset: station ",
+        "groundfield rho_preset: Station",
+        "groundfield rho_preset: ",
+    ):
+        assert read(NS(description=text)) is None, text

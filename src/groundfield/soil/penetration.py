@@ -113,8 +113,12 @@ class PenetrationDepth:
 
     A value: the three arrays are read-only copies of the given ones, two
     results compare equal when their arrays are equal (``==``), and a result
-    is hashable (by its frequencies, so equal results have equal hashes), so
-    it can key a dictionary or join a set (audit W3B-11).
+    is hashable (by its frequency values, so equal results have equal
+    hashes), so it can key a dictionary or join a set (audit W3B-11). A
+    result built directly is validated as :func:`penetration_depth` builds
+    it: finite, positive frequencies, no NaN in the depth or the resistivity
+    (audit W3R2B-05: f = +0.0 and -0.0 compared equal but hashed differently,
+    and a NaN depth made ``x == x`` False).
 
     Attributes
     ----------
@@ -133,7 +137,9 @@ class PenetrationDepth:
     Raises
     ------
     ValueError
-        If the three arrays are not one-dimensional of one length.
+        If the three arrays are not one-dimensional of one length, a
+        frequency is not finite and positive, or the depth or the
+        resistivity holds a NaN.
     """
 
     frequencies: np.ndarray
@@ -153,6 +159,18 @@ class PenetrationDepth:
                 "one-dimensional arrays of one length (one entry per frequency), "
                 f"got the shapes {[value.shape for value in arrays.values()]}."
             )
+        f = arrays["frequencies"]
+        if not np.all(np.isfinite(f)) or np.any(f <= 0.0):
+            raise ValueError(
+                "PenetrationDepth: frequencies must be finite and positive (Hz), "
+                f"got {f.tolist()!r}."
+            )
+        for name in ("depth", "resistivity"):
+            if np.any(np.isnan(arrays[name])):
+                raise ValueError(
+                    f"PenetrationDepth: {name} must not be NaN, got "
+                    f"{arrays[name].tolist()!r}."
+                )
         for name, value in arrays.items():
             value.setflags(write=False)
             object.__setattr__(self, name, value)
@@ -166,7 +184,9 @@ class PenetrationDepth:
         )
 
     def __hash__(self) -> int:
-        return hash(self.frequencies.tobytes())
+        # the values, not the bytes: equal arrays hash equally (the
+        # frequencies are finite and positive, so no signed zero or NaN)
+        return hash(tuple(self.frequencies.tolist()))
 
     def mutual_impedance(self, z_i: float, z_j: float, distance: float) -> np.ndarray:
         """Per-metre impedance of the complex-depth formula, every frequency.

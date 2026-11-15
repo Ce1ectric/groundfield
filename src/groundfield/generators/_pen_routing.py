@@ -88,26 +88,46 @@ Rules of :class:`~groundfield.generators.tn_network.TnNetworkGenerator`
    raises :class:`ValueError` naming both (a site on top of another).
 
 5. **Drops that leave one tap in one direction lie in a row** (decision D9
-   of 2026.11): drops that start at one node at one point and run on one
-   axis in one direction (the drops of houses behind each other: the five
-   drops of the 5-house radial network all leave the substation ring along
-   −x) are laid side by side at the touching distance $d_t = 2r$ of the
-   PEN, so that only neighbours touch. The row is sorted by drop length,
-   shortest first (equal lengths keep their plan order), and drop $k$ of
-   $n$ lies at $(k - (n - 1)/2)\,d_t$ from the common axis along the normal
-   $(-d_y, d_x)/|d|$ of the drop direction $d$
+   of 2026.11; robust to placement jitter since audit W3R2B-01): drops
+   that leave one node in one direction (the drops of houses behind each
+   other: the five drops of the 5-house radial network all leave the
+   substation ring along −x) are laid side by side at the touching distance
+   $d_t = 2r$ of the PEN, so that only neighbours touch. Two drops of one
+   node belong to one row when their start points lie within $d_t$ of each
+   other and the end of the shorter one within $d_t$ of the line of the
+   longer one, pointing the same way — the overlap criterion itself; rows
+   are the connected groups of that relation. (In the default grids of
+   5 … 200 houses two drops of one node are collinear to round-off,
+   3e-14 m, or 0.28 m apart at the end of the shorter one; a placement
+   jitter of up to 0.1 m keeps the first kind within 1 cm.) The row is
+   sorted by drop length, shortest first (equal lengths keep their plan
+   order). Drops on one axis to round-off — every generated network
+   without jitter — keep the layout of D9: drop $k$ of $n$ at
+   $(k - (n - 1)/2)\,d_t$ along the normal $(-d_y, d_x)/|d|$ of its
+   direction $d$
    (:attr:`~groundfield.generators.plan.PlannedBranch.axis_offset_m`; both
    ends move, the drop stays attached to its tap and its building): the
    row is centred on the axis, a row of an odd number of drops keeps its
-   middle drop on it. "On one axis" means: the start points and the end of
-   the shorter drop lie within $10^{-9}\,d_t$ of the line of the longer one
-   (the tolerance of the overlap check of
-   :func:`~groundfield.diagnostics.diagnose`, audit W3B-03; in the default
-   grids of 5 … 200 houses two drops of one node are collinear to
-   round-off, 3e-14 m, or diverge by at least 1.6e-2 rad, 0.28 m at the end
-   of the shorter one). Up to
-   then they were drawn on one axis and the inductance matrix read them as
-   a bundle in which every pair touches, which no cross-section of four or
+   middle drop on it, and a drop starts up to $(n - 1)/2\,d_t$ off its tap
+   (2 cm in the rows of five). The drops of a row that are not exactly
+   parallel (placement jitter) are shifted along one common normal, that
+   of the longest drop
+   (:attr:`~groundfield.generators.plan.PlannedBranch.axis_offset_normal_xy`),
+   each just far enough to lie at least $d_t$ from every shorter one, and
+   the row is centred (its smallest and largest offsets of equal size). A drop
+   that would then lie closer than touching to a drop of another row over a
+   stretch that :func:`~groundfield.diagnostics.diagnose` reports as an
+   overlap — a drop of the same node, a drop of another node next to which
+   a row has moved one of its drops, or a drop of a tap a centimetre away
+   on the same cable — joins that row, until none does. So a row is never
+   centred on a drop that is not in it, and no generated network reports
+   an overlap (star and radial networks of 5 … 200 houses, placement jitter
+   0 … 0.1 m). Up to then a row needed its start points and the shorter
+   drop's end within $10^{-9}\,d_t$ = 1e-11 m of the longer drop's line,
+   which a jitter of 1 nm broke (the 10-house radial network reported 19
+   overlaps and its reactance at 1 kHz jumped by +2.4 %). Before D9 the
+   drops were drawn on one axis and the inductance matrix read them as a
+   bundle in which every pair touches, which no cross-section of four or
    more equal wires realises; :func:`~groundfield.diagnostics.diagnose`
    reported every pair (audit W3B-05). A drop that leaves its tap alone in
    its direction keeps its axis (offset 0), so a placement without shared
@@ -179,10 +199,11 @@ from groundfield.generators.plan import (
 
 __all__ = ["MIN_DROP_LENGTH_M", "PenRouter", "min_section_length"]
 
-# Rule 5 (decision D9): two drops lie on one axis when their start points and
-# the end of the shorter one lie within this fraction of the touching
-# distance of the line of the longer one (the relative tolerance of the
-# overlap check of diagnose(), diagnostics._OVERLAP_TOUCH_TOL, audit W3B-03).
+# Rule 5 (decision D9, audit W3R2B-01): a row keeps the layout of D9 (offsets
+# (k - (n - 1) / 2) d_t along each drop's own normal) when that layout keeps
+# every pair at least d_t apart to this fraction of d_t (the relative
+# tolerance of the overlap check of diagnose(), audit W3B-03): drops on one
+# axis to round-off, as in every generated network without jitter.
 _ROW_TOLERANCE = 1e-9
 
 MIN_DROP_LENGTH_M = 0.01
@@ -524,7 +545,9 @@ class PenRouter:
         and then the service drops, as plan branches; the drops of one tap
         and direction in a row (rule 5, decision D9)."""
         sections = [s for cable in self._cables.values() for s in cable]
-        offsets = [0.0] * len(sections) + self._row_offsets()
+        drop_offsets, drop_normals = self._row_layout()
+        offsets = [0.0] * len(sections) + drop_offsets
+        normals = [None] * len(sections) + drop_normals
         return [
             PlannedBranch(
                 name=s.name,
@@ -536,40 +559,79 @@ class PenRouter:
                 start_contact=_contact(s.start),
                 end_contact=_contact(s.end),
                 axis_offset_m=offset,
+                axis_offset_normal_xy=normal,
             )
-            for s, offset in zip([*sections, *self._drops], offsets, strict=True)
+            for s, offset, normal in zip(
+                [*sections, *self._drops], offsets, normals, strict=True
+            )
         ]
 
-    def _row_offsets(self) -> list[float]:
-        """Offset in m of every drop from its axis (rule 5, decision D9).
+    def _row_layout(
+        self,
+    ) -> tuple[list[float], list[tuple[float, float] | None]]:
+        """Offset in m and offset normal of every drop (rule 5, decision D9).
 
-        Drops that leave one node at one point on one axis in one direction
-        form a row; it is sorted by drop length (shortest first, ties in
-        plan order) and centred on the axis, one touching distance between
-        neighbours. Any other drop gets 0.
+        The drops of one node form rows by the overlap criterion (audit
+        W3R2B-01): two drops belong to one row when their start points lie
+        within the touching distance $d_t$ of each other and the end of the
+        shorter one within $d_t$ of the line of the longer one, pointing the
+        same way (:func:`_in_row`), and rows are the connected groups of
+        that relation. A row is sorted by drop length (shortest first, ties
+        in plan order) and laid out by :func:`_lay_out_row`. A drop that
+        would then lie closer than touching to a drop of another row over a
+        stretch that the overlap check of
+        :func:`~groundfield.diagnostics.diagnose` reports (:func:`_overlap`)
+        joins that row, until none does: a drop of the same node, or a drop
+        of another node — next to which a row has moved one of its drops, or
+        from a tap a centimetre or a few away on the same cable (placement
+        jitter: taps 1.0 … 4.3 cm apart in the generated networks of up to
+        200 houses). So a row is never centred on a drop that is not in it.
+        Any other drop gets offset 0.
+
+        Returns
+        -------
+        offsets : list of float
+            Offset of every drop in m along its normal.
+        normals : list of (float, float) or None
+            The common unit normal of the drop's row in plan, or ``None``
+            for the drop's own left normal (the layout of D9; also every
+            drop with offset 0).
         """
         touch = 2.0 * float(self.conductor.wire_radius_m)
-        tol = _ROW_TOLERANCE * touch
-        offsets = [0.0] * len(self._drops)
+        drops = self._drops
+
+        def by_length(row: list[int]) -> list[int]:
+            return sorted(row, key=lambda k: (_length(drops[k]), k))
+
         by_node: dict[str, list[int]] = {}
-        for k, drop in enumerate(self._drops):
+        for k, drop in enumerate(drops):
             by_node.setdefault(drop.start.node, []).append(k)
+        rows: list[list[int]] = []
         for members in by_node.values():
-            rows: list[list[int]] = []
-            for k in members:
-                for row in rows:
-                    if all(_one_axis(self._drops[k], self._drops[m], tol) for m in row):
-                        row.append(k)
-                        break
-                else:
-                    rows.append([k])
+            rows.extend(
+                _components(members, lambda a, b: _in_row(drops[a], drops[b], touch))
+            )
+        rows = sorted((by_length(row) for row in rows), key=min)
+        layout: list[tuple[float, tuple[float, float] | None]] = []
+        for _ in range(len(drops) + 1):
+            layout = [(0.0, None)] * len(drops)
             for row in rows:
-                if len(row) < 2:
-                    continue
-                row.sort(key=lambda k: (_length(self._drops[k]), k))
-                for i, k in enumerate(row):
-                    offsets[k] = (i - 0.5 * (len(row) - 1)) * touch
-        return offsets
+                if len(row) > 1:
+                    for k, value in _lay_out_row(
+                        [drops[k] for k in row], row, touch
+                    ).items():
+                        layout[k] = value
+            clash = _first_clash(drops, rows, layout, touch)
+            if clash is None:
+                break
+            a, b = clash
+            ra = next(r for r in rows if a in r)
+            rb = next(r for r in rows if b in r)
+            rows = sorted(
+                [r for r in rows if r is not ra and r is not rb] + [by_length(ra + rb)],
+                key=min,
+            )
+        return [offset for offset, _ in layout], [normal for _, normal in layout]
 
     # ------------------------------------------------------------------
     # Geometry helpers
@@ -931,22 +993,271 @@ def _length(section: _Section) -> float:
     return math.hypot(bx - ax, by - ay)
 
 
-def _one_axis(a: _Section, b: _Section, tol: float) -> bool:
-    """Whether two drops of one node leave it on one axis in one direction.
+def _direction(section: _Section) -> tuple[float, float]:
+    """Unit plan direction of a section or drop (from start to end)."""
+    (ax, ay), (bx, by) = section.start.xy, section.end.xy
+    length = math.hypot(bx - ax, by - ay)
+    return (bx - ax) / length, (by - ay) / length
 
-    Their start points lie within ``tol`` of each other, and the end of the
-    shorter drop within ``tol`` of the line of the longer one, on its side
-    of the start (rule 5).
+
+def _in_row(a: _Section, b: _Section, touch: float) -> bool:
+    """Whether two drops of one node belong to one row (rule 5).
+
+    Their start points lie within ``touch`` (the touching distance $d_t$)
+    of each other, and the end of the shorter drop within ``touch`` of the
+    line of the longer one, on its side of the start (audit W3R2B-01: the
+    overlap criterion itself; up to then 1e-9 $d_t$, which a placement
+    jitter of 1 nm broke).
     """
     (ax, ay), (bx, by) = a.start.xy, b.start.xy
-    if math.hypot(ax - bx, ay - by) > tol:
+    if math.hypot(ax - bx, ay - by) > touch:
         return False
     short, long_ = (a, b) if _length(a) <= _length(b) else (b, a)
-    (sx, sy), (ex, ey) = long_.start.xy, long_.end.xy
-    length = _length(long_)
-    ux, uy = (ex - sx) / length, (ey - sy) / length
+    sx, sy = long_.start.xy
+    ux, uy = _direction(long_)
     px, py = short.end.xy[0] - sx, short.end.xy[1] - sy
-    return ux * px + uy * py > 0.0 and abs(ux * py - uy * px) <= tol
+    return ux * px + uy * py > 0.0 and abs(ux * py - uy * px) <= touch
+
+
+def _components(members: Sequence[int], related) -> list[list[int]]:
+    """Connected groups of ``members`` under the pair relation ``related``.
+
+    Each group in ascending member order, the groups by their first member
+    (deterministic: the order of the plan).
+    """
+    parent = {k: k for k in members}
+
+    def root(k: int) -> int:
+        while parent[k] != k:
+            parent[k] = parent[parent[k]]
+            k = parent[k]
+        return k
+
+    for i, a in enumerate(members):
+        for b in members[i + 1 :]:
+            if root(a) != root(b) and related(a, b):
+                parent[max(root(a), root(b))] = min(root(a), root(b))
+    groups: dict[int, list[int]] = {}
+    for k in members:
+        groups.setdefault(root(k), []).append(k)
+    return sorted(groups.values(), key=min)
+
+
+def _needed_shift(
+    a: _Section, b: _Section, normal: tuple[float, float], touch: float
+) -> float:
+    r"""Smallest shift $\Delta$ of ``b`` along ``normal`` relative to ``a``
+    that puts ``b`` at least ``touch`` from ``a`` on the side of ``normal``.
+
+    Every end point of one drop whose projection falls on the other drop
+    (to 1e-9 of its length) must lie at least ``touch`` from that drop's
+    line: the distance of two segments is attained at such a point or
+    between two end points, and an end point that projects beyond the
+    other drop is farther from it than the other drop's end point is from
+    its own line. Exact for drops at any angle (the shift is along the
+    common normal, so it moves the signed distance to a line by
+    $\Delta\,(n_a \cdot n)$).
+    """
+    nx, ny = normal
+    best = -math.inf
+    for fixed, moving, sign in ((a, b, 1.0), (b, a, -1.0)):
+        (fx, fy), length = fixed.start.xy, _length(fixed)
+        ux, uy = _direction(fixed)
+        gain = -uy * nx + ux * ny  # n_fixed . normal
+        for px, py in (moving.start.xy, moving.end.xy):
+            dx, dy = px - fx, py - fy
+            t = (ux * dx + uy * dy) / length
+            if not -1e-9 <= t <= 1.0 + 1e-9:
+                continue
+            side = -uy * dx + ux * dy  # signed distance from the fixed line
+            # b moves by +Delta: b's points gain Delta*gain against a's line,
+            # a's points lose Delta*gain against b's line
+            best = max(best, (touch - sign * side) / gain)
+    if best == -math.inf:  # pragma: no cover - start points within touch
+        (ax, ay), (bx, by) = a.start.xy, b.start.xy
+        best = touch - ((bx - ax) * nx + (by - ay) * ny)
+    return best
+
+
+def _lay_out_row(
+    drops: Sequence[_Section], keys: Sequence[int], touch: float
+) -> dict[int, tuple[float, tuple[float, float] | None]]:
+    r"""Offsets and normals of the drops of one row, sorted by length.
+
+    The layout of D9 when the drops are parallel to round-off (each drifts
+    from the direction of the longest by at most :data:`_ROW_TOLERANCE`
+    $d_t$ over its length) and it keeps every pair at least $d_t$ apart (to
+    :data:`_ROW_TOLERANCE` of it): drop $k$ of $n$ at $(k - (n - 1)/2)\,d_t$
+    along its own left normal, so drops on one axis to round-off keep the
+    worlds they had. Otherwise (drops that are not exactly parallel, audit
+    W3R2B-01: moved along their own normals they would not end up $d_t$
+    apart) all offsets lie along one common normal, the left normal of
+    the longest drop: drop $k$ is shifted just far enough to lie at least
+    $d_t$ from every shorter one (:func:`_needed_shift`), and the row is
+    centred, its smallest and largest offsets of equal size and opposite
+    sign.
+    """
+    n = len(drops)
+    ux, uy = _direction(drops[-1])
+    normal = (-uy, ux)
+    need = {
+        (i, j): _needed_shift(drops[i], drops[j], normal, touch)
+        for i in range(n)
+        for j in range(i + 1, n)
+    }
+    plain = [(k - 0.5 * (n - 1)) * touch for k in range(n)]
+    slack = _ROW_TOLERANCE * touch
+    parallel = all(
+        abs(ux * dy - uy * dx) * _length(drop) <= slack
+        for drop in drops
+        for dx, dy in (_direction(drop),)
+    )
+    if parallel and all(plain[j] - plain[i] >= need[i, j] - slack for (i, j) in need):
+        return {k: (offset, None) for k, offset in zip(keys, plain, strict=True)}
+    shifts = [0.0] * n
+    for j in range(1, n):
+        shifts[j] = max(shifts[i] + need[i, j] for i in range(j))
+    centre = 0.5 * (min(shifts) + max(shifts))
+    return {k: (shift - centre, normal) for k, shift in zip(keys, shifts, strict=True)}
+
+
+def _moved(
+    drop: _Section, layout: tuple[float, tuple[float, float] | None]
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    """Plan end points of a drop after its offset (as the materialiser)."""
+    offset, normal = layout
+    (sx, sy), (ex, ey) = drop.start.xy, drop.end.xy
+    if offset == 0.0:
+        return (sx, sy), (ex, ey)
+    if normal is None:
+        ux, uy = _direction(drop)
+        normal = (-uy, ux)
+    nx, ny = normal
+    return (sx + offset * nx, sy + offset * ny), (ex + offset * nx, ey + offset * ny)
+
+
+def _point_segment(
+    p: tuple[float, float], a: tuple[float, float], b: tuple[float, float]
+) -> float:
+    """Plan distance in m of the point ``p`` from the segment ``a b``."""
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    dd = dx * dx + dy * dy
+    t = 0.0 if dd == 0.0 else ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / dd
+    t = min(max(t, 0.0), 1.0)
+    return math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy)
+
+
+def _close_stretch(a0, a1, b0, b1, reach: float) -> float:
+    """Length in m of the part of segment ``a0 a1`` closer than ``reach`` to
+    segment ``b0 b1`` (plan). The distance is convex along the segment, so
+    the part is one interval around the closest point; as the stretch of
+    the overlap check of :func:`~groundfield.diagnostics.diagnose`."""
+
+    def dist(s: float) -> float:
+        return _point_segment(
+            (a0[0] + s * (a1[0] - a0[0]), a0[1] + s * (a1[1] - a0[1])), b0, b1
+        )
+
+    lo, hi = 0.0, 1.0  # golden-section search for the closest point
+    g = 0.5 * (math.sqrt(5.0) - 1.0)
+    for _ in range(80):
+        m1, m2 = hi - g * (hi - lo), lo + g * (hi - lo)
+        if dist(m1) <= dist(m2):
+            hi = m2
+        else:
+            lo = m1
+    s0 = 0.5 * (lo + hi)
+    if not dist(s0) < reach:
+        return 0.0
+
+    def edge(inside: float, outside: float) -> float:
+        if dist(outside) < reach:
+            return outside
+        for _ in range(60):
+            mid = 0.5 * (inside + outside)
+            if dist(mid) < reach:
+                inside = mid
+            else:
+                outside = mid
+        return inside
+
+    return (edge(s0, 1.0) - edge(s0, 0.0)) * math.hypot(a1[0] - a0[0], a1[1] - a0[1])
+
+
+def _overlap(a, b, touch: float) -> bool:
+    """Whether two moved drops ``(start, end)`` would be reported by the
+    overlap check of :func:`~groundfield.diagnostics.diagnose`: closer than
+    touching over more than ``OVERLAP_REL_LENGTH`` touching distances and
+    ``OVERLAP_FRACTION`` of the shorter one."""
+    from groundfield.conductors.proximity import _closer_than_touching
+    from groundfield.diagnostics import OVERLAP_FRACTION, OVERLAP_REL_LENGTH
+
+    (a0, a1), (b0, b1) = a, b
+    la = math.hypot(a1[0] - a0[0], a1[1] - a0[1])
+    lb = math.hypot(b1[0] - b0[0], b1[1] - b0[1])
+    ua = ((a1[0] - a0[0]) / la, (a1[1] - a0[1]) / la)
+    ub = ((b1[0] - b0[0]) / lb, (b1[1] - b0[1]) / lb)
+    if ua[0] * ub[0] + ua[1] * ub[1] <= 0.0:
+        return False  # drops of one node in opposing directions part at once
+    scale = max(abs(v) for point in (a0, a1, b0, b1) for v in point)
+    reach = float(_closer_than_touching(touch, scale))
+    threshold = max(OVERLAP_REL_LENGTH * touch, OVERLAP_FRACTION * min(la, lb))
+    sin = abs(ua[0] * ub[1] - ua[1] * ub[0])
+    if 2.0 * reach <= threshold * sin:
+        # the signed distance from the other line changes by sin per metre,
+        # so either drop is within reach of the other over 2 reach / sin at
+        # most
+        return False
+    if (
+        min(
+            _point_segment(a0, b0, b1),
+            _point_segment(a1, b0, b1),
+            _point_segment(b0, a0, a1),
+            _point_segment(b1, a0, a1),
+        )
+        >= reach
+    ):
+        return False  # not crossing: the distance is attained at an end point
+    stretch = max(
+        _close_stretch(a0, a1, b0, b1, reach), _close_stretch(b0, b1, a0, a1, reach)
+    )
+    return stretch > threshold
+
+
+def _first_clash(
+    drops: Sequence[_Section],
+    rows: Sequence[Sequence[int]],
+    layout: Sequence[tuple[float, tuple[float, float] | None]],
+    touch: float,
+) -> tuple[int, int] | None:
+    """The first pair of drops in different rows (a lone drop is a row of
+    one) that overlap once the rows are laid out, or ``None``: two drops of
+    one node, a drop that its row moves next to a drop of another node, or
+    two drops of taps a few centimetres apart on a cable (placement jitter).
+    """
+    row_of = {k: i for i, row in enumerate(rows) for k in row}
+    moved = [_moved(drop, value) for drop, value in zip(drops, layout, strict=True)]
+    margin = 2.0 * touch
+    boxes = [
+        (
+            min(a[0], b[0]) - margin,
+            min(a[1], b[1]) - margin,
+            max(a[0], b[0]) + margin,
+            max(a[1], b[1]) + margin,
+        )
+        for a, b in moved
+    ]
+    for a in range(len(drops)):
+        for b in range(a + 1, len(drops)):
+            if row_of[a] == row_of[b]:
+                continue
+            xa0, ya0, xa1, ya1 = boxes[a]
+            xb0, yb0, xb1, yb1 = boxes[b]
+            if xa1 < xb0 or xb1 < xa0 or ya1 < yb0 or yb1 < ya0:
+                continue
+            if _overlap(moved[a], moved[b], touch):
+                return a, b
+    return None
 
 
 def _contact(end: _End) -> PlannedContact | None:

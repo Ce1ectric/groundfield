@@ -69,3 +69,35 @@ def test_w3b_02_the_stated_carson_series_error_covers_a_10_house_radial_network(
     assert max(stated) >= 100.0 * (ratio_50 - 1.0)
     assert 100.0 * (ratio_50 - 1.0) == pytest.approx(41.4, abs=1.0)
     assert 100.0 * (ratio_1k - 1.0) == pytest.approx(20.2, abs=1.0)
+
+
+# audit W3R2B-03 (the auditor's test, on the earth-return explanation; about
+# 1 min: the 80-house radial network, two models)
+@pytest.mark.slow
+def test_w3r2b_03_the_stated_50_hz_error_covers_the_80_house_radial_network() -> None:
+    """Base 06580ea: the explanation stated "the reactance 21 … 44 % high at
+    50 Hz" for the generated networks of 5 … 100 houses; the 80-house radial
+    network reads +49.7 % (against the default and a refined sommerfeld,
+    which agree to 4e-5 there). The stated range now ends at 50 %."""
+    text = (ROOT / "docs/explanation/earth-return.md").read_text(encoding="utf-8")
+    flat = " ".join(text.split())
+    m = re.search(r"the reactance 21 … (\d+) %", flat)
+    assert m, "the 50 Hz range of carson_series is gone from the explanation"
+    cfg = TnNetworkConfig(
+        soil=HomogeneousSoilSpec(rho=100.0),
+        building_counts={"residential": 80},
+        pen_topology=RadialTrunkTopology(),
+        pen=PenConfig(inductance_model="neumann", segment_length_m=5.0),
+    )
+    world = TnNetworkGenerator(cfg, seed=0).build()
+    x = {}
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for model in ("carson_series", "sommerfeld"):
+            eng = gf.create_engine(
+                segment_length=2.0, frequencies=[50.0], earth_inductive_model=model
+            )
+            x[model] = eng.solve(world).input_impedance()[0].imag
+    error = 100.0 * (x["carson_series"] / x["sommerfeld"] - 1.0)
+    assert error == pytest.approx(49.7, abs=0.5)
+    assert error <= float(m.group(1))

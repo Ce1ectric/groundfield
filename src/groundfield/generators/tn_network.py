@@ -104,7 +104,10 @@ Geometric layout
   one tap in one direction (houses behind each other) lie side by side at
   the touching distance of the PEN, sorted by length and centred on their
   common axis, so that only neighbours touch (decision D9 of 2026.11,
-  :attr:`~groundfield.generators.plan.PlannedBranch.axis_offset_m`).
+  :attr:`~groundfield.generators.plan.PlannedBranch.axis_offset_m`); with
+  placement jitter along one common normal, so that no generated network
+  reports an overlap (audit W3R2B-01, rule 5 of
+  :mod:`groundfield.generators._pen_routing`).
 
 Validity envelope
 -----------------
@@ -1231,7 +1234,14 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
     ) -> World:
         """Materialise one realisation of the configured TN network.
 
-        Equivalent to ``materialise_plan(self.plan(cfg, rng=rng))``.
+        Equivalent to ``materialise_plan(self.plan(cfg, rng=rng))``, with
+        one exception: right after :meth:`plan` on this generator — without
+        ``rng`` in either call, nothing drawn from the generator's RNG since
+        and the same configuration — it materialises the plan that
+        :meth:`plan` returned (once; the next call draws the next
+        realisation). Before, it drew a second realisation, which differs
+        from the plan with placement jitter or other per-site randomness
+        (audit W3R2B).
 
         Parameters
         ----------
@@ -1255,7 +1265,31 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
             if the total building count is zero, or if a configured
             placement returns fewer positions than buildings.
         """
-        return materialise_plan(self.plan(cfg, rng=rng))
+        planned = self._take_last_plan(cfg) if rng is None else None
+        if planned is None:
+            planned = self.plan(cfg, rng=rng)
+            if rng is None:
+                # a plan nobody has seen: the next build() draws anew
+                self._last_plan = None
+        return materialise_plan(planned)
+
+    def _take_last_plan(self, cfg: Optional[TnNetworkConfig]) -> Optional[NetworkPlan]:
+        """The plan :meth:`plan` returned last, if :meth:`build` may use it.
+
+        It may when the generator's RNG is the one that drew it and has not
+        drawn since (its state is unchanged) and the configuration equals
+        the one it was drawn for; the plan is handed out once.
+        """
+        last = getattr(self, "_last_plan", None)  # pickles of 0.15.0 have none
+        self._last_plan = None
+        if last is None:
+            return None
+        rng, state, drawn_for, planned = last
+        if self._rng is not rng or self._rng.bit_generator.state != state:
+            return None
+        if (cfg or self.cfg) != drawn_for:
+            return None
+        return planned
 
     def plan(
         self,
@@ -1270,7 +1304,9 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         counts, building positions, per-building grounding, cable
         cabinets (count, positions, groundings), measurement electrodes
         and leads, source magnitude. Materialising the returned plan
-        draws no further random numbers.
+        draws no further random numbers. A plan drawn from the generator's
+        RNG is remembered (a copy): :meth:`build` right after it gives its
+        world (audit W3R2B).
 
         Parameters
         ----------
@@ -1291,6 +1327,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
             See :meth:`build`.
         """
         cfg = cfg or self.cfg
+        own_stream = rng is None
         rng = self._rng if rng is None else _coerce_rng(rng)
 
         soil = materialise_soil(cfg.soil, rng)
@@ -1439,7 +1476,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
             kind=cfg.source_kind,
             magnitude=_to_float(cfg.source_magnitude_a, rng),
         )
-        return NetworkPlan(
+        plan = NetworkPlan(
             name=cfg.name,
             soil=soil,
             sites=sites,
@@ -1448,6 +1485,18 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
             measurement=measurement,
             sources=[source],
         )
+        if own_stream:
+            # build() right after this call materialises this plan instead
+            # of drawing another realisation (audit W3R2B); copies, so that
+            # changing the returned plan or the configuration in place
+            # cannot change what build() gives
+            self._last_plan = (
+                rng,
+                rng.bit_generator.state,
+                cfg.model_copy(deep=True),
+                plan.model_copy(deep=True),
+            )
+        return plan
 
     # ------------------------------------------------------------------
     # Helpers

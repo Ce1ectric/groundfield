@@ -217,3 +217,72 @@ def test_generated_networks_report_no_overlap(n, topology) -> None:
     decision D9 they lie in a row at the touching distance and none is
     reported (tests/test_service_drop_rows.py covers more networks)."""
     assert _overlaps(_generated(n, topology)) == []
+
+
+# audit W3R2B-02 (the auditor's test)
+@pytest.mark.parametrize("origin", [(0.0, 0.0), (5.0e5, 5.8e6)], ids=["local", "utm"])
+def test_w3r2b_02_cables_at_the_touching_distance_at_projected_coordinates(
+    origin,
+) -> None:
+    """Base 06580ea: the tolerance of the overlap check was 1e-9 of the
+    touching distance (1e-11 m for 5 mm cables); at UTM coordinates the
+    spacing of float64 is 9.3e-10 m, so two 40 m cables drawn exactly 10 mm
+    apart were reported as overlapping over 40 m. The rows of the generated
+    5 / 80 / 200-house radial networks translated by (5e5, 5.8e6) gave
+    4 / 10 / 98 false overlaps (0 in local coordinates). The check now
+    also allows 16 ulps of the coordinates."""
+    x0, y0 = origin
+    w = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    for k, y in enumerate((y0 + 0.3, y0 + 0.3 + 0.01)):
+        gf.create_junction(w, name=f"a{k}", position=(x0, y, 0.7))
+        gf.create_junction(w, name=f"b{k}", position=(x0 + 40.0, y, 0.7))
+        w.add_conductor(
+            gf.Conductor(
+                name=f"c{k}",
+                start=(x0, y, 0.7),
+                end=(x0 + 40.0, y, 0.7),
+                start_electrode=f"a{k}",
+                end_electrode=f"b{k}",
+                wire_radius=0.005,
+                coupling_to_soil="isolated",
+                inductance_model="neumann",
+            )
+        )
+    assert _overlaps(w) == []
+
+
+# audit W3R2B-02
+def test_w3r2b_02_a_translated_row_reports_nothing() -> None:
+    """The rows of the 5-house radial network, translated to UTM-like
+    coordinates (5e5, 5.8e6) as the generator's docs recommend (build at the
+    origin, translate the world): base 06580ea 4 overlaps, now none; an
+    overlap 1e-5 inside the touching distance (1.2e-7 m, above the 2.1e-8 m
+    of 16 ulps at 5.8e6 m) is still found there."""
+    world = _generated(5, RadialTrunkTopology())
+    drops = [c for c in world.conductors if c.name.startswith("pen_service_")]
+    assert len(drops) == 5
+    for x0, y0 in ((0.0, 0.0), (5.0e5, 5.8e6)):
+        w = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+        for c in drops:
+            a = (c.start[0] + x0, c.start[1] + y0, c.start[2])
+            b = (c.end[0] + x0, c.end[1] + y0, c.end[2])
+            gf.create_junction(w, name=f"{c.name}_a", position=a)
+            gf.create_junction(w, name=f"{c.name}_b", position=b)
+            w.add_conductor(
+                c.model_copy(
+                    update={
+                        "start": a,
+                        "end": b,
+                        "start_electrode": f"{c.name}_a",
+                        "end_electrode": f"{c.name}_b",
+                    }
+                )
+            )
+        assert _overlaps(w) == [], (x0, y0)
+    # the check still finds a real overlap at those coordinates
+    w = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    for k, y in enumerate((5.8e6, 5.8e6 + 0.012 * (1.0 - 1e-5))):
+        gf.create_junction(w, name=f"a{k}", position=(5.0e5, y, 0.7))
+        gf.create_junction(w, name=f"b{k}", position=(5.0e5 + 50.0, y, 0.7))
+        _cable(w, f"cable_{k}", f"a{k}", f"b{k}")
+    assert len(_overlaps(w)) == 1

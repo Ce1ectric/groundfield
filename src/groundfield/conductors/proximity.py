@@ -22,8 +22,10 @@ closer than a threshold, classified as
     T-contact; the model does not connect conductors there);
 ``"interpenetrating"``
     the axis distance is below the sum of the radii, $d < a_i + a_j$, by
-    more than $10^{-9}$ of it (wires drawn at the touching distance are
-    ``"close"``; audit W3B-03);
+    more than $10^{-9}$ of it or 16 units in the last place of the largest
+    coordinate of the pair, whichever is larger (wires drawn at the
+    touching distance are ``"close"``, also at projected coordinates; audits
+    W3B-03, W3R2B-02);
 ``"close"``
     $d$ is below the threshold
     $\max(\texttt{rel\_threshold}\cdot(a_i + a_j), \texttt{abs\_threshold})$;
@@ -72,6 +74,30 @@ _TOUCH_REL = 1e-9
 # of a row since decision D9) and are close, not interpenetrating (the
 # tolerance of the overlap check of diagnose(), audit W3B-03).
 _CONTACT_REL_TOL = 1e-9
+# ... or by more than this many units in the last place of the largest
+# coordinate of the pair, whichever is larger (audit W3R2B-02): at projected
+# coordinates (5.8e6 m, UTM) float64 is spaced 9.3e-10 m, more than 1e-9 of a
+# touching distance of 1 cm, and a row drawn at the origin and translated
+# there lies closer than touching by round-off (16 ulps: 2.1e-8 m at
+# 5.8e6 m). Up to about 2.8 km from the origin (for 1 cm touching) the
+# relative term is the larger one, so local worlds keep their findings.
+_CONTACT_ULPS = 16.0
+_EPS = float(np.finfo(float).eps)
+
+
+def _closer_than_touching(touch, scale):
+    """Axis distance below which two wires lie closer than touching.
+
+    ``touch`` is the sum of the radii in m, ``scale`` the largest absolute
+    coordinate of the pair in m (scalars or arrays): the smaller of
+    ``touch * (1 - 1e-9)`` and ``touch - 16 * eps * scale`` (audits W3B-03,
+    W3R2B-02). Shared by the kinds of :func:`find_close_wires` and the
+    overlap check of :func:`groundfield.diagnostics.diagnose`.
+    """
+    return np.minimum(
+        np.multiply(touch, 1.0 - _CONTACT_REL_TOL),
+        np.subtract(touch, _CONTACT_ULPS * _EPS * np.asarray(scale, dtype=float)),
+    )
 
 
 @dataclass(frozen=True)
@@ -254,6 +280,8 @@ def find_close_wires(
         return []
     dist, s, t = segment_distance(p1[i], p2[i], p1[j], p2[j])
     hit = dist < pair_thr
+    scale = np.maximum(np.abs(ep[i]).max(axis=(1, 2)), np.abs(ep[j]).max(axis=(1, 2)))
+    inside = dist < _closer_than_touching(rad[i] + rad[j], scale)
     out: list[WireProximity] = []
     for k in np.nonzero(hit)[0]:
         ia, ib = int(i[k]), int(j[k])
@@ -267,7 +295,7 @@ def find_close_wires(
             kind: ProximityKind = "junction"
         elif dist[k] <= tol:
             kind = "touching" if (at_end_a or at_end_b) else "crossing"
-        elif dist[k] < (rad[ia] + rad[ib]) * (1.0 - _CONTACT_REL_TOL):
+        elif inside[k]:
             kind = "interpenetrating"
         else:
             kind = "close"

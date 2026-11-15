@@ -38,6 +38,7 @@ from groundfield.generators import (
     TnNetworkConfig,
     TnNetworkGenerator,
 )
+from groundfield.conductors.proximity import segment_distance
 from groundfield.generators.materialise import materialise_plan
 from groundfield.generators.plan import NetworkPlan, PlannedBranch
 
@@ -269,3 +270,237 @@ def test_the_materialiser_applies_the_offset_to_both_ends() -> None:
             conductor=drop.conductor,
             axis_offset_m=math.inf,
         )
+
+
+# ---------------------------------------------------------------------
+# Audit W3R2B-01: the rows under placement jitter
+# ---------------------------------------------------------------------
+
+
+def _jittered(n: int, topology, jitter: float, *, seed: int = 0) -> NetworkPlan:
+    place = TnNetworkConfig().placement.model_copy(update={"jitter_m": jitter})
+    cfg = TnNetworkConfig(
+        soil=HomogeneousSoilSpec(rho=100.0),
+        building_counts={"residential": n},
+        pen_topology=topology,
+        pen=PenConfig(inductance_model="neumann", segment_length_m=5.0),
+        placement=place,
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return TnNetworkGenerator(cfg, seed=seed).plan()
+
+
+# audit W3R2B-01 (the auditor's test)
+@pytest.mark.parametrize("jitter", [1e-9, 1e-6, 1e-3])
+@pytest.mark.parametrize(
+    "topology", [RadialTrunkTopology(), StarCabinetTopology()], ids=["radial", "star"]
+)
+def test_w3r2b_01_jittered_drops_of_one_tap_also_lie_in_a_row(topology, jitter) -> None:
+    """Base 06580ea: rule 5 grouped drops whose start points and shorter end
+    lie within 1e-9 d_t = 1e-11 m of the longer drop's line. A placement
+    jitter of 1 nm ... 1 mm moves the start points on the substation ring
+    apart by more than that, so the drops of the 10-house networks went back
+    on (nearly) one axis: radial 19 / 20 / 14 overlaps, star 10 / 10 / 5,
+    instead of 0. Now drops of one node are grouped by the overlap criterion
+    (start points within d_t, the shorter end within d_t of the longer
+    line)."""
+    plan = _jittered(10, topology, jitter)
+    assert _overlaps(materialise_plan(plan)) == []
+
+
+# audit W3R2B-01 (the auditor's test, with the bound of the brief)
+def test_w3r2b_01_the_reactance_is_continuous_in_the_jitter() -> None:
+    """Base 06580ea: X(1 kHz) of the 10-house radial network with
+    carson_series is 0.203070 Ohm at jitter 0 and 0.207877 Ohm at 1e-9 m and
+    1e-6 m (+2.37 %: the rows fell apart). Now X moves by less than 1e-6
+    between jitter 0 and 1e-9 m."""
+    x = []
+    for jitter in (0.0, 1e-9):
+        plan = _jittered(10, RadialTrunkTopology(), jitter)
+        eng = gf.create_engine(
+            segment_length=2.0,
+            frequencies=[1000.0],
+            earth_inductive_model="carson_series",
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            x.append(eng.solve(materialise_plan(plan)).input_impedance()[0].imag)
+    assert x[1] == pytest.approx(x[0], rel=1e-6)
+
+
+def _rows(plan: NetworkPlan) -> dict[tuple, list[PlannedBranch]]:
+    """Drops with an offset, grouped by start node and recorded normal."""
+    rows: dict[tuple, list[PlannedBranch]] = {}
+    for b in plan.all_branches:
+        if b.role == "service_drop" and b.axis_offset_m != 0.0:
+            rows.setdefault((b.start, b.axis_offset_normal_xy), []).append(b)
+    return rows
+
+
+# audit W3R2B-01
+def test_w3r2b_01_a_jittered_row_lies_along_one_normal_and_keeps_d_t() -> None:
+    """With jitter the drops of a row are not exactly parallel: their offsets
+    lie along one common normal (recorded in ``axis_offset_normal_xy``), and
+    every member ends at least one touching distance from every other member
+    (to 1e-9 of it); the row keeps the order by length and is centred."""
+    plan = _jittered(10, RadialTrunkTopology(), 1e-3)
+    world = materialise_plan(plan)
+    rows = _rows(plan)
+    assert len(rows) == 2 and all(len(r) == 5 for r in rows.values())
+    for (_, normal), row in rows.items():
+        assert normal is not None and math.hypot(*normal) == pytest.approx(1.0)
+        ends = {b.name: _plan_xy(world, b.name) for b in row}
+        lengths = {name: float(np.linalg.norm(e - a)) for name, (a, e) in ends.items()}
+        offsets = [b.axis_offset_m for b in sorted(row, key=lambda b: lengths[b.name])]
+        assert offsets == sorted(offsets)
+        assert offsets[0] == pytest.approx(-offsets[-1], abs=1e-15)
+        for a, b in itertools.combinations(row, 2):
+            (pa, qa), (pb, qb) = ends[a.name], ends[b.name]
+            d, _, _ = segment_distance(
+                np.append(pa, 0.0),
+                np.append(qa, 0.0),
+                np.append(pb, 0.0),
+                np.append(qb, 0.0),
+            )
+            assert float(d[0]) >= TOUCH * (1.0 - 1e-9)
+
+
+# audit W3R2B-01: bit-identity of the unjittered rows
+def test_w3r2b_01_unjittered_rows_keep_the_d9_layout() -> None:
+    """Drops on one axis to round-off (no jitter) keep the layout of D9: the
+    offsets (k - (n - 1) / 2) d_t along their own normals, no recorded
+    normal, so the worlds of fw3perf are bit-identical."""
+    plan = _plan(10, RadialTrunkTopology())
+    moved = [b for b in plan.all_branches if b.axis_offset_m != 0.0]
+    assert len(moved) == 8
+    assert all(b.axis_offset_normal_xy is None for b in plan.all_branches)
+    assert sorted(b.axis_offset_m for b in moved) == [
+        k * TOUCH for k in (-2, -2, -1, -1, 1, 1, 2, 2)
+    ]
+
+
+# audit W3R2B-01: the whole jitter range of the brief
+@pytest.mark.parametrize(
+    ("n", "topology", "jitter", "seed"),
+    [
+        (80, RadialTrunkTopology(), 0.1, 0),
+        (80, RadialTrunkTopology(), 0.03, 1),
+        (30, RadialTrunkTopology(), 0.1, 1),
+        (10, StarCabinetTopology(), 0.1, 0),
+        (5, RadialTrunkTopology(), 1e-4, 1),
+    ],
+    ids=["radial80_0.1", "radial80_0.03", "radial30_0.1", "star10_0.1", "radial5_1e-4"],
+)
+def test_w3r2b_01_no_overlap_over_the_jitter_range(n, topology, jitter, seed) -> None:
+    """Base 06580ea: the 80-house radial network with 0.1 m jitter kept 6
+    overlaps; at ``pen_tap_29`` drops 73 / 74 formed a row at +-d_t/2 around
+    drop 72, which diverges by 1.4e-4 rad and stayed on the axis, 5 mm from
+    both (the row was centred on a drop that was not in it). Now none."""
+    assert _overlaps(materialise_plan(_jittered(n, topology, jitter, seed=seed))) == []
+
+
+# audit W3R2B-01: a drop that a row would straddle joins it
+def test_w3r2b_01_a_row_is_never_centred_on_a_drop_that_is_not_in_it() -> None:
+    """Three drops of one tap: two on one axis (30 m and 40 m) and a third of
+    35 m whose end lies 1.5 cm off that axis, so it is no row member by the
+    criterion of start points and ends. Laid out as a row of two at
+    +-d_t/2, the pair would straddle the third, 5 mm from each over most of
+    its length (an overlap of the moved geometry). The router merges it into
+    the row: three drops, sorted by length, every pair at least d_t apart."""
+    from groundfield.generators._pen_routing import PenRouter, _End, _Section
+
+    plan = _plan(5, RadialTrunkTopology())
+    conductor = next(b for b in plan.all_branches if b.role == "service_drop").conductor
+    router = PenRouter("t", {"t": (0.0, 0.0)}, depth_m=0.6, conductor=conductor)
+    ends = {"a": (30.0, 0.0), "x": (35.0, 0.015), "b": (40.0, 0.0)}
+    router._drops = [
+        _Section(name, _End("t", (0.0, 0.0)), _End(name, xy), "service_drop", name)
+        for name, xy in ends.items()
+    ]
+    offsets, normals = router._row_layout()
+    by_name = dict(zip(ends, offsets, strict=True))
+    assert by_name["a"] < by_name["x"] < by_name["b"]
+    assert by_name["a"] == pytest.approx(-by_name["b"], abs=1e-15)
+    assert all(n == (0.0, 1.0) for n in normals)
+    moved = {
+        name: (np.array([0.0, o, 0.0]), np.array([*ends[name], 0.0]) + [0.0, o, 0.0])
+        for name, o in by_name.items()
+    }
+    for p, q in itertools.combinations(moved, 2):
+        d, _, _ = segment_distance(*moved[p], *moved[q])
+        assert float(d[0]) >= TOUCH * (1.0 - 1e-9)
+
+
+# audit W3R2B-01 (own attack): the common normal in the plan
+def test_w3r2b_01_the_common_normal_round_trips_and_is_checked() -> None:
+    """A jittered plan with common normals round-trips through JSON and
+    rebuilds the identical world; a normal that is not a unit vector or not
+    finite is refused, and an offset of 0 ignores the normal."""
+    plan = _jittered(10, RadialTrunkTopology(), 1e-3)
+    assert any(b.axis_offset_normal_xy is not None for b in plan.all_branches)
+    again = NetworkPlan.model_validate_json(plan.model_dump_json())
+    assert (
+        materialise_plan(again).model_dump_json()
+        == materialise_plan(plan).model_dump_json()
+    )
+    drop = next(b for b in plan.all_branches if b.role == "service_drop")
+    for bad in ((1.0, 1.0), (math.nan, 1.0), (math.inf, 0.0)):
+        with pytest.raises(ValueError, match="axis_offset_normal_xy"):
+            drop.model_validate({**drop.model_dump(), "axis_offset_normal_xy": bad})
+    plain = materialise_plan(
+        plan.model_copy(
+            update={
+                "branches": [
+                    b.model_copy(
+                        update={"axis_offset_m": 0.0, "axis_offset_normal_xy": None}
+                    )
+                    for b in plan.branches
+                ]
+            }
+        )
+    )
+    still = materialise_plan(
+        plan.model_copy(
+            update={
+                "branches": [
+                    b.model_copy(update={"axis_offset_m": 0.0}) for b in plan.branches
+                ]
+            }
+        )
+    )
+    assert still.model_dump_json() == plain.model_dump_json()
+
+
+# audit W3R2B-01 (own attack): drops of one tap point that diverge
+def test_w3r2b_01_diverging_drops_of_one_point_lie_along_one_normal() -> None:
+    """Two drops from one tap point, the longer one diverging by 3e-4 rad
+    towards the side its offset moves it (its end 9 mm off the shorter one's
+    line at 30 m): moved along their own normals by -+d_t/2 (the layout of
+    D9) their starts would lie d_t cos(phi / 2), 1.1e-8 d_t closer than
+    touching. The row lies along one common normal, every pair at least d_t
+    apart."""
+    from groundfield.generators._pen_routing import PenRouter, _End, _moved, _Section
+
+    plan = _plan(5, RadialTrunkTopology())
+    conductor = next(b for b in plan.all_branches if b.role == "service_drop").conductor
+    router = PenRouter("t", {"t": (0.0, 0.0)}, depth_m=0.6, conductor=conductor)
+    ends = {"a": (30.0, 0.0), "b": (40.0, 0.012)}
+    router._drops = [
+        _Section(name, _End("t", (0.0, 0.0)), _End(name, xy), "service_drop", name)
+        for name, xy in ends.items()
+    ]
+    offsets, normals = router._row_layout()
+    assert offsets[0] < 0.0 < offsets[1] and all(n is not None for n in normals)
+    moved = [
+        _moved(drop, (o, n))
+        for drop, o, n in zip(router._drops, offsets, normals, strict=True)
+    ]
+    (a0, a1), (b0, b1) = moved
+    d, _, _ = segment_distance(
+        np.array([*a0, 0.0]),
+        np.array([*a1, 0.0]),
+        np.array([*b0, 0.0]),
+        np.array([*b1, 0.0]),
+    )
+    assert float(d[0]) >= TOUCH * (1.0 - 1e-9)

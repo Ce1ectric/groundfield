@@ -69,7 +69,10 @@ BusType of :func:`to_bustype`, :func:`save_bustype_to_db` and
 :func:`bustype_from_spec` has no metadata; it carries the preset as the last
 line of its description, ``groundfield rho_preset: <name>``, which the
 ``groundinsight`` database keeps, and :func:`bustype_rho_preset` reads it
-back (audit W3B-06). The exporter cannot check the
+back (audit W3B-06). Only that exact line, with a known preset name, is the
+record: the rest of a given description stays as it is (audit W3R2B-06),
+and a document is loaded only with a known preset name (or none), as the
+exporters write it. The exporter cannot check the
 number it is given against the preset. :func:`evaluate_spec` and
 :func:`bustype_from_spec` take the preset of the bus they serve and emit
 :class:`RhoPresetMismatchWarning` when the document names another one (a
@@ -446,13 +449,13 @@ class BusTypeSpec:
                 f"BusType document {name!r}: samples and metadata must be JSON objects"
             )
         _strict_json(metadata, context=f"BusType document {name!r}: metadata")
-        preset = metadata.get("rho_preset")
-        if preset is not None and (not isinstance(preset, str) or not preset.strip()):
-            # a blank name is no record of a preset (audit W3B-06)
-            raise ValueError(
-                f"BusType document {name!r}: metadata['rho_preset'] must be a "
-                f"preset name or null, got {str(preset)[:40]!r}"
-            )
+        # a preset name as the exporters write it (audit W3R2B-06: blank
+        # names were refused, but padding, line breaks and unknown names
+        # loaded, and the live BusType could not carry them)
+        _check_rho_preset(
+            metadata.get("rho_preset"),
+            f"BusType document {name!r}: metadata['rho_preset']",
+        )
         sample_lists: dict[str, list[Any]] = {}
         for key in ("frequency_Hz", "rho_Ohm_m", "Z_real_Ohm", "Z_imag_Ohm"):
             values = samples.get(key, [])
@@ -1204,18 +1207,57 @@ def _import_groundinsight():
 _RHO_PRESET_MARKER = "groundfield rho_preset:"
 
 
+def _preset_of_line(line: str) -> Optional[str]:
+    """The preset a description line records, or ``None``.
+
+    A line records a preset only when it is exactly
+    ``groundfield rho_preset: <name>`` with a name of
+    :data:`~groundfield.soil.EFFECTIVE_RESISTIVITY_PRESETS` (the line the
+    exporters write); any other line, also one that merely starts with the
+    marker, is the user's text (audit W3R2B-06).
+    """
+    from groundfield.soil.effective import EFFECTIVE_RESISTIVITY_PRESETS
+
+    head = _RHO_PRESET_MARKER + " "
+    if not line.startswith(head):
+        return None
+    name = line[len(head) :]
+    return name if name in EFFECTIVE_RESISTIVITY_PRESETS else None
+
+
+def _line_body(part: str) -> str:
+    """A line of ``str.splitlines(keepends=True)`` without its line break."""
+    lines = part.splitlines()
+    return lines[0] if lines else ""
+
+
 def _live_description(spec: BusTypeSpec) -> Optional[str]:
-    """Description of the live BusType of ``spec``: the given text, without
-    any earlier preset line, and the preset line when a preset is recorded."""
+    """Description of the live BusType of ``spec``: the given text without
+    its preset lines, then the preset line when a preset is recorded.
+
+    Only exact preset lines (:func:`_preset_of_line`) are removed; every
+    other line keeps its text and its line break (audit W3R2B-06: every
+    line that started with the marker was dropped, and the lines were joined
+    with ``"\\n"``). The preset line follows the text after its last line
+    break, or after a ``"\\n"`` when the text ends without one.
+    """
     text = spec.description
-    lines = [] if text is None else str(text).splitlines()
-    kept = [line for line in lines if not line.startswith(_RHO_PRESET_MARKER)]
+    parts = [] if text is None else str(text).splitlines(keepends=True)
+    kept = [part for part in parts if _preset_of_line(_line_body(part)) is None]
     preset = spec.rho_preset
-    if preset is not None:
-        kept.append(f"{_RHO_PRESET_MARKER} {preset}")
-    elif kept == lines:
+    if preset is None and len(kept) == len(parts):
         return text  # unchanged, None included
-    return "\n".join(kept) if kept else None
+    if preset is None:
+        if kept and parts[-1] == _line_body(parts[-1]) and len(kept) < len(parts):
+            if _preset_of_line(parts[-1]) is not None:
+                # the removed preset line ended the text: the line break
+                # before it belonged to it
+                kept[-1] = _line_body(kept[-1])
+        return "".join(kept) or None
+    body = "".join(kept)
+    if kept and _line_body(kept[-1]) == kept[-1]:
+        body += "\n"
+    return body + f"{_RHO_PRESET_MARKER} {preset}"
 
 
 def _to_live_bustype(spec: BusTypeSpec):
@@ -1252,17 +1294,17 @@ def bustype_rho_preset(bus_type: Any) -> Optional[str]:
     Returns
     -------
     str or None
-        The preset name, or ``None`` when the description has no preset
-        line (no preset was named, or the BusType was not built by
-        groundfield 2026.11 or later).
+        The preset name, or ``None`` when the last line of the description
+        is not exactly ``groundfield rho_preset: <name>`` with a name of
+        :data:`~groundfield.soil.EFFECTIVE_RESISTIVITY_PRESETS` (no preset
+        was named, the BusType was not built by groundfield 2026.11 or
+        later, or the line is the user's own text; audit W3R2B-06).
 
     Raises
     ------
     TypeError
         If ``bus_type`` has no ``description`` or a description that is
         neither a string nor ``None``.
-    ValueError
-        If the preset line names no preset.
     """
     if isinstance(bus_type, BusTypeSpec):
         return bus_type.rho_preset
@@ -1281,15 +1323,7 @@ def bustype_rho_preset(bus_type: Any) -> Optional[str]:
             f"{type(text).__name__}"
         )
     lines = text.splitlines()
-    if not lines or not lines[-1].startswith(_RHO_PRESET_MARKER):
-        return None
-    name = lines[-1][len(_RHO_PRESET_MARKER) :].strip()
-    if not name:
-        raise ValueError(
-            "bustype_rho_preset: the description ends with a rho_preset line "
-            f"that names no preset ({lines[-1]!r})"
-        )
-    return name
+    return _preset_of_line(lines[-1]) if lines else None
 
 
 def to_bustype(
@@ -1346,7 +1380,8 @@ def to_bustype(
         the ``rho`` of the fit (default ``None``: none named), see
         :func:`to_bustype_dict`; recorded as the last line of the
         description, ``groundfield rho_preset: <name>`` (a preset line in
-        ``description`` is replaced).
+        ``description`` is replaced; the rest of the description stays as
+        given).
 
     Returns
     -------

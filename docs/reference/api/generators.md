@@ -48,7 +48,12 @@ of the order in which mapping keys were written. `sample_world(rng=...)`
 also returns the resolved configuration (every distribution replaced by
 its drawn value); it replays the world exactly when no per-site draws
 remain (presence probabilities 0 or 1, no placement jitter), otherwise
-keep the seed or the plan / world JSON. The foundation penetration mask
+keep the seed or the plan / world JSON. Successive `build()` or `plan()`
+calls on one generator draw successive realisations from its stream;
+`build()` right after `plan()` (no `rng=` in either, nothing drawn from
+`generator.rng` since, the same configuration) gives the world of that plan
+— up to audit W3R2B it drew a second realisation, another world with
+placement jitter. The foundation penetration mask
 of the layout builder is a stable hash of the building ids and is nested
 in the penetration rate (a house equipped at 10 % is also equipped at
 20 %).
@@ -190,7 +195,21 @@ centred on their common axis, drop $k$ of $n$ at $(k - (n - 1)/2)\,2r$
 along the normal $(-d_y, d_x)/|d|$ of the drop direction $d$. The plan
 records the offset as `PlannedBranch.axis_offset_m`; the materialiser
 moves both ends of the conductor by it, and the drop stays attached to
-its tap and its building. Up to then such drops lay on one axis and the
+its tap and its building (it starts up to $(n - 1)/2 \cdot 2r$ off the tap,
+2 cm in a row of five). Two drops of one node are in a row when their start
+points lie within $2r$ of each other and the end of the shorter one within
+$2r$ of the line of the longer one — the overlap criterion — so the rows
+hold under placement jitter (audit W3R2B-01): drops that are not exactly
+parallel are shifted along one common normal (recorded as
+`PlannedBranch.axis_offset_normal_xy`), each just far enough to lie at
+least $2r$ from every shorter one, and a drop that would come closer than
+touching to a drop of a row — of the same tap, or of a tap 1 … 4 cm away
+on the same trunk — joins the row. No generated network reports an overlap
+(star and radial networks of 5 … 200 houses, `jitter_m` 0 … 0.1 m), and
+the input impedance is continuous in the jitter: the reactance of the
+10-house radial network at 1 kHz moves by −8.5e-10 at 1 nm and −4.5e-4 at
+1 mm (`carson_series`; up to then +2.4 % at 1 nm, where the rows fell
+apart). Before D9 such drops lay on one axis and the
 inductance matrix read them as a bundle in which every pair touches,
 which no cross-section of four or more equal wires realises;
 `gf.diagnose()` reported every pair (audit W3B-05). With an inductive
@@ -199,7 +218,10 @@ PEN (5 m pieces, 100 Ω·m) the input reactance moves at 1 kHz by
 network, −2.3 / −2.8 % with 10 houses, −1.1 / −1.3 % in the 10-house
 star, and by at most 1.1e-6 (30 houses) and 5e-4 (80 and 200 houses,
 both frequencies) in the radial networks; the star networks of 5, 30, 80 and
-200 houses have no such drops and build the same world, and plans
+200 houses have no such drops and build the same world, those of 40, 60,
+100, 120, 140 and 180 houses have (the 60-house star: X −1.0e-3 / −6.1e-4
+at 50 Hz / 1 kHz under `carson_series`, −1.3e-3 / −8.1e-4 under
+`sommerfeld`; the 40-house star, all 40 drops in rows, 3e-7), and plans
 written before (no offsets) build the worlds they built. `LvNetworkLayout`
 draws no rows. Conductors that overlap otherwise (in a hand-made plan)
 are evaluated as touching wires. A drop may also pass over other buildings'
