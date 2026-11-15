@@ -463,4 +463,5 @@ def test_diagnose_reports_a_rod_end_at_the_interface() -> None:
         assert found[0].severity == "warning"
         assert found[0].data["end"] == "tip"
         assert found[0].data["offset_m"] == pytest.approx(0.0, abs=1e-12)
-        assert "interface contact: 1 rod end lies within one wire radius" in str(report)
+        assert "interface contact: 1 rod end or wire lies too close" in str(report)
+        assert "within one wire radius has no end face" in str(report)

@@ -217,6 +217,16 @@ with.
     wire radii from an interface, or bracket the result by moving the end
     by ±2 wire radii.
 
+    A horizontal wire has the same kind of limit: next to a more conductive
+    layer the solid wire's current crowds to its near side, which the
+    current on the axis cannot follow. A ring ($a$ = 5 mm) reads +1.2 % at
+    3 wire radii, +3.6 % at 2 and +8.6 % at 1.5 radii above a layer 33
+    times more conductive, against the solid torus of the axisymmetric
+    `fem` (audit W4A-07). Within the reach of the interface — 3.5 radii at
+    that contrast, tabulated under `InterfaceContactWarning` in the
+    [warnings reference](../../reference/warnings.md) — the solve warns
+    with `InterfaceContactWarning` as well.
+
 !!! warning "Point kernel next to the interface"
 
     With `kernel="point"` (and in the `mom` family, which shares the point
@@ -241,6 +251,7 @@ with.
 | Contrast | $\lvert K\rvert < 1$; the series length grows like $\ln(\text{tol}) / \ln\lvert K\rvert$ | `SeriesTruncationWarning` at `image_max_terms` |
 | Electrodes | anywhere in the soil; below or through $h_1$ via the Sommerfeld path (slower, see [performance](../performance.md)) | — |
 | Rod ends | head and tip more than one wire radius from $h_1$ (thin wire without end face, see above) | `InterfaceContactWarning` |
+| Horizontal wires next to $h_1$ | the wire axis outside the reach of the interface (3.5 wire radii over a layer 33 times more conductive; current crowding, see above) | `InterfaceContactWarning` |
 | Point kernel near $h_1$ | horizontal wires at least 0.6 segment lengths from $h_1$, on either side | `PointKernelInterfaceWarning`; within 0.387: `BackendCapabilityError` |
 | Thin wire, burial, shallow segments | as for [`image`](image.md#validity-range) | `ValueError` / `ShallowSegmentWarning` (point kernel) |
 | Field quantities near grids, stars, strip ends | uniform-current ansatz, see [`image`](image.md#field-quantities-and-the-uniform-current-ansatz) | `UniformCurrentFieldWarning` in the safety helpers |

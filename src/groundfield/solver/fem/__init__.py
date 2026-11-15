@@ -300,6 +300,11 @@ def solve_fem(
     MixedCoordinatesWarning
         For a world that mixes local and projected coordinates (user
         decision D5), as every backend.
+    InterfaceContactWarning
+        3-D model: for a horizontal wire within the reach of a contrasting
+        layer interface, where the smoothed line source shares the
+        thin-wire error of the integral engines (audits W4A-07, W4B-02).
+        The axisymmetric model resolves the wire and does not warn.
     DeprecationWarning
         For ``n_radial``, ``n_axial`` or ``z_far_factor``.
 
@@ -417,9 +422,14 @@ def _solve(
     three_d = model == "3d" or (model == "auto" and not _is_axisymmetric(world, engine))
     topology = None
     if three_d:
+        from groundfield.solver._guards import _warn_wires_near_interfaces
         from groundfield.solver.fem._solid import require_extra, solid_earth
 
         require_extra()
+        # The 3-D model's smoothed line sources share the thin-wire limit
+        # next to a contrasting interface (audits W4A-07, W4B-02); its own
+        # guards refuse rod ends near an interface.
+        _warn_wires_near_interfaces(world)
         disc, topo = port_topology(world)
         topology = (disc, topo)
         extra = disc.segments[len(world.electrodes) :]

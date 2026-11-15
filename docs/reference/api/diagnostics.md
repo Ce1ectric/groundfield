@@ -51,8 +51,13 @@ The checks guard the assumptions of the thin-wire model (see
   other layer through a part shorter than its radius; the solid rod is
   continuous in between. Against an axisymmetric model of the solid rod
   (4.5 m, $a$ = 8 mm, 1000/30 Ω·m) the thin wire reads +21 % with its tip
-  at the interface and −4.6 % 1 mm past it (category
-  `interface_contact`, also `InterfaceContactWarning` at the solve).
+  at the interface and −4.6 % 1 mm past it. A horizontal wire within a few
+  wire radii of a contrasting interface carries its current on the axis
+  while the solid wire's current crowds to the near side: +3.6 % at two
+  radii over a layer 33 times more conductive (audits W4A-07, W4B-02; the
+  reach per contrast is tabulated under `InterfaceContactWarning` in the
+  [warnings reference](../warnings.md)). Category `interface_contact`, also
+  `InterfaceContactWarning` at the solve.
 - **Size.** The dense reaction matrix of $N$ segments has $N^2$
   entries ($8N^2$ bytes, 3.0 GiB at $N$ = 20 000); the work per
   excitation grows like $N^2$ and the direct solve like $N^3$. The
