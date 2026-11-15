@@ -162,8 +162,8 @@ def background(center: np.ndarray, r_far: float, cells: int = 4):
     ``2 cells x 2 cells x cells`` cubes of side ``r_far / cells`` on
     $[c_x - R, c_x + R] \\times [c_y - R, c_y + R] \\times [0, R]$, every cube
     split into six tetrahedra (``scikit-fem``'s ``MeshTet.init_tensor``).
-    No interface is a mesh plane (layers enter as laminate conductivities,
-    :func:`layer_fractions`), so the mesh stays isotropic everywhere: a
+    No interface is a mesh plane (layers enter as immersed elements,
+    :mod:`~groundfield.solver.fem._assembly3d`), so the mesh stays isotropic: a
     tensor grid through the interfaces would carry slabs of the layer
     thickness to the box, thousands of times wider than thick, on which the
     multigrid solver stalls (stream w4fem3d: 345 conjugate-gradient
@@ -464,7 +464,9 @@ def box_faces(
     return np.concatenate(found, axis=1)
 
 
-def predicted_nodes(total_length: float, h_w: float, growth: float, r_core: float) -> int:
+def predicted_nodes(
+    total_length: float, h_w: float, growth: float, r_core: float
+) -> int:
     """Node count of the coarser 3-D mesh before it is built (resource guard).
 
     $N \\approx 12\\,000 + 5\\,L\\,[\\pi r_c^2/h_\\mathrm{w}^3 + 2\\pi/(g^2 h_\\mathrm{w})]$ for

@@ -331,8 +331,8 @@ def solid_earth(
             "max_nodes_3d to solve it on purpose."
         )
 
-    # Coarse mesh: isotropic background refined towards the wire axes,
-    # then cut by every interface (and concrete prism face) plane.
+    # Coarse mesh: isotropic background refined towards the wire axes (and
+    # the interfaces and concrete prism faces near them).
     t0 = time.perf_counter()
     samples = np.concatenate(
         [
