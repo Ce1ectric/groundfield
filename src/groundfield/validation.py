@@ -462,7 +462,8 @@ def compare_engines(
             return cmp
 
     # Quantities: cluster impedances (one representative per cluster)
-    # and the input impedance of every current source.
+    # and the input impedance of every current or voltage source (a
+    # voltage source since 2026.11, audit W2A-02).
     roots = sorted(
         {sorted(m)[0] for res in results.values() for m in res.clusters.values()}
     )
@@ -481,7 +482,7 @@ def compare_engines(
     source_names = [
         s.name
         for s in next(iter(results.values())).sources
-        if getattr(s, "kind", None) == "current"
+        if getattr(s, "kind", None) in ("current", "voltage")
     ]
     for name in source_names:
         quantities.append(

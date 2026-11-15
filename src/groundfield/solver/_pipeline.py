@@ -1256,7 +1256,9 @@ def _reject_voltage_sources(world, backend: str) -> None:
     voltages (registry capability ``voltage_sources``); a backend without
     it is called directly here (``Engine.solve`` rejects the world in the
     capability check already). Up to 0.15.0 such a backend dropped the
-    voltage sources with a warning and solved to zero.
+    voltage sources with a warning and solved to zero. The message names
+    the backends that solve the world (those of the capability check,
+    audit W2A-07).
 
     Raises
     ------
@@ -1273,13 +1275,22 @@ def _reject_voltage_sources(world, backend: str) -> None:
         raise BackendCapabilityError(
             f"Backend '{backend}' does not implement impressed voltage sources "
             f"(voltage source(s) {names}). Backends that can: "
-            f"{_voltage_capable_backends()}."
+            f"{_voltage_capable_backends(world)}."
         )
 
 
-#: Name of :func:`_reject_voltage_sources` up to 2026.11 (it warned and
-#: dropped the voltage sources); kept for the re-export of ``solver.image``.
-_warn_ignored_sources = _reject_voltage_sources
+def _warn_ignored_sources(world, backend: str, *, stacklevel: int = 3) -> None:
+    """Name of :func:`_reject_voltage_sources` up to 2026.11.
+
+    Up to 0.15.0 it warned and dropped the voltage sources (hence
+    ``stacklevel``, accepted and ignored since; audit W2A-03); kept with
+    the old signature for ``fem`` and the re-export of ``solver.image``.
+    It returns ``None`` for a world of current sources and raises
+    :class:`~groundfield.solver.registry.BackendCapabilityError` for a
+    world with voltage sources.
+    """
+    del stacklevel  # nothing is warned any more
+    _reject_voltage_sources(world, backend)
 
 
 def _reject_concrete_shells(world, backend: str) -> None:
@@ -1290,7 +1301,9 @@ def _reject_concrete_shells(world, backend: str) -> None:
     coefficient on the reaction-matrix diagonal. A backend without it
     (``fem``) would silently solve the bare-metal problem, which the
     electrode documentation explicitly promises will fail loudly
-    instead.
+    instead. The message names the backends of the registry that solve
+    the world (audit W2A-09; up to then it named ``image`` /
+    ``image_2layer`` only).
 
     Raises
     ------
@@ -1305,11 +1318,16 @@ def _reject_concrete_shells(world, backend: str) -> None:
         if float(getattr(e, "concrete_shell_coefficient_ohm_m", 0.0) or 0.0) != 0.0
     ]
     if shelled:
-        from groundfield.solver.registry import BackendCapabilityError
+        from groundfield.solver.registry import (
+            BackendCapabilityError,
+            _capable_backends,
+        )
 
+        capable = _capable_backends(world, None, False)
+        alternatives = ", ".join(capable) if capable else "none"
         raise BackendCapabilityError(
             f"Backend '{backend}' does not implement the concrete-shell "
             f"correction (ADR-0012) carried by electrode(s) {shelled}. "
-            "Use backend='image' / 'image_2layer', or set "
+            f"Backends that solve this world: {alternatives}; or set "
             "concrete_shell_coefficient_ohm_m = 0."
         )

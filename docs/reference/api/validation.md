@@ -16,7 +16,8 @@ Every compared quantity is complex and is compared at **every**
 frequency, real and imaginary part separately:
 
 - the cluster impedance of every cluster (Ω),
-- the input impedance of every current source (Ω),
+- the input impedance of every current or voltage source (Ω; a voltage
+  source since 2026.11),
 - optionally the potential at `sample_points` (V).
 
 Each (quantity, frequency, part) is one `ComparisonRow` with the

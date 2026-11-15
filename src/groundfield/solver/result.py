@@ -951,10 +951,13 @@ class FieldResult(BaseModel):
                     "impedance is defined for current and voltage sources."
                 )
         if record.kind == "voltage":
-            if len(record.current) != len(record.voltage):
+            n_freq = len(self.frequencies)
+            if len(record.current) != n_freq or len(record.voltage) != n_freq:
                 raise ValueError(
                     f"Voltage source {record.name!r}: the result carries no "
-                    "solved source current (the backend did not report it)."
+                    "solved source current (the backend did not report it), "
+                    f"or not one per frequency ({len(record.current)} currents, "
+                    f"{len(record.voltage)} voltages, {n_freq} frequencies)."
                 )
             return [
                 u / i if i != 0 else complex("nan")
