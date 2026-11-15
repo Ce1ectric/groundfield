@@ -1064,8 +1064,12 @@ def test_substation_slots_tap_their_feeders_trunk() -> None:
     trunk). Only the houses of the northern and southern feeders, which
     have no trunk, are still fed from the substation: 4 drops. Each
     tapping drop is as long as the distance from its foundation to the
-    trunk (2 mm sampling of the trunk, a second method)."""
+    trunk (2 mm sampling of the trunk, a second method). Since decision D9
+    the two drops that leave each cabinet beyond its trunk on the trunk's
+    axis lie in a row, half a touching distance (5 mm) to either side: their
+    start lies that far from the trunk (``PlannedBranch.axis_offset_m``)."""
     plan, world = _radial(30)
+    offset = {b.name: abs(b.axis_offset_m) for b in plan.all_branches}
     trunks = [c for c in world.conductors if c.name.startswith("pen_trunk_")]
     drops = _drops(world)
     from_trafo = [d for d in drops if d.start_electrode.startswith("trafo")]
@@ -1086,7 +1090,7 @@ def test_substation_slots_tap_their_feeders_trunk() -> None:
         if d in from_trafo:
             continue
         start_on_trunk = min(_segment_distance(d.start, t.start, t.end) for t in trunks)
-        assert start_on_trunk < 1e-9, d.name
+        assert start_on_trunk < 1e-9 + offset[d.name], d.name  # user decision D9
         house = [e for e in world.electrodes if _root(e.name) == _root(d.end_electrode)]
         sampled = min(
             _points_to_segment(samples, a, b)

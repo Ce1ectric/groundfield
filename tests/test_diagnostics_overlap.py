@@ -5,9 +5,10 @@ other closer than touching (two cables drawn on one axis, a service drop drawn
 on its PEN main) as touching wires; ``diagnose()`` reports such pairs as
 ``overlap`` warnings when the stretch exceeds 10 touching distances and 5 % of
 the shorter conductor. Branches, crossings, T-contacts and a core inside its
-cable shield are not overlaps. In the generated radial networks every drop of
-a row of houses leaves the same tap on one axis: those overlaps are real
-(spread 5 cm apart, Z_in of 5 houses moves by 3.5 % at 1 kHz, X by -15 %).
+cable shield are not overlaps. Up to 098bbbc the drops of a row of houses in
+the generated radial and star networks left one tap on one axis and were
+reported (5 houses radial: 10 pairs); since decision D9 they lie side by side
+at the touching distance and are not (with the tolerance of audit W3B-03).
 """
 
 from __future__ import annotations
@@ -142,6 +143,49 @@ def test_a_branch_is_an_overlap_only_when_it_runs_along(angle_deg, flagged) -> N
         assert stretch == pytest.approx(0.012 / math.sin(t), rel=0.05)
 
 
+# audit W3B-03
+def test_w3b_03_cables_drawn_at_the_touching_distance_are_not_an_overlap() -> None:
+    """Base 098bbbc: two 40 m cables (5 mm) drawn 1e-14 m closer than
+    touching (round-off of a drawing at the touching distance) were reported
+    as overlapping over 40 m, although the inductance matrix evaluates them
+    the same either way; 6 of the 31 overlaps of the 80-house radial network
+    stayed when its drops were drawn side by side at the touching distance.
+    The check has a relative tolerance of 1e-9 at the touching distance."""
+    w = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    y0 = 1.234567
+    for k, y in enumerate((y0, y0 + 0.01 * (1.0 - 1e-12))):
+        gf.create_junction(w, name=f"a{k}", position=(0.0, y, 0.7))
+        gf.create_junction(w, name=f"b{k}", position=(40.0, y, 0.7))
+        w.add_conductor(
+            gf.Conductor(
+                name=f"c{k}",
+                start=(0.0, y, 0.7),
+                end=(40.0, y, 0.7),
+                start_electrode=f"a{k}",
+                end_electrode=f"b{k}",
+                wire_radius=0.005,
+                coupling_to_soil="isolated",
+                inductance_model="neumann",
+            )
+        )
+    assert not _overlaps(w)
+
+
+# audit W3B-03
+@pytest.mark.parametrize(
+    ("factor", "flagged"), [(1.0 - 1e-6, True), (1.0 - 1e-10, False)]
+)
+def test_w3b_03_the_tolerance_is_relative_and_tight(factor, flagged) -> None:
+    """1e-6 inside the touching distance is still an overlap; 1e-10 is
+    round-off (the tolerance is 1e-9 of the touching distance)."""
+    w = _two_rods()
+    for k, y in enumerate((0.0, 0.012 * factor)):
+        gf.create_junction(w, name=f"a{k}", position=(0.0, y, 0.7))
+        gf.create_junction(w, name=f"b{k}", position=(50.0, y, 0.7))
+        _cable(w, f"cable_{k}", f"a{k}", f"b{k}")
+    assert bool(_overlaps(w)) is flagged
+
+
 def _generated(n: int, topology) -> gf.World:
     cfg = TnNetworkConfig(
         soil=HomogeneousSoilSpec(rho=100.0),
@@ -154,25 +198,22 @@ def _generated(n: int, topology) -> gf.World:
         return TnNetworkGenerator(cfg, seed=0).build()
 
 
+# user decision D9, audit W3B-03
 @pytest.mark.parametrize(
-    ("n", "topology", "expected"),
+    ("n", "topology"),
     [
-        (30, StarCabinetTopology(), 0),
-        (200, StarCabinetTopology(), 0),
-        (5, RadialTrunkTopology(), 10),
-        (30, RadialTrunkTopology(), 2),
+        (30, StarCabinetTopology()),
+        (200, StarCabinetTopology()),
+        (5, RadialTrunkTopology()),
+        (30, RadialTrunkTopology()),
     ],
     ids=["star30", "star200", "radial5", "radial30"],
 )
-def test_generated_networks_report_only_their_drops_on_one_axis(
-    n, topology, expected
-) -> None:
+def test_generated_networks_report_no_overlap(n, topology) -> None:
     """Measured on the generated networks (stream w3perf, item 4): the star
-    networks of 30 and 200 houses have none; in the radial ones the drops of
-    houses behind each other leave one tap on one axis (5 houses: all five
-    drops from the substation ring along -x, 10 pairs)."""
-    found = _overlaps(_generated(n, topology))
-    assert len(found) == expected
-    for d in found:
-        assert all(name.startswith("pen_service_") for name in d.subjects)
-        assert d.data["distance_m"] < 1e-9
+    networks of 30 and 200 houses had none; in the radial ones the drops of
+    houses behind each other left one tap on one axis (5 houses: all five
+    drops from the substation ring along -x, 10 pairs; 30 houses: 2). Since
+    decision D9 they lie in a row at the touching distance and none is
+    reported (tests/test_service_drop_rows.py covers more networks)."""
+    assert _overlaps(_generated(n, topology)) == []

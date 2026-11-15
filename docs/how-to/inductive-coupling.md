@@ -212,9 +212,13 @@ sections; it matters for harmonics up to 1 kHz.
   integrated in one dimension along it, at a cost that grows at most
   linearly with the length (one lumped 2 km conductor at 50 Hz and 1 kHz:
   1.1 s; 100 km: 10.6 s, within 0.25 GB). The spectral quadrature
-  resolves the most distant points of a conductor at 0.7 m depth up to
-  about 38 km (16 nodes per Bessel period up to 2.4 km, 8 beyond, at any
-  frequency); a longer conductor warns (`SommerfeldResolutionWarning`).
+  resolves the most distant points of a conductor up to
+  $2^{17}\cdot 2\pi\,(z + z')/30$, about 27 km per metre of $z + z'$
+  (16 nodes per Bessel period up to 2.4 km, 8 beyond, at any frequency):
+  38 km for a conductor at 0.7 m, 33 km for one from a rod head at 0.5 m
+  to a junction at 0.7 m. A longer conductor warns
+  (`SommerfeldResolutionWarning`) and its result is not converged — the
+  100 km conductor above is solved in 10.6 s but warns (audit W3B-10).
 - For hand formulas of a cable or a line over layered soil (the
   complex-depth formulas of Dubanton and Deri),
   `gf.penetration_depth(soil, frequencies)` gives the equivalent complex

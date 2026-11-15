@@ -1018,7 +1018,9 @@ def materialise_branch(
     the contact's point on the wire it names, and the conductor is attached
     to that wire (user decisions Q41, Q43); an end without one is the connection
     point of the node (the site's anchor electrode, or the junction). With
-    ``axis_z_m`` both ends are moved to that depth.
+    ``axis_z_m`` both ends are moved to that depth, with ``axis_offset_m``
+    both ends move by that distance along the normal of the plan direction
+    (decision D9: service drops in a row).
 
     Raises
     ------
@@ -1030,7 +1032,8 @@ def materialise_branch(
         exact circle of a ring) than one minimum cable section
         (:func:`~groundfield.generators._pen_routing.min_section_length` of
         the branch's conductor: 1 cm for wire radii up to 7.3 mm; audit
-        R4A-05).
+        R4A-05); or if a branch with ``axis_offset_m`` has no horizontal
+        extent.
     """
     start = nodes.get(branch.start, branch.start)
     end = nodes.get(branch.end, branch.end)
@@ -1043,6 +1046,7 @@ def materialise_branch(
         branch.axis_z_m is None
         and branch.start_contact is None
         and branch.end_contact is None
+        and branch.axis_offset_m == 0.0
     ):
         return create_conductor(
             world,
@@ -1078,6 +1082,21 @@ def materialise_branch(
     )
     if branch.axis_z_m is not None:
         sz = ez = float(branch.axis_z_m)
+    if branch.axis_offset_m != 0.0:
+        # a drop in a row (decision D9): both ends along the left normal of
+        # the plan direction; the conductor stays attached to its nodes
+        dx, dy = ex - sx, ey - sy
+        length = math.hypot(dx, dy)
+        if length == 0.0:
+            raise ValueError(
+                f"materialise_branch: branch {branch.name!r} has "
+                f"axis_offset_m = {branch.axis_offset_m!r} but no horizontal "
+                "extent (its ends coincide in plan), so the offset has no "
+                "direction."
+            )
+        shift = float(branch.axis_offset_m) / length
+        sx, sy = sx - dy * shift, sy + dx * shift
+        ex, ey = ex - dy * shift, ey + dx * shift
     cond = Conductor(
         name=branch.name,
         start=(sx, sy, sz),

@@ -179,3 +179,162 @@ def test_bustype_from_spec_feeds_a_groundinsight_bus(groundinsight, tmp_path) ->
         bustype_from_spec(spec, rho_preset="lv_network")
     with pytest.raises(TypeError, match="BusTypeSpec"):
         bustype_from_spec(spec.to_dict())
+
+
+# ---------------------------------------------------------------------
+# audit W3B-06: the preset on the live BusType and in the database
+# ---------------------------------------------------------------------
+
+
+# audit W3B-06 (the auditor's test)
+def test_w3b_06_a_live_bustype_keeps_the_preset_it_was_given(groundinsight) -> None:
+    """Base 098bbbc: to_bustype(..., rho_preset='station') validated the
+    preset and dropped it (the live BusType has no metadata), so a BusType
+    saved with save_bustype_to_db carried no record of it. The description of
+    the live BusType ends with the line 'groundfield rho_preset: station'."""
+    from groundfield.io.groundinsight import to_bustype
+
+    bt = to_bustype(
+        _make_rho_f_fit(),
+        name="b",
+        system_type="TN",
+        voltage_level=0.4,
+        rho_preset="station",
+    )
+    assert "station" in (bt.description or "")
+    assert bt.description == "groundfield rho_preset: station"
+    assert gf.bustype_rho_preset(bt) == "station"
+
+
+# audit W3B-06
+def test_w3b_06_the_marker_follows_a_given_description(groundinsight) -> None:
+    from groundfield.io.groundinsight import to_bustype
+
+    fit = _make_rho_f_fit()
+    bt = to_bustype(
+        fit,
+        name="b",
+        system_type="TN",
+        voltage_level=0.4,
+        description="AP1 station, 2 x 2 mesh",
+        rho_preset="lv_network",
+    )
+    assert (
+        bt.description == "AP1 station, 2 x 2 mesh\ngroundfield rho_preset: lv_network"
+    )
+    assert gf.bustype_rho_preset(bt) == "lv_network"
+    # a description read back from a database, re-exported with another
+    # preset: the old marker line is replaced, not repeated
+    again = to_bustype(
+        fit,
+        name="b",
+        system_type="TN",
+        voltage_level=0.4,
+        description=bt.description,
+        rho_preset="station",
+    )
+    assert (
+        again.description == "AP1 station, 2 x 2 mesh\ngroundfield rho_preset: station"
+    )
+    # no preset named: the description is the one given, unchanged
+    plain = to_bustype(fit, name="b", system_type="TN", voltage_level=0.4)
+    assert plain.description is None and gf.bustype_rho_preset(plain) is None
+    given = to_bustype(
+        fit, name="b", system_type="TN", voltage_level=0.4, description="x"
+    )
+    assert given.description == "x"
+    # a stale preset line without a named preset is dropped, not kept as a
+    # claim the exporter was not given (own attack)
+    stale = to_bustype(
+        fit,
+        name="b",
+        system_type="TN",
+        voltage_level=0.4,
+        description=again.description,
+    )
+    assert stale.description == "AP1 station, 2 x 2 mesh"
+    assert gf.bustype_rho_preset(stale) is None
+
+
+# audit W3B-06
+def test_w3b_06_bustype_from_spec_carries_the_preset_of_the_document(
+    groundinsight, tmp_path
+) -> None:
+    path = save_bustype_json(
+        _make_rho_f_fit(),
+        tmp_path / "s.json",
+        name="s",
+        system_type="TN",
+        voltage_level=20.0,
+        description="station",
+        rho_preset="station",
+    )
+    spec = load_bustype_json(path)
+    assert spec.description == "station"  # the document keeps the given text
+    live = bustype_from_spec(spec)
+    assert live.description == "station\ngroundfield rho_preset: station"
+    assert gf.bustype_rho_preset(live) == "station"
+    old = BusTypeSpec.from_dict(_payload("rho_f_standard"))
+    assert gf.bustype_rho_preset(bustype_from_spec(old)) is None
+
+
+# audit W3B-06
+def test_w3b_06_the_preset_survives_a_groundinsight_database(
+    groundinsight, tmp_path
+) -> None:
+    """Bridge test against the PyPI groundinsight of the dev group: the
+    database keeps the description of a BusType, so a BusType read back from
+    it names its preset (save_bustype_to_db and gi.load_bustypes_from_db)."""
+    from groundfield.io.groundinsight import save_bustype_to_db
+
+    if groundinsight.engine is not None:  # pragma: no cover - a leftover session
+        groundinsight.close_dbsession()
+    groundinsight.start_dbsession(str(tmp_path / "groundinsight.db"))
+    try:
+        save_bustype_to_db(
+            _make_rho_f_fit(),
+            name="station",
+            system_type="TN",
+            voltage_level=20.0,
+            rho_preset="station",
+        )
+        save_bustype_to_db(
+            _make_rho_f_fit(),
+            name="plain",
+            system_type="TN",
+            voltage_level=20.0,
+            description="no preset",
+        )
+        loaded = groundinsight.load_bustypes_from_db()
+    finally:
+        groundinsight.close_dbsession()
+    assert gf.bustype_rho_preset(loaded["station"]) == "station"
+    assert loaded["station"].description == "groundfield rho_preset: station"
+    assert gf.bustype_rho_preset(loaded["plain"]) is None
+    assert loaded["plain"].description == "no preset"
+
+
+# audit W3B-06
+@pytest.mark.parametrize("bad", ["", "  "])
+def test_w3b_06_a_blank_preset_is_refused_on_load(bad) -> None:
+    """Base 098bbbc: metadata['rho_preset'] = '' loaded as ''."""
+    payload = _payload("rho_f_standard")
+    payload["metadata"]["rho_preset"] = bad
+    with pytest.raises(ValueError, match="rho_preset"):
+        BusTypeSpec.from_dict(payload)
+
+
+# audit W3B-06
+def test_w3b_06_the_reader_takes_any_object_with_a_description() -> None:
+    from types import SimpleNamespace as NS
+
+    read = gf.bustype_rho_preset
+    assert read(NS(description=None)) is None
+    assert read(NS(description="a\nb")) is None
+    assert read(NS(description="text\ngroundfield rho_preset: station")) == "station"
+    # only the last line is the record
+    assert read(NS(description="groundfield rho_preset: station\nmore")) is None
+    with pytest.raises(ValueError, match="rho_preset"):
+        read(NS(description="groundfield rho_preset: "))
+    with pytest.raises(TypeError, match="description"):
+        read(42)

@@ -57,8 +57,15 @@ and `bustype_from_spec(spec, rho_preset=...)` (the live groundinsight
 `BusType` of a loaded document) take the preset of the bus and emit
 `RhoPresetMismatchWarning` when the document names another one — a preset
 holds for its electrode class only (the AP1 station paired with
-`"lv_group_4_p40"` misses the field solution by 39.9 % rms). Describe the
-layers, and explicit weights $w_0$, $\beta$, in `soil_summary`.
+`"lv_group_4_p40"` misses the field solution by 39.9 % rms). The live
+`BusType` of `to_bustype`, `save_bustype_to_db` and `bustype_from_spec`
+has no metadata; with a preset its description ends with the line
+`groundfield rho_preset: <name>` (a preset line in the given description
+is replaced), which the groundinsight database keeps, and
+`gf.bustype_rho_preset(bus_type)` reads it back, also from a `BusType`
+loaded with `gi.load_bustypes_from_db()` (audit W3B-06; `None` without a
+preset line). A blank `metadata["rho_preset"]` is refused on load. Describe
+the layers, and explicit weights $w_0$, $\beta$, in `soil_summary`.
 
 Before a `BusType` is written, the exported formula (with its rounded
 coefficients) is checked for passivity, $\operatorname{Re}Z \ge 0$ from

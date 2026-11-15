@@ -64,7 +64,12 @@ preset. Every document records this convention as
 0.15.0 have no such entry) and the preset the caller names,
 ``metadata["rho_preset"]`` (``rho_preset=...`` of the exporters, ``None``
 when no preset is named; user decision Q39; documents of earlier versions
-have no such entry and load with ``None``). The exporter cannot check the
+have no such entry and load with ``None``). The live ``groundinsight``
+BusType of :func:`to_bustype`, :func:`save_bustype_to_db` and
+:func:`bustype_from_spec` has no metadata; it carries the preset as the last
+line of its description, ``groundfield rho_preset: <name>``, which the
+``groundinsight`` database keeps, and :func:`bustype_rho_preset` reads it
+back (audit W3B-06). The exporter cannot check the
 number it is given against the preset. :func:`evaluate_spec` and
 :func:`bustype_from_spec` take the preset of the bus they serve and emit
 :class:`RhoPresetMismatchWarning` when the document names another one (a
@@ -170,6 +175,7 @@ __all__ = [
     "NonPassiveFitError",
     "RhoPresetMismatchWarning",
     "bustype_from_spec",
+    "bustype_rho_preset",
 ]
 
 
@@ -441,7 +447,8 @@ class BusTypeSpec:
             )
         _strict_json(metadata, context=f"BusType document {name!r}: metadata")
         preset = metadata.get("rho_preset")
-        if preset is not None and not isinstance(preset, str):
+        if preset is not None and (not isinstance(preset, str) or not preset.strip()):
+            # a blank name is no record of a preset (audit W3B-06)
             raise ValueError(
                 f"BusType document {name!r}: metadata['rho_preset'] must be a "
                 f"preset name or null, got {str(preset)[:40]!r}"
@@ -1190,16 +1197,99 @@ def _import_groundinsight():
     return BusType
 
 
+#: Start of the last line of the description of a live ``groundinsight``
+#: BusType that records the effective-resistivity preset (audit W3B-06): the
+#: BusType model and the groundinsight database keep the description but no
+#: metadata, so the preset travels as ``groundfield rho_preset: <name>``.
+_RHO_PRESET_MARKER = "groundfield rho_preset:"
+
+
+def _live_description(spec: BusTypeSpec) -> Optional[str]:
+    """Description of the live BusType of ``spec``: the given text, without
+    any earlier preset line, and the preset line when a preset is recorded."""
+    text = spec.description
+    lines = [] if text is None else str(text).splitlines()
+    kept = [line for line in lines if not line.startswith(_RHO_PRESET_MARKER)]
+    preset = spec.rho_preset
+    if preset is not None:
+        kept.append(f"{_RHO_PRESET_MARKER} {preset}")
+    elif kept == lines:
+        return text  # unchanged, None included
+    return "\n".join(kept) if kept else None
+
+
 def _to_live_bustype(spec: BusTypeSpec):
     """Build the ``groundinsight.BusType`` for an already validated spec."""
     BusType = _import_groundinsight()
     return BusType(
         name=spec.name,
-        description=spec.description,
+        description=_live_description(spec),
         system_type=spec.system_type,
         voltage_level=spec.voltage_level,
         impedance_formula=spec.impedance_formula,
     )
+
+
+def bustype_rho_preset(bus_type: Any) -> Optional[str]:
+    """Effective-resistivity preset recorded on a BusType (audit W3B-06).
+
+    A live ``groundinsight.BusType`` built by :func:`to_bustype`,
+    :func:`save_bustype_to_db` or :func:`bustype_from_spec` from a fit or a
+    document with a preset carries it as the last line of its description,
+    ``groundfield rho_preset: <name>``; the ``groundinsight`` database keeps
+    the description, so the preset of a BusType loaded from it
+    (``gi.load_bustypes_from_db()``) is read the same way. Compare it with
+    the preset of the bus's ``specific_earth_resistance``
+    (:func:`~groundfield.soil.effective_resistivity`); for a document use
+    :attr:`BusTypeSpec.rho_preset` or the check of :func:`evaluate_spec`.
+
+    Parameters
+    ----------
+    bus_type : groundinsight.BusType, BusTypeSpec or any object with a ``description``
+        The BusType. For a :class:`BusTypeSpec` the preset its metadata
+        records (:attr:`BusTypeSpec.rho_preset`).
+
+    Returns
+    -------
+    str or None
+        The preset name, or ``None`` when the description has no preset
+        line (no preset was named, or the BusType was not built by
+        groundfield 2026.11 or later).
+
+    Raises
+    ------
+    TypeError
+        If ``bus_type`` has no ``description`` or a description that is
+        neither a string nor ``None``.
+    ValueError
+        If the preset line names no preset.
+    """
+    if isinstance(bus_type, BusTypeSpec):
+        return bus_type.rho_preset
+    try:
+        text = bus_type.description
+    except AttributeError:
+        raise TypeError(
+            "bustype_rho_preset: expected a groundinsight BusType (an object "
+            f"with a description), got {type(bus_type).__name__}"
+        ) from None
+    if text is None:
+        return None
+    if not isinstance(text, str):
+        raise TypeError(
+            "bustype_rho_preset: the description must be a string or None, got "
+            f"{type(text).__name__}"
+        )
+    lines = text.splitlines()
+    if not lines or not lines[-1].startswith(_RHO_PRESET_MARKER):
+        return None
+    name = lines[-1][len(_RHO_PRESET_MARKER) :].strip()
+    if not name:
+        raise ValueError(
+            "bustype_rho_preset: the description ends with a rho_preset line "
+            f"that names no preset ({lines[-1]!r})"
+        )
+    return name
 
 
 def to_bustype(
@@ -1227,7 +1317,10 @@ def to_bustype(
     The metadata block (including the passivity check) is **not**
     carried over into the returned ``BusType`` (the ``BusType`` schema
     has no metadata field) — use :func:`to_bustype_dict` or
-    :func:`save_bustype_json` if metadata must be persisted.
+    :func:`save_bustype_json` if metadata must be persisted. The one
+    exception is the preset: with ``rho_preset`` the description of the
+    ``BusType`` ends with the line ``groundfield rho_preset: <name>``
+    (:func:`bustype_rho_preset` reads it back; audit W3B-06).
 
     Parameters
     ----------
@@ -1250,8 +1343,10 @@ def to_bustype(
         passivity check fails. Default False.
     rho_preset : str, optional
         The preset of :func:`~groundfield.soil.effective_resistivity` behind
-        the ``rho`` of the fit, recorded as ``metadata["rho_preset"]``
-        (default ``None``: none named), see :func:`to_bustype_dict`.
+        the ``rho`` of the fit (default ``None``: none named), see
+        :func:`to_bustype_dict`; recorded as the last line of the
+        description, ``groundfield rho_preset: <name>`` (a preset line in
+        ``description`` is replaced).
 
     Returns
     -------
@@ -1333,8 +1428,11 @@ def save_bustype_to_db(
         passivity check fails. Default False.
     rho_preset : str, optional
         The preset of :func:`~groundfield.soil.effective_resistivity` behind
-        the ``rho`` of the fit, recorded as ``metadata["rho_preset"]``
-        (default ``None``: none named), see :func:`to_bustype_dict`.
+        the ``rho`` of the fit (default ``None``: none named), see
+        :func:`to_bustype_dict`; stored as the last line of the description,
+        ``groundfield rho_preset: <name>``, which the database keeps:
+        :func:`bustype_rho_preset` reads it from a BusType loaded with
+        ``gi.load_bustypes_from_db()`` (audit W3B-06).
 
     Raises
     ------
@@ -1377,7 +1475,9 @@ def bustype_from_spec(spec: BusTypeSpec, *, rho_preset: Optional[str] = None):
 
     The ``groundinsight`` model of a spec built by the exporters or read
     with :func:`load_bustype_json` (its four scalar fields and the
-    formula; the metadata is not carried over, as with :func:`to_bustype`).
+    formula; the metadata is not carried over, as with :func:`to_bustype`,
+    except the preset the document records: the description ends with
+    ``groundfield rho_preset: <name>``, audit W3B-06).
 
     Parameters
     ----------
