@@ -3428,7 +3428,7 @@ below implemented the decisions that change code.
 |---|---|---|---|
 | 20 | Encase the cross-braces of mesh foundation electrodes in the concrete shell, as DIN 18014 lays the foundation earth electrode with its connections in the concrete? | yes | streams `d2gen`, `f2gen` |
 | 21 | Deprecate `FoundationElectrodeSpec.concrete_model`, which only chooses one or four current owners of a ring foundation (≤ 0.06 % apart up to aspect ratio 4)? | yes; the measured difference is larger (< 1 % / < 2 % up to aspect ratio 4 / 50, see the box below; for the author's review) | streams `d2gen`, `f2gen`, `f3gen` |
-| 22 | Keep the PEN routing of `TnNetworkGenerator` (an own cable per cabinet, a service drop taps the cable that feeds its building)? Place cabinets per building group in the future? | routing kept; cabinets per building group moved into 2026.11.0 (user decision of 2026-11-14, stream `w1gen`; the 20 m step of the rule stays, user decision D7) | [changelog](../changelog.md) |
+| 22 | Keep the PEN routing of `TnNetworkGenerator` (an own cable per cabinet, a service drop taps the cable that feeds its building)? Place cabinets per building group in the future? | routing kept; cabinets per building group moved into 2026.11.0 (user decision of 2026-11-14, stream `w1gen`; a wide group's cabinet on the ray through its far-end building since audit W1B-01, stream `fw1gen`; the 20 m step of the rule stays, user decision D7, stream `fw1r2gen`) | [changelog](../changelog.md) |
 | 23 | `fem` whose equivalent hemisphere puts current into a more conductive layer that the electrodes do not touch (−38 … −98 %): error instead of warning? | error; extended after the audit to a more conductive layer within the electrodes' horizontal half-extent (coordinator, for the author's review) | streams `d2solver`, `f2solver`, `f3solver` |
 | 24 | Point-form guard near a layer interface: keep the conservative thresholds (warning within 0.6 segment lengths, error within 0.387)? | kept | [known limitations](../reference/known-limitations.md#current-ansatz-and-source-kernels) |
 | 25 | Accept the step of `carson_series` at the 8.1° boundary of its validity domain as a documented limit? | accepted | [known limitations](../reference/known-limitations.md#earth-return-and-conductors), [earth return](../explanation/earth-return.md) |
@@ -3439,8 +3439,8 @@ below implemented the decisions that change code.
 | 30 | One current per wire line for grids and stars in the image family (−3 … −5 %)? | moved into 2026.11.0 (user decision of 2026-11-14, stream `w1sol`): grids one owner per wire line (−1.2 … −5.5 %), building outlines per side (Q44); a star alone does not change (equal arm currents), its remaining error is on the [roadmap](../roadmap.md#left-open-by-2026110) | [changelog](../changelog.md) |
 | 31 | Make the soft size notice (5 000 segments) adjustable per engine as well? | yes | stream `d2solver` |
 | 32 | Read a thin conductor inside a thicker one as a concentric cable only with an explicit marker? | moved into 2026.11.0 (user decision of 2026-11-14, stream `w1sol`): marker `conductor_type="cable_shield"` | [changelog](../changelog.md) |
-| 33 | No internal inductance of a solid wire for cable shields (100 m coaxial pair 31.97 instead of 26.97 µH)? | moved into 2026.11.0 together with 32: 26.97 µH; sub-pieces add up since audit W1A-02 | [changelog](../changelog.md) |
-| 34 | Tighten the rule for segments up to a quarter skin depth under `sommerfeld` (step of 3.5e-4 at δ/4)? | next release | done in 2026.11.0 (streams w3perf, fw3perf): exact one-dimensional self rule and graded close-pair rule; with the λ grid of audit W3B-01 the self correction is within 1.1e-9 of a refined rule from 1 m and 0.01 δ to 3 km at 50 Hz and 1 kHz, no step (was 4.8e-4, step 3.5e-4); close pairs within about 4e-8 (were up to 1.5e-3); five golden cases move by up to 4.9e-7 ([changelog](../changelog.md)) |
+| 33 | No internal inductance of a solid wire for cable shields (100 m coaxial pair 31.97 instead of 26.97 µH)? | moved into 2026.11.0 together with 32: 26.97 µH; sub-pieces add up since audit W1A-02 (stream `fw1sol`), also tilted against each other since audits W1R2-01, W1R3-01 and W1R3-02 (streams `fw1r2sol`, `fw1r3`) | [changelog](../changelog.md) |
+| 34 | Tighten the rule for segments up to a quarter skin depth under `sommerfeld` (step of 3.5e-4 at δ/4)? | a later release (2026-11-08); moved into 2026.11.0 by the user decision of 2026-11-14 | done in 2026.11.0 (streams `w3perf`, `fw3perf`): exact one-dimensional self rule and graded close-pair rule; with the λ grid of audit W3B-01 the self correction is within 1.1e-9 of a refined rule from 1 m and 0.01 δ to 3 km at 50 Hz and 1 kHz for the soils tested (up to 3.4e-9 in high-contrast soils, audit W3R2B-08), no step (was 4.8e-4, step 3.5e-4); close pairs within about 4e-8 (were up to 1.5e-3); five golden cases move by up to 4.9e-7 ([changelog](../changelog.md)) |
 | 35 | Radial trunk: a building in a substation slot taps its feeder's trunk instead of getting its own line from the substation? | moved into 2026.11.0 together with 22 (stream `w1gen`) | [changelog](../changelog.md) |
 | 36 | Presets of the effective-resistivity weights per electrode class, with the values of the AP2 hand-over? | yes | streams `d2soil`, `f2gen` |
 
@@ -3448,15 +3448,17 @@ The audits of the decision streams left four more questions, answered on the
 same day; the author again followed the recommendations and chose the next
 release for 37 and 39, this release for 38, and for 40 a quantification
 only once a 3-D volume reference exists. The earlier wording of 37 pointed to
-a "conforming axisymmetric" roadmap item that did not exist yet; the roadmap
-carries it now.
+a "conforming axisymmetric" roadmap item that did not exist yet. With the
+user decision of 2026-11-14, 37 and 39 moved into 2026.11.0, and the 3-D
+model of wave 4 gave the reference that 40 waited for; the rows say where
+each was done.
 
 | Q | Question | Decision | Where |
 |---|---|---|---|
-| 37 | Stop adding rules to the equivalent-hemisphere reduction of `fem`, in which every audit round found new limit cases (an interface 1 cm below a deep ring +191 … +308 % without a message; a rod reaching 1 µm … 8 cm into a more conductive top layer −44 … −78 %, warning only)? | yes; no further rules, replaced by a conforming axisymmetric model in the next release (rod on the axis, ring, ring with central rod; other electrodes refused until a full 3-D method exists) | implemented in 2026.11 (streams w4axi and w4fem3d): conforming axisymmetric model of rods on one axis and rings around it (about 1e-4), and a three-dimensional conforming model for every other world — strips, grids, meshes, several clusters, galvanic distributed conductors — within 2e-3 of the axisymmetric model and between `image_2layer` and `mom` at the AP1 station; the equivalent-hemisphere reduction is gone ([changelog](../changelog.md)) |
+| 37 | Stop adding rules to the equivalent-hemisphere reduction of `fem`, in which every audit round found new limit cases (an interface 1 cm below a deep ring +191 … +308 % without a message; a rod reaching 1 µm … 8 cm into a more conductive top layer −44 … −78 %, warning only)? | yes; no further rules, replaced by a conforming axisymmetric model (rod on the axis, ring, ring with central rod; other electrodes refused until a full 3-D method exists); planned for a later release on 2026-11-08, moved into 2026.11.0 with the full 3-D model by the user decision of 2026-11-14 | done in 2026.11.0 (streams `w4axi` and `w4fem3d`): conforming axisymmetric model of rods on one axis and rings around it (about 1e-4; a ring wire cut by an interface to a more conductive layer, or within 0.05 wire radii of it, up to 6.0e-3, audit W4A-01), and a three-dimensional conforming model for every other world — strips, grids, meshes, several clusters, galvanic distributed conductors — within 2e-3 of the axisymmetric model and between `image_2layer` and `mom` at the AP1 station; the equivalent-hemisphere reduction is gone ([changelog](../changelog.md)) |
 | 38 | Which owner model stays when `concrete_model` is removed: one current per rectangle without cross-braces (up to 2.2 % above the reference with one current per segment) or one per side (up to 0.9 %; short side at least 1 m)? | one per side, already in 2026.11.0: `concrete_model` has no effect | stream `d3gen` |
-| 39 | Record the effective-resistivity preset in the BusType document (for example `metadata["rho_preset"]`), so that a bus paired with the wrong preset is detectable? | yes, next release | done in 2026.11.0 (streams w3perf, fw3perf): `rho_preset` of the exporters, `metadata["rho_preset"]`, `BusTypeSpec.rho_preset`, the last line of the description of the live BusType and of its database entry (`bustype_rho_preset`), `RhoPresetMismatchWarning` from `evaluate_spec` / `bustype_from_spec`; older documents load with `None` ([changelog](../changelog.md)) |
-| 40 | Quantify the overlap of the concrete shells at the corners and crossings of encased foundations? | only once a 3-D volume reference is available | quantified in 2026.11 (stream w4fem3d) against the concrete resolved as a volume in the 3-D `fem` model: each junction acts like at most about one shell radius of wire (corner −1.5 cm, crossing −3 … −6 cm, T-joint within ±5 cm; 5 mm bar, 5 cm cover, ρ_c 1 000 / 5 000 Ω·m), the generators' house mesh changes by less than 0.6 %; no correction rule ([concrete shells](../explanation/concrete-shells.md#overlapping-shells-at-junctions)) |
+| 39 | Record the effective-resistivity preset in the BusType document (for example `metadata["rho_preset"]`), so that a bus paired with the wrong preset is detectable? | yes, in a later release (2026-11-08); moved into 2026.11.0 by the user decision of 2026-11-14 | done in 2026.11.0 (streams `w3perf`, `fw3perf`, `fw3r2b`): `rho_preset` of the exporters, `metadata["rho_preset"]`, `BusTypeSpec.rho_preset`, the last line of the description of the live BusType and of its database entry (`bustype_rho_preset`; audit W3B-06), `RhoPresetMismatchWarning` from `evaluate_spec` / `bustype_from_spec`; a document holds a known preset name or null, and only an exact preset line of a description is replaced (audit W3R2B-06); older documents load with `None` ([changelog](../changelog.md)) |
+| 40 | Quantify the overlap of the concrete shells at the corners and crossings of encased foundations? | only once a 3-D volume reference is available | quantified in 2026.11.0 (stream `w4fem3d`) against the concrete resolved as a volume in the 3-D `fem` model: each junction acts like at most about one shell radius of wire (corner −1.5 cm, crossing −3 … −6 cm, T-joint within ±5 cm; 5 mm bar, 5 cm cover, ρ_c 1 000 / 5 000 Ω·m), the generators' house mesh changes by less than 0.6 %; no correction rule ([concrete shells](../explanation/concrete-shells.md#overlapping-shells-at-junctions)) |
 
 The audits of stream `d3gen` (D3A-02, D3A-03, D3B-03, D3B-04) found that the
 generators attach PEN conductors at the connection point of a foundation's
@@ -3466,7 +3468,7 @@ the first vertex for building outlines; the author decided on 2026-11-14:
 
 | Q | Question | Decision | Where |
 |---|---|---|---|
-| 41 | Where do the conductors the generators route to a foundation end: at the centre as in 0.15.0, at the corner of the anchor side, or at the point of the foundation nearest to the conductor? | at the nearest point, for every foundation form (rectangles, building outlines, the substation's foundation), already in 2026.11.0 | stream `f4gen` |
+| 41 | Where do the conductors the generators route to a foundation end: at the centre as in 0.15.0, at the corner of the anchor side, or at the point of the foundation nearest to the conductor? | at the nearest point, for every foundation form (rectangles, building outlines, the substation's foundation), already in 2026.11.0 | streams `f4gen`, `f5gen`, `f6gen` (audits D3A, D3B, R4A, R4B, R5A, R5B, R6A); rings and strips since Q43 and layout cables clipped at every site they pass since audits R6A-01, W1B-03, W1B-04 (streams `w1gen`, `fw1gen`) ([changelog](../changelog.md)) |
 
 
 The hand-over of 2026-11-14 left three questions; the author answered them
@@ -3479,9 +3481,13 @@ groundmeas, the AP1 reference-case library and scaling the LU solve to
 
 | Q | Question | Decision | Where |
 |---|---|---|---|
-| 42 | Route service drops around foundations (street geometry) instead of the shortest connection? | no, keep the shortest connection | — |
-| 43 | Apply the nearest-point rule of Q41 also to sites earthed by a `RingElectrodeSpec` circle or a strip (the default substations)? | yes | stream `w1gen` |
-| 44 | One current per straight wire for building outlines? | yes, together with Q30 (one current per wire line in the solver) | stream `w1sol` |
+| 42 | Route service drops around foundations (street geometry) instead of the shortest connection? | no, keep the shortest connection | no code change; [known limitations](../reference/known-limitations.md#generators-and-osm), [roadmap](../roadmap.md#status-of-the-roadmap-items-carried-in-the-changelog) (row of the TN generator) |
+| 43 | Apply the nearest-point rule of Q41 also to sites earthed by a `RingElectrodeSpec` circle or a strip (the default substations)? | yes | done in 2026.11.0 (stream `w1gen`): every conductor routed to such a site ends at the point of the electrode nearest to it (a circle exactly), rods keep their head ([changelog](../changelog.md)) |
+| 44 | One current per straight wire for building outlines? | yes, together with Q30 (one current per wire line in the solver) | done in 2026.11.0 (stream `w1sol`); straight runs at projected coordinates since audits W1A-01 and W1R2-05 (streams `fw1sol`, `fw1r2sol`), in linear time since audit W1R3-03 (stream `fw1r3`) ([changelog](../changelog.md)) |
+
+The decisions D1–D9 taken while these items were implemented are listed in
+[Decisions of 2026-11-15](#decisions-of-2026-11-15), before the sections of
+the four waves at the end of this page.
 
 
 !!! warning "Correction to question 38 (audit D3B-01)"
@@ -3820,7 +3826,8 @@ gave it a 1 cm drop (R5A-03); radial planning grew faster than the network
 - **Drops over other foundations:** 0 … 80 % of the drops of the default
   grids run 0.2 m above other houses' side wires; moved 1 m aside they change
   \|Z\| by at most 0.02 % (insulated PEN) and −0.30 % (bare PEN). Routing
-  drops around foundations is left to the next release.
+  drops around foundations was left to the next release; the author then
+  kept the shortest connection (user decision Q42).
 - **Golden:** nothing moves.
 
 ## Verification audit R6A of stream `f6gen`
@@ -3839,3 +3846,975 @@ points (R6A-02 … R6A-06: an evidence line of the stream's report, the
 "along" in the 10.38 row, the frequency of the detour reactance, the
 substation drop in tutorial T06), which the release notes, the known
 limitations and the tutorial now state.
+
+## Decisions of 2026-11-15
+
+While the items of the user decision of 2026-11-14 were implemented, eight
+questions came up (D1–D8), each with a recommendation. On 2026-11-15 the
+author followed every recommendation and asked, for D6, to stay with
+licences that allow further commercial use and are as free as possible.
+During the waves he decided two more: the form of the far images of the
+two-layer image series and D9. The table keeps the question, the
+recommendation that is now the decision, and where it was done.
+
+| id | Question | Decision | Status and where |
+|---|---|---|---|
+| D1 | Give `VoltageSource` an internal impedance Z_q = R + jωL (two fields, one diagonal entry of the source's constraint row)? Without it: a junction with a conductor, or the 1 A solve scaled by hand. | yes (small, useful for AP2) | done in 2026.11.0 (stream `fw2src`): `internal_resistance_ohm`, `internal_inductance_h`, 0 by default and then bit-identical to the ideal source; pickles written before it load as ideal sources, and a galvanic `mom` world factorises once for all frequencies (audits W2R2-01, W2R2-02, stream `fw2r2`) ([changelog](../changelog.md)) |
+| D2 | Make the near/far switch of the line kernel continuous (a deterministic margin or a far form exact to round-off), so that results do not depend on where a world stands? It moves worlds near the origin, estimated at about 2e-7 (audit W2B-02: 1.15e-5 for the switch alone in golden `line_img2_rod_crosslayer`). | yes, in stream `w3xl` (the numbers move far below every tolerance; reproducibility wins) | done in 2026.11.0 (stream `w3xl`, item 5): a C¹ blend between 6 and 7.5 segment lengths; 1e-13 over local shifts, ≤ 5e-11 at UTM coordinates (audit W3A-04); with the far images and the cross-layer line form of the same stream the golden line-kernel cases move by up to 6.0e-4 ([changelog](../changelog.md)) |
+| D3 | A current that varies along each wire in the image family (stars +1.8 … +10.4 %, 8 arms in 1000/100 Ω·m +12.3 %; grids +0.36 … +0.70 % above one current per segment)? | roadmap (`mom` is the per-segment answer today) | open: [roadmap](../roadmap.md#left-open-by-2026110) |
+| D4 | The generator rules wave 1 left open: a group rule for wide groups (about 180°), one cabinet around the substation, a cabinet that cannot keep its clearance (it raises; it could move on along its ray)? | roadmap; the raise is a clean failure | open: three items of the [roadmap](../roadmap.md#left-open-by-2026110) |
+| D5 | Worlds that mix projected (UTM) and local coordinates are not helped by the shifted local frame of stream `w2mom`: what to do about them? | document them, once audit W2B has quantified them | quantified by audit W2B-04 and done in 2026.11.0 (stream `fw2mom`); by the coordinator's decision on W2B-04 beyond the text: `diagnose()` reports such a world under `coordinates`, and its solve warns with `MixedCoordinatesWarning` ([known limitations](../reference/known-limitations.md#scope-of-the-physics), [changelog](../changelog.md)) |
+| D6 | Dependencies of the 3-D FEM as an optional extra of the MIT package (meshers: gmsh GPL-2.0-or-later with exceptions, netgen LGPL, TetGen AGPL; `scikit-fem` BSD-3, `pyamg` MIT)? | permissive licences only (MIT / BSD / Apache): `scikit-fem` with its own tensor-product meshes and `pyamg`; no GPL / AGPL; a weak-copyleft mesher only if nothing permissive works, and then ask again | done in 2026.11.0 (stream `w4fem3d`): the optional extra `fem3d` with scikit-fem (BSD-3-Clause) and pyamg (MIT); the design needs no surface-fitted mesh, so no external mesher and no copyleft package ([changelog](../changelog.md)) |
+| D7 | A continuous cabinet rule instead of the 20 m threshold, which moves a cabinet by up to 142 m for a 0.2 m change of the house spacing (X at 1 kHz about −20 % in the 50-house grid; AP1 mixes with groups at 18.8 / 20.2 / 20.7 m; audit W1R2-02)? | keep the threshold for 2026.11, document the step and record the rule per cabinet; the AP1 catalogue does not use the generator's cabinets | done in 2026.11.0 (stream `fw1r2gen`): the plan records `PlannedSite.cabinet_rule` and `PlannedSite.centroid_ray_gap_m` per cabinet, the [known limitations](../reference/known-limitations.md#generators-and-osm) give the step (141.8 m, X at 1 kHz −21.6 / −18.9 % with `carson_series` / `sommerfeld`); a continuous rule is on the [roadmap](../roadmap.md#left-open-by-2026110) |
+| D8 | Rebase the golden baseline for 2026.11.0 after the last wave, since the declared bounds of many streams add up and no longer bind (audit W1R2-07)? | yes, as the last step before the release dry run | pending: part of the release preparation after wave 4 |
+| D9 | Service drops that leave one tap in one direction (the radial taps, the substation drops of the star) lie on one axis, where the inductance matrix reads every pair as touching (`diagnose()`: 10 overlapping pairs in the 5-house radial network, 247 with 200 houses): keep them, or lay them side by side? | in a row side by side at the touching distance; only neighbours touch | done in 2026.11.0 (stream `fw3perf`; along one common normal under placement jitter since audit W3R2B-01, stream `fw3r2b`): `PlannedBranch.axis_offset_m`; X at 1 kHz of the 5-house radial network −2.33 / −2.70 % (`carson_series` / `sommerfeld`); no generated network reports an overlap for `jitter_m` 0 … 0.1 m; no golden case moves ([changelog](../changelog.md)) |
+| far images | Which form do the far images of the two-layer image series take (stream `w3xl`, item 1)? | the quadrupole form stays the default (the reference model); an `Engine` option gives the point form for fast parameter studies | done in 2026.11.0 (stream `fw3xl`): `Engine.image_far_field = "quadrupole" \| "point"`; the TN 40-house network in 1000/30 Ω·m with h₁ = 1.5 m solves in 0.49 of the default's time; since audit W3R2A-01 (stream `fw3r2a`) the point form keeps the near image pairs on the cross-layer path, and a 75 m strip below the interface is within 1.1e-5 of its exact value at any segment length (up to −58 % before) ([changelog](../changelog.md), [known limitations](../reference/known-limitations.md#current-ansatz-and-source-kernels)) |
+
+## Waves 1 to 4 of the extended release
+
+On 2026-11-14 the author moved (almost) every open roadmap item into
+2026.11.0 (see the decisions above). The work ran in four waves, each with
+implementation streams on disjoint files, the coordinator's texts, a first
+round of two adversarial audits, fix streams with the coordinator's decision
+per finding, and a second audit round that attacked the fixes, again
+followed by fixes; wave 1 had a third, verifying round, and the rounds of
+wave 4 after audit W4A follow at the release. The audits number their
+findings per round (W1A-01 … W4A-11). Wave 1 with its first fixes and audit W1R2, and the wave-2 streams,
+ran in the cloud workspace (Linux x86-64, OpenBLAS); the rest ran on the
+author's Mac (macOS arm64, Accelerate), where every claim of bit identity is
+made against a golden baseline generated on the same machine. As for the
+streams above, the release notes carry the result; the sections below say
+what each stream and each audit round did, with the numbers as corrected by
+the later rounds.
+
+## Wave 1: one current per straight wire, concentric cables, cabinets per building group
+
+Wave 1 implemented the user decisions Q30 / Q44 and Q32 / Q33 in the solver
+and the coupling (stream `w1sol`), and Q22 / Q35, Q43 and the layout fix of
+audit R6A-01 in the generators (stream `w1gen`); Q42 needed no code. Its
+audits ran three rounds: W1A / W1B, W1R2 on the fixes, and the verification
+round W1R3.
+
+### Stream `w1sol`: one current per straight wire, concentric cables by marker (Q30, Q44, Q32, Q33)
+
+`image`, `image_2layer` (with its cross-layer path) and `solve_mutual_*`
+give every grid one uniform-current owner per full wire line, a star one per
+arm and a polyline one per straight run; the owners of an electrode are
+ideally bonded, every result stays per electrode, and
+`metadata["wire_owners"]` counts them. Rods, strips and rings stay one wire;
+generated mesh foundations, one electrode per wire line already, do not
+change. In the coupling, a thinner conductor on the axis of a thicker one is
+a core inside a shield only when the thicker one has
+`conductor_type="cable_shield"`, and a shield has no internal inductance of
+a solid wire. In short:
+
+- **Grids:** −1.2 % (10 m, 2 × 2 meshes) … −4.0 % (40 m, 8 × 8) … −5.5 %
+  (100 m, 20 × 20) in 100 Ω·m; above one current per segment +0.36 … +0.70 %
+  instead of +1.6 … +4.9 %. Against `mom`, at the corner of the 20 m grid
+  with 4 × 4 meshes: touch voltage +6.4 % (+20 % before), step voltage
+  −7.6 % (−21 %); the touch-voltage envelope of the 10.21 note 111.44 →
+  98.72 V.
+- **Outlines and stars:** a building outline is one owner per side and
+  equals the rectangle given by its size (rectangle outlines −0.000 …
+  −0.31 % bare, −0.62 % in wet concrete; the T06 layout with the AP1 station
+  −0.03 … −0.40 %). A star alone does not change (equal arm currents); its
+  gap to one current per segment stays on the roadmap (decision D3). A
+  source-free grid, star or polyline floats at one potential with exactly
+  zero net current.
+- **Concentric cables:** two unmarked conductors on one axis are separate
+  cables that touch (a 100 m pair of 5 mm and 15 mm radius: loop 31.97 →
+  43.47 µH, the analytic 43.48 µH); the self terms of a shield drop μ₀ℓ/(8π)
+  (50 nH/m), and the 100 m coax reads the analytic 26.97 µH instead of
+  31.97 µH. `buried_lead()` is a shield: two-pole readings with buried leads
+  −2.5 % in reactance.
+- **Golden:** `img2_grid_upper_resistive` (Zc −0.94 %),
+  `cim_grid_unequal_segments` (−1.41 %), `img_mixed_cluster_hom` and
+  `line_img_mixed_cluster_hom` (−0.20 %, electrode currents up to 3.4 %)
+  move; Q32 / Q33 move no stored case. The refinement bound of benchmark B11
+  is 0.6 % instead of 0.5 %.
+
+### Stream `w1gen`: cabinets per building group, the nearest point on rings and strips (Q22, Q35, Q43, R6A-01)
+
+The star topology of `TnNetworkGenerator` orders the buildings by bearing
+around the substation, from the widest angular gap on, cuts them into one
+run of consecutive bearings per cabinet (sizes differ by at most one) and
+places each cabinet on the ray through its group's centroid, 1 m
+(`CabinetConfig.end_clearance_m`) beyond the group. In the radial topology a
+building in a substation slot taps its feeder's trunk (Q35). Every conductor
+routed to a site earthed by a ring or a strip, the default substations
+among them, ends at the point of that electrode nearest to it (Q43), and a
+layout cable reaches a site where its polyline enters the site foundation
+(R6A-01). In short:
+
+- **Default networks:** the 30-house star had both cabinets west of the
+  substation and fed its eastern houses by drops of 3.5 … 106.5 m from the
+  substation (25 drops, 1 140 m); its cabinets now stand at (−118.5, 0) and
+  (118.5, 0) m with 20 drops of 25 m. The 30-house radial network: drops
+  1 115 → 778 m, 14 → 4 of them from the substation. The default mains
+  leave the substation ring at its point nearest to their cabinets.
+- **Numbers** (default grids of 10 … 150 houses, 100 Ω·m, with the fixes of
+  `fw1gen`): resistive PEN at 50 Hz star +0.12 … +0.85 %, radial −0.01 …
+  +0.49 % (Q43 alone −0.05 … −0.13 %); an isolated Neumann PEN at 1 kHz (up
+  to 50 houses) star \|Z\| −1.4 … +13.1 %, radial −1.2 … +15.4 %. The
+  reactance of the default 30-house star rises by +64 / +55 %
+  (`carson_series` / `sommerfeld`), because its houses share their main
+  instead of parallel drops (audit W1B: the rise comes from the tree, +52 %
+  in an own lumped model, +54.9 % with `mom`).
+- **Golden:** `gen_tn_default` (substation potential +1.18 %, the current of
+  the cabinet rod −62.7 %: the rod stands 1 m beyond the houses instead of
+  62.5 m) and `gen_tn_measurement_overhead_leads` (+1.76 %, the probe rod's
+  potential +117 %) move; the other 47 cases are bit-identical.
+
+### Audits W1A and W1B of the wave-1 streams
+
+Two auditors attacked the merged wave 1 (snapshot `6f63deb`, change from
+`e6124cd`) with code of their own, W1A the solver and coupling side, W1B the
+generators. Findings:
+
+- W1A-01 (medium): the absolute collinearity tolerance (a sine of 1e-9)
+  split the wire lines of rotated generated meshes at UTM coordinates into
+  extra owners (a 10 m mesh with 10 × 10 meshes: 142 extra owners, −0.55 %;
+  up to −0.64 %).
+- W1A-02 (medium): the coax loop inductance shrank with the number of pieces
+  (26.966 µH lumped, 24.608 µH in 0.25 m pieces, −8.8 %).
+- W1A-03 (low): the 10.21 row still gave 69.6 V at +x; since Q30 it is
+  59.95 V (point kernel), 61.31 V (line kernel), 61.58 V (`mom`).
+- W1A-04 (low): the owner texts of the generators described one leakage
+  current per electrode.
+- W1A-05 (low): `model_copy` bypassed the rule that a shield has no skin
+  model.
+- W1A-06 (low): `diagnose()` counted one owner per electrode (102 instead of
+  393 unknowns).
+- W1A-07 … W1A-10 (info): a lone floating split electrode reported
+  `-0-0j`; the roadmap had lost the star item and three decision rows of this
+  page were stale; two documentation points on shields.
+- W1B-01 (medium): a group spanning about 180° got its cabinet in empty
+  ground (10 houses and one small commercial building: 50.4 m from the
+  nearest building, drops 527 instead of 337 m).
+- W1B-02 (medium): the clearance looked only at the group's horizontal
+  wires; a cabinet rod stood at the point of a building's rod.
+- W1B-03, W1B-04 (low): the R6A-01 clip covered only a cable's own end
+  sites, and its merge cut off cable legs that serve houses (drops 30.0 →
+  142.8 m).
+- W1B-05 … W1B-08 (low): `end_clearance_m` without a lower bound, golden
+  bounds wider than their quantities and adding up across streams, stale
+  texts, tests that did not check what they promised.
+
+Confirmed: one owner per wire line equals bonded strips to 7e-15 in every
+engine path; an independent grid code gives the owner gaps (20 m 4 × 4 grid:
++3.297 % with one owner, +0.574 % with one per wire; stars +1.81 / +3.48 /
++10.54 %); 54 records outside the items are bit-identical; 26.97 µH and
+43.48 µH follow from closed forms; over about 300 layouts every PEN network
+is one tree, every building is fed once and every drop is the closest pair;
+ring contacts lie on the circle within 2.5e-13 m. Taken up by `fw1sol`
+(W1A except -04 and -08), `fw1gen` (W1B and W1A-04) and the coordinator
+(W1A-08: the roadmap item and the rows).
+
+### Streams `fw1sol` and `fw1gen`: fixes of audits W1A and W1B
+
+- **`fw1sol` (W1A):** a vertex continues a straight wire when it lies on the
+  chord of its neighbours up to 64 units of round-off of the coordinates
+  (`COLLINEAR_ROUNDOFF_ULPS`), so generated meshes at UTM coordinates read
+  their local value again (+0.09 … +0.64 %). Pieces of conductors lying
+  beside each other add up: a thinner wire parallel inside a shield couples
+  at the shield radius at every axial offset, and the coax reads 26.97 µH in
+  any parallel pieces (it read 26.91 / 26.37 / 24.61 µH in 10 / 1 / 0.25 m
+  pieces), the unmarked pair 43.47 µH. A copied skin shield is rejected at
+  the solve, `diagnose()` counts 393 unknowns, a lone floating electrode
+  reports `0j`, and the 10.21 note gives the touch voltage after Q30.
+  Golden: `cond_drops_along_pen_main_perfect_mirror` moves (X at 1 kHz
+  +3.9e-4, Zin 1.3e-5).
+- **`fw1gen` (W1B, W1A-04):** a cabinet stays on its centroid ray,
+  `end_clearance_m` beyond the group's farthest electrode (rods included)
+  plus the plan extent of its own grounding, unless it would stand there
+  farther than `max_far_end_gap_m` (20 m) from the nearest electrode of its
+  group; then it stands on the ray through the group's far-end building.
+  This hybrid rule is the coordinator's: the stream's first version put
+  every cabinet on the far-end ray, which gave the 50-house grid six drops
+  from the substation. The case of W1B-01 has its cabinet 1.56 m from the
+  nearest building and 311.8 m of drops. A cabinet that cannot keep its
+  clearance to another site raises, naming both; `end_clearance_m` is
+  positive. Layout cables are clipped at every site they pass, and only the
+  leading and trailing waypoints inside the end sites are merged.
+- **Numbers (`fw1gen`):** resistive PEN at 50 Hz of the default star grids
+  of 100 … 200 houses −0.031 … +0.089 %, the mix of 10 houses and one small
+  commercial building +0.489 %; the wide mixes with an isolated Neumann PEN
+  at 1 kHz \|Z\| +0.3 … +1.9 %; layouts with a cable through a passed
+  cabinet −0.16 … −0.45 %. The 10-, 30- and 50-house grids, the radial
+  networks and every golden case are unchanged.
+
+### Audit W1R2: round 2 on the wave-1 fixes
+
+The second round attacked the fixes of `fw1sol` and `fw1gen` (snapshot
+`1579ed8`). Findings:
+
+- W1R2-01 (medium): the rule of W1A-02 acted only on pieces parallel within
+  4.47e-5 rad; at 4.5e-5 rad the 100 m coax read −0.17 … −7.42 % again in
+  10 … 0.25 m pieces, with a step at the tolerance.
+- W1R2-02 (medium): the 20 m threshold switches a cabinet between two
+  positions up to 142 m apart (the 50-house grid with its house columns
+  32.0 / 32.2 m apart: X at 1 kHz about −20 %); the texts said it separates
+  the group populations, which it does not (decision D7).
+- W1R2-03 (low): the bundle rule evaluated all piece pairs at once (two
+  600 m conductors: 30 → 292 MiB).
+- W1R2-04 (low): texts against the measurements (the AP1 gaps are
+  20.21 … 53.56 m, not 23.7 … 50.4 m; thresholds of 15 / 25 m move two groups
+  of the 100-house grid, not one; a timing of the first version).
+- W1R2-05 (low): straight runs were judged per vertex triple, so a
+  near-duplicate vertex or a finely sampled arc counted as straight at UTM
+  coordinates.
+- W1R2-06 (low): rows 22 and 35 of this page still said "next release",
+  and five rows linked a roadmap section that no longer listed them.
+- W1R2-07 … W1R2-10 (info): the golden bounds of several streams add up
+  (decision D8); without conductor labels unmarked touching pieces keep the
+  old drift; `end_clearance_m ≥ max_far_end_gap_m` silently sent every group
+  to the far-end ray; `World.check()` let a copied skin shield through.
+
+Confirmed: the coax and the unmarked pair add up exactly at local and UTM
+coordinates (1.6e-15), the W1A regressions and the ten W1B tests pass, the
+layout clip is clean in 17 hand-made attack cases, and the cabinet rule is
+deterministic and raises nowhere over the 80 AP1 mixes. Taken up by
+`fw1r2sol` (01, 03, 05, 08, 10), `fw1r2gen` (02 with D7, the code texts of
+04, 09) and the coordinator (the other texts of 04, 06; 07 by D8).
+
+### Streams `fw1r2sol` and `fw1r2gen`: fixes of audit W1R2
+
+- **`fw1r2sol`:** pieces of two conductors tilted against each other get the
+  bundle rule, with the stretches inside, beside and away from the partner
+  found exactly (the length gate and the angular cap of this version went
+  in `fw1r3`); the tilted coax returns to its lumped value (+0.004 …
+  +8.0 %). The generator's overhead probe lead, drawn from 10 mm beside the
+  feed lead to its axis, is such a pair: the probe junction potential moves
+  by 6.5e-5 … 1.1e-4. The bundle rule needs memory in proportion to the
+  matrix (292 → 30 MiB, bit-identical). Straight runs grow against the chord
+  of the whole run (a 2° arc electrode of R = 50 m at UTM coordinates
+  +1.27 % → +5.5e-4 against the local origin). `World.check()` rejects a
+  copied skin shield. Golden: nothing moves.
+- **`fw1r2gen` (D7):** the 20 m threshold stays and the step is documented
+  with its measured size (the 50-house grid: 141.8 m, X at 1 kHz with an
+  inductive PEN −21.6 / −18.9 %, `carson_series` / `sommerfeld`); the plan
+  records per cabinet which rule placed it and the gap it compared
+  (`PlannedSite.cabinet_rule`, `PlannedSite.centroid_ray_gap_m`). Over the
+  80 AP1 mixes 118 groups stand 20.21 … 53.56 m from their houses on the
+  centroid ray and take the far-end ray; the largest gap kept is 18.84 m.
+  `end_clearance_m` must be smaller than `max_far_end_gap_m`. Golden:
+  nothing moves.
+
+### Verification audit W1R3 of the W1R2 fixes
+
+A third round checked the fixes of `fw1r2sol` (snapshot `8c83d7c`). Its own
+integration of the documented readings agreed with the code on 1740 piece
+pairs to 5.5e-12 wherever the code claims a reading. Findings:
+
+- W1R3-01 (medium): the length gate of the tilted rule kept the old drift
+  for longer pieces: a core crossing the shield's axis stepped by −8.6e-5 of
+  the loop at the gate, shield pieces of mixed length −1.6e-3, where the
+  texts said about 1e-6.
+- W1R3-02 (low): the cap \|cos φ\| ≥ 0.99 made a new step of 1.5e-3 at 8.1°
+  for two wires leaving a junction in 0.02 m pieces.
+- W1R3-03 (medium): the chord rule took quadratic time: 4000 collinear edges
+  13.3 s (0.085 s before W1R2-05), a 2 km polyline electrode in 1 m vertices
+  17.7 s (0.46 s).
+- W1R3-04 (low): a row of *Numbers that change* said "more than" 0.46 µm,
+  where the rule changes polylines whose vertices lie closer than that.
+- W1R3-05 … W1R3-07 (info): correct but undeclared moves (wires leaving a
+  junction at 3° in fine pieces +0.098 / +0.75 %, drops routed back along a
+  split main +6.8e-5 … +1.65e-3); the partition into runs depends on the
+  vertex order at UTM coordinates (2.4e-8); the `carson_series` gap between
+  a lumped tilted pair and its pieces grows with the square of the tilt
+  (4.2e-4 … 4.4e-3 in X at 2e-3 … 8e-3 rad).
+
+Taken up by `fw1r3` (01, 02, 03; 06 measured), the coordinator's texts (04,
+05) and stream `w3perf` of wave 3 (07).
+
+### Stream `fw1r3`: fixes of audit W1R3
+
+- **Tilted rule:** no length gate and no angular cap; pairs within 1e-9 of
+  orthogonal count as orthogonal. Every case of the audit adds up within
+  2.2e-12, the tilted coax within 6.4e-12 for tilts up to 1e-3 rad (an
+  unmarked touching pair within 3.1e-10), and the solved loop within 1.1e-15
+  under `perfect_mirror` (`sommerfeld` within 1.6e-8, its own piece
+  dependence).
+- **Chord rule in linear time:** the decisions are the same bit for bit, and
+  the runs are cached on the vertices' values: 4000 collinear edges 0.006 s,
+  the 2 km polyline electrode 0.25 s instead of 17.3 s. The order dependence
+  of W1R3-06 stays at 2.37e-8.
+- **Golden:** strict against the stream's own baseline, 49 cases pass; of a
+  probe of 178 arrays 177 are bit-identical, and two wires leaving one point
+  at 30° in 0.05 m pieces move from −1.04e-4 to −7.8e-16 off their lumped
+  pair. Every generated network is bit-identical.
+
+## Wave 2: impressed voltage sources, shells in `mom`, projected coordinates
+
+Wave 2 added impressed voltage sources (stream `w2src`, finding 10.51, the
+open item "voltage sources" of the scope of 2026-11-14) and concrete shells
+in the moment method, together with solves at projected coordinates that do
+not depend on where a world stands (stream `w2mom`, an open point of
+`fw1sol`). Decisions D1 and D5 came with its fixes.
+
+### Stream `w2src`: impressed voltage sources (10.51)
+
+A `VoltageSource` holds `attached_to` at U above `return_to` (or remote
+earth) and is solved by modified nodal analysis: one current unknown and one
+constraint row per source in the nodal system of the shared pipeline, in
+`image`, `image_2layer` (also on the cross-layer path), `mom` and
+`mom_sommerfeld`, with conductors, inductive coupling and several
+frequencies. Up to 0.15.0 every backend dropped it with a warning and solved
+to zero potentials. In short:
+
+- **Results:** `SourceRecord.current` holds the solved current (new
+  `SourceRecord.voltage` and column `voltage_v`), `input_impedance()` is
+  U/I, and `sweep`, the rho-f helpers, `split_factor` and
+  `touch_voltage_spectrum` accept the source; several sources superpose and
+  0 V is an ideal short; new capability `BackendCapabilities.voltage_sources`.
+- **Checks:** voltage sources that close a loop through ideal bonds or remote
+  earth, and a source short-circuited by an ideal bond, raise `ValueError`
+  naming the sources; `fem` rejected voltage sources with
+  `BackendCapabilityError` until its conforming models of wave 4, which
+  solve them.
+- **Validation:** the voltage solve equals the 1 A current-source solve
+  scaled by U/Z_in in every backend, in two- and three-layer soil, on the
+  cross-layer path and with inductive conductors at 0 / 50 / 1000 Hz (at most
+  1.4e-15), and agrees with `solve_mutual_matrix` for a two-terminal source,
+  the hand-inverted transfer matrix of three sources, Dwight's rod (−0.012 %)
+  and the hemispherical far field.
+- **Golden:** no stored quantity moves; worlds without voltage sources are
+  bit-identical.
+
+### Stream `w2mom`: concrete shells in `mom` and `mom_sommerfeld`, solves at projected coordinates
+
+- **Shells:** each segment adds its radial shell resistance C/Δs to the
+  diagonal of the point-matching system and the shell drop to its potential;
+  with one owner per segment the image family solves the same system
+  (7e-16), and a ring rises by exactly C/(2πr) in one, two and three layers
+  (1e-14). Up to then both engines raised `BackendCapabilityError`; `fem`
+  remained the only backend that refused shells, until wave 4. `mom` is
+  thereby the
+  per-segment reference for encased foundations: the image family's point
+  kernel lies +0.35 … +0.69 % above it for grids in 5 cm of wet concrete and
+  up to +18.8 % for stars.
+- **Projected coordinates:** a world with a horizontal coordinate beyond
+  10 km is solved in an exactly shifted local frame and reported in user
+  coordinates, also by `FieldResult.potential`, and the segment counts allow
+  the round-off of the coordinates' own magnitude (64 ε\|x\|): a generated
+  10 m mesh foundation at UTM coordinates had 508 instead of 440 segments,
+  and `mom` / `image(kernel="point")` moved by 2.6e-4 / 2.8e-4, now 3e-12;
+  the line kernel stayed within its own spread (1.5e-6; ≤ 5e-11 since
+  decision D2). A distributed conductor whose length is a whole number of
+  pieces up to round-off gets no extra piece (a 60 m counterpoise at UTM
+  coordinates 7 → 6 pieces).
+- **Golden:** nothing moves; the AP1 catalogue is not affected. Three open
+  points went to the audits: the knife edge of the line kernel's switch
+  (D2), worlds that mix coordinates (D5) and the brace effect with `mom`.
+
+### Audits W2A and W2B of the wave-2 streams
+
+Two auditors attacked wave 2 (snapshot `ecff7b6`, change from `1579ed8`),
+W2A the voltage sources, W2B the shells and the frame. Findings:
+
+- W2A-01 (medium): `LvNetworkLayout.measured_grounding_impedance` and
+  `verify_current_balance` fell back to 1 A for a voltage source (5.604
+  instead of 1.635 Ω, balance `ok=False`).
+- W2A-02 … W2A-09 (low): `compare_engines` left out the input impedance of
+  voltage sources; the alias `_warn_ignored_sources` lost its `stacklevel`
+  (`TypeError` in every world); a voltage record without voltage and current
+  gave `[]` or `IndexError`; "equals the scaled 1 A solve" holds for one
+  source only (two sources −7.5 %); the messages of a same-node voltage
+  source and of a loop; a direct `solve_fem` and the shell refusal of `fem`
+  named the wrong capable backends.
+- W2A-10, W2A-11 (info): `source_kind="voltage"` with a measurement set-up
+  solved, but `measured_impedance` refused it; a bullet of this page and
+  notebook 83.
+- W2B-01, W2B-02 (medium): the near/far switch of the line kernel is a knife
+  edge: two-layer image pairs on it spread Z by 1.0e-5 … 2.6e-5 and the touch
+  voltage by up to 5.5e-5 with the position of a world (the texts said up to
+  2.4e-7), also through the series-image switch, whose far form is the point
+  form; the estimate of D2 (about 2e-7) was wrong (golden
+  `line_img2_rod_crosslayer` 1.15e-5).
+- W2B-03 (medium): "worlds within 10 km unchanged" is false for distributed
+  conductors: a 60 m / 10 m counterpoise goes 7 → 6 pieces in 876 of 3600
+  directions, Z −0.30 % (`image`) and −2.54 % (`mom`).
+- W2B-04 (medium): decision D5 quantified: the round-off grows only from
+  1.0e-11 to 1.5e-11 (point kernel), but nothing warns; a return electrode
+  given at local coordinates raised Z_in by 0.43 %, a cable end given locally
+  made a 33 118 km conductor (7.5 kΩ instead of 5.4 Ω), and `sommerfeld` did
+  not finish.
+- W2B-05 (medium, pre-existing): one lumped Neumann conductor under
+  `sommerfeld` took 0.42 / 4.3 / 28 s and 116 / 364 / 1647 MB at 0.25 / 1 /
+  2 km.
+- W2B-06, W2B-07 (low, texts): the brace effect with `mom` and the
+  `medium_industry` values were missing from the concrete-shell page;
+  "`mom_sommerfeld` equals `mom` to 4e-9" holds for one soil only (1.4e-9 …
+  1.5e-8 over four).
+- W2B-08 (info): the frame shift is exact only for coordinates between o/2
+  and 2o, o being the frame's origin; elsewhere it is within 1.9e-9 m.
+
+Confirmed: the modified nodal analysis matches the scaled 1 A solve and
+independent closed forms to 1.1e-15 in every backend, layering, terminal kind
+and frequency tested; worlds without voltage sources are bit-identical (563
+of 563 golden quantities) and cost the same; the shell term and the frame
+agree with two independent methods each to round-off (the rise C/(2πr) of a
+ring to 5.6e-15; 19 worlds at 10 offsets: Z within 2.6e-11). Taken up by
+`fw2src` (W2A-01 … -10, with D1), `fw2mom` (the texts of W2B-01, -03, -04
+with D5, -06 … -08), stream `w3xl` of wave 3 (W2B-01, -02 by D2), stream
+`w3perf` (W2B-05) and the coordinator (W2A-11).
+
+### Streams `fw2src` and `fw2mom`: fixes of audits W2A and W2B, decisions D1 and D5
+
+- **`fw2src` (D1):** `VoltageSource.internal_resistance_ohm` and
+  `internal_inductance_h` (≥ 0, 0 by default: the ideal source, bit for bit)
+  and `internal_impedance(f)`; Z_q is the diagonal entry of the source's
+  constraint row in every backend that solves voltage sources, and
+  `input_impedance()` is the impedance the source sees, U/I − Z_q. A galvanic
+  world whose source has an inductance is solved per frequency on the
+  complex path. Validated against the junction +
+  `lumped_series_resistance_ohm` pattern (≤ 7.2e-16), the 1 A solve with
+  I = U/(Z_q + Z_in) in every backend, three earth models and the
+  cross-layer path (≤ 4.0e-15), and the transfer matrix of three sources and
+  `solve_mutual_matrix` (≤ 3.4e-16). A source with R > 0 opens a loop of
+  voltage sources; an inductance alone does not.
+- **`fw2src` (W2A):** the layout readings use the solved current (1.635 Ω);
+  a record without voltage and current raises `ValueError`; `stacklevel` is
+  restored; the loop message names the sources on the loop, and a same-node
+  voltage source is reported as short-circuited; `compare_engines` compares
+  the input impedance of voltage sources; `source_kind="voltage"` gives the
+  readings of `"current"`. Golden: 563 of 563 quantities identical; worlds
+  with ideal voltage sources bit-identical.
+- **`fw2mom` (D5, W2B):** `diagnose()` has the category `coordinates` (a
+  warning when points lie both within 10 km of the origin and beyond 1000 km
+  from it, naming both groups and the conductors between them; information
+  for a world wider than 100 km that does not mix), and such a solve warns
+  once with `MixedCoordinatesWarning` before anything is discretised. The
+  texts give the measured line-kernel spread (W2B-01), the local piece
+  counts with W2B's pin test (W2B-03), the brace effect with `mom`
+  (+49.6 / +321.2 % for the house mesh, +49.5 / +313.7 % for
+  `medium_industry` at ρ_c = 1000 / 5000 Ω·m; the owner model with bare braces
+  1.6 / 2.8 % and 2.2 / 3.6 % high), the agreement of `mom_sommerfeld` with
+  `mom` (about 1e-8), and where the frame shift is exact. Golden: 563 of 563
+  quantities identical.
+
+### Audit W2R2: round 2 on the wave-2 fixes
+
+The second round attacked the fixes of `fw2src` and `fw2mom` (snapshot
+`34ad269`). D1 holds (the constraint row, its sign and the per-frequency
+complex path agree with independent methods to round-off; ideal sources stay
+bit-identical), the W2A fixes hold, and D5 raised no false alarm in eleven
+projected and local coordinate systems while it caught every stray node or
+conductor end of a UTM world; worlds outside the items are bit-identical
+(563 of 563). Findings:
+
+- W2R2-01 (low): worlds and results pickled before D1 raised
+  `AttributeError`.
+- W2R2-02 (low, cost): a galvanic `mom` world whose source has an inductance
+  got one complex factorisation per frequency (×2.0 / ×8.1 / ×28 at 1 / 5 /
+  20 frequencies, 1488 segments).
+- W2R2-03 (low, text): the stated direct-pair spread of the line kernel was
+  exceeded (a 12 m strip 5.9e-7 / 1.15e-6).
+- W2R2-04, W2R2-05 (low): the message of a short-circuited source with
+  R > 0; `measured_impedance` raised "2 sources" for a result with one
+  voltage and one current source, which read the current source before.
+- W2R2-06 … W2R2-11 (info): "never flagged" is untrue for wide pure worlds;
+  a TN network with its substation at UTM coordinates builds a mixed world
+  (D5 warns, correctly); "876 of 3600" depends on how the angles are formed
+  (829); `mom_sommerfeld` against `mom` is 9e-8 with the interface 0.2 m
+  below the wires and 9.2 % with a truncated series (both warned); a large R
+  loses log10(R/Z_E) digits, and 1e-310 Ω gave `nan`; what the D5 rule does
+  not see (a stray point between 10 and 1000 km, field and probe points).
+
+Taken up by `fw2r2`, the known-limitation texts through the coordinator.
+
+### Stream `fw2r2`: fixes of audit W2R2
+
+- **Pickles:** worlds and results pickled before D1 load as ideal sources
+  (W2R2-01).
+- **Cost:** a galvanic `mom` / `mom_sommerfeld` world whose source has an
+  inductance factorises its segment system once and solves only the V × V
+  system of the source currents per frequency (exact): 1.02 times the solve
+  without the inductance at 20 frequencies on 1 488 segments, 28 times
+  before; results equal to 3.3e-15 (W2R2-02; audit W3B: within 1.4e-14 of
+  the former path, ×1.04 … ×1.05).
+- **Messages and readings:** a short-circuited source behind Z_q is told
+  that its current U/Z_q would circulate through the bond and the source;
+  `measured_impedance` and the layout readings take the single current
+  source, else the single voltage source, as up to 0.15.0 (W2R2-04, -05). A
+  non-zero R or L below the smallest normal float is rejected (W2R2-10), and
+  `SubstationConfig.position` is documented as local (W2R2-07).
+- **Texts:** the line-kernel spread, the scope of D5, the 829 … 876
+  directions and the agreement of `mom_sommerfeld` (W2R2-03, -06, -08,
+  -09); the text on what D5 does not see (W2R2-11) went to the known
+  limitations.
+- **Golden:** 563 of 563 quantities identical.
+
+## Wave 3: the two-layer image series, earth return and soil
+
+Wave 3 took the roadmap items of the two-layer image series and the
+cross-layer path with decision D2 (stream `w3xl`), and those of the earth
+return, the soil and the BusType document with the user decisions Q34 and
+Q39 (stream `w3perf`). The author decided the far-image option and D9
+during its fixes.
+
+### Stream `w3xl`: far images, the cross-layer path in line form, memory, the continuous switch (D2, 10.28, 10.56)
+
+Five items. In short:
+
+- **Far images (item 1):** far Tagg/Sunde images carry the quadrupole term
+  of the segment average, and the far form of segment pairs the radius term
+  of the reduced kernel; the term is tapered off between 60 and 120 segment
+  lengths of the pair's vertical distance and left out below 1e-9 of a unit
+  point term. A straight strip in two-layer soil is within 3.6e-6 of its
+  uniform-current resistance for segment lengths of 0.125 … 2 m, not
+  monotonically (+5.1e-4 before; the 7.7e-7 of the stream held at its five
+  sampled lengths only, audit W3A-03), and the surface potential above it
+  within 8e-6 (0.94 % before).
+- **Cross-layer path (items 2–4):** the layered correction in line form (its
+  exact image expansion, ADR-0007 amendment): a rod through the interface
+  changes by 9e-7 between segment lengths of 2 and 0.125 m (1.3e-4 …
+  2.4e-4 before), and the two paths of `image_2layer` agree to 1.7e-7 where
+  both apply (6.2e-4). Memory as on the series path, in row chunks and in
+  row blocks beyond the budget: 278 → 137 MiB at the AP1 station with 40 %
+  penetration with numba (without numba 224 → 140 MiB since audit W3A-05).
+  The spectral amplitudes in closed form: the path with the point kernel
+  1.6 … 2.0 times faster at the AP1 station, round-off.
+- **Continuous switch (item 5, D2):** pairs between 6 and 7.5 segment lengths
+  blend the exact and the far value with a C¹ weight (direct pairs, surface
+  and Tagg/Sunde images, the images of the cross-layer correction, field
+  points): 1e-13 over local shifts and ≤ 5e-11 at UTM coordinates (4.7e-11
+  measured by audit W3A-04), where the position had moved results by up to
+  5.9e-7 (direct pairs) and 8e-6 … 2.6e-5 (two-layer images).
+- **Numbers:** homogeneous soil ≤ 7.8e-7; two layers: house grids 3e-6 …
+  1.8e-4, wires near the interface up to 6.2e-4 (audit W3A-04), surface
+  potentials near the interface up to 0.9 %; cross-layer rods ≤ 4e-4, the
+  AP1 station −4e-5. The cost was larger than the stream stated (audit
+  W3A-01, see `fw3xl`).
+- **Golden:** 60 quantities in 9 line-kernel cases declared
+  (`w3xl.toml`), up to 6.0e-4 (`line_img2_ring_rods_within_layer`);
+  `line_img2_rod_crosslayer` moves 4.0e-4, its former point-form error.
+  Point-kernel and `mom`-family cases are bit-identical apart from the
+  round-off of the closed-form amplitudes (≤ 2.5e-16).
+
+### Stream `w3perf`: penetration depth, `sommerfeld` segment rules, the BusType preset, overlaps (Q34, Q39)
+
+Roadmap items of the earth return and the soil, the user decisions Q34 and
+Q39, and two audit leftovers (W2B-05, W1R3-07). In short:
+
+- **Penetration depth:** `penetration_depth(soil, frequencies)` and
+  `PenetrationDepth` give the complex penetration depth and the equivalent
+  resistivity of a soil with any number of layers; exact for homogeneous
+  soil, over the 39 AP1 soils (50 Hz … 1 kHz, 0.1 … 1000 m) within a median
+  of 2.2 % of the exact layered earth return (at most 28 / 33 % overhead /
+  buried); three and four layers up to 46 / 77 % at 1 km and 1 kHz (audit
+  W3B-08). `per_metre_mutual_impedance` gives the exact layered earth-return
+  impedance per metre (within 5e-8 of Carson and of the two-layer Pollaczek
+  integral; against an independent integral within 6e-8 of the earth-return
+  correction up to 300 m and 7e-7 at 1 km for buried pairs, audit W3B-08).
+- **Q34:** the self term of every `sommerfeld` segment is the exact
+  one-dimensional reduction of its double integral, and close pairs get a
+  graded rule: no step at a quarter skin depth (4.8e-4 off before, with a
+  step of 3.5e-4); with the λ grid of audit W3B-01 the self correction is
+  within 1.1e-9 for the soils tested (3.4e-9 in high-contrast soils, audit
+  W3R2B-08) and close pairs within about 4e-8 (the stream had stated 2.7e-9;
+  up to 1.5e-3 before).
+- **Q39:** BusType documents record the effective-resistivity preset
+  (`rho_preset=` of the exporters, `metadata["rho_preset"]`,
+  `BusTypeSpec.rho_preset`); `evaluate_spec` and `bustype_from_spec` warn
+  with `RhoPresetMismatchWarning` when the bus uses another preset.
+- **Overlaps:** `diagnose()` reports inductive conductors that lie beside
+  each other closer than touching over more than ten touching distances and
+  5 % of the shorter one (category `overlap`); the generated networks had
+  such pairs (the 5-house radial network 10, 200 houses 247: drops of one
+  tap on one axis), which led to decision D9.
+- **Cost:** a long lumped conductor under `sommerfeld` costs at most linear
+  time with bounded memory (W2B-05: 2 km 28 s and 1.6 GB → 1.1 s and
+  0.21 GB; 100 km 10.6 s within 0.24 GB, but beyond 33 km for that conductor,
+  38 km for one at 0.7 m, the result warns with `SommerfeldResolutionWarning`
+  and is not converged, audit W3B-10). Compiled Carson integrals were
+  measured and not built (5 … 13 % of an inductive sweep after memoisation,
+  below the 20 % threshold; 10.63).
+- **`carson_series`:** a tilted near-parallel pair that comes close is tiled
+  per stretch (W1R3-07: a lumped pair and its pieces within 8e-6 of the loop
+  reactance); generated networks move by up to 3e-7 (audit W3B-07). On the
+  generated networks of 5 … 100 houses the series reads X 4 … 21 % and R up
+  to 11 % high at 1 kHz and X 21 … 50 % and R up to 0.9 % high at 50 Hz
+  against `sommerfeld` (audits W3B-02, W3R2B-03).
+- **Golden:** five cases move by 8e-10 … 4.9e-7
+  (`cond_lumped_long_pen_sommerfeld` 4.9e-7,
+  `cond_isolated_pen_sommerfeld_two_layer`,
+  `cond_overhead_lead_over_pen_carson_series`,
+  `cond_galvanic_neumann_sommerfeld`, `defaults_mixed_cluster_inductive`).
+
+### Audits W3A and W3B of the wave-3 streams
+
+Two auditors attacked wave 3 (snapshot `0b942c9`), W3A stream `w3xl`, W3B
+stream `w3perf` together with the fix streams `fw1r3` and `fw2r2`. Findings:
+
+- W3A-01 (medium): the image work grew with the world's longest segment and
+  with the image density: eight 9.4 m pieces among 1920 segments made the
+  solve 2.7 … 6.5 times slower, thin top layers 7 … 8.5 times, and the TN
+  40-house network in 1000/30 Ω·m with h₁ = 1.5 m took 4.4 times (11 times
+  without numba) the solve before wave 3, where the texts said +59 … +70 %
+  and 3.3 times.
+- W3A-02 (medium, pre-existing): image pairs used the reduced kernel
+  √(r² + a²): a ring 1 cm above a 1000/30 Ω·m interface read +1.60 % against
+  the exact thin ring (+1.74 % before wave 3); the cause of what stream
+  `w4axi` had found.
+- W3A-03 … W3A-06 (low): the strip bound "within 7.7e-7, monotonically" held
+  at the five sampled lengths only; stale texts on the one-step switch and
+  on far images as point sources, 6.2e-4 instead of "up to 4e-4" and 4.7e-11
+  instead of 3e-11 at UTM coordinates; the memory claims held with numba only
+  (161 instead of 79.6 MiB); the near-interface "finer segment_length"
+  warning fired for the line kernel.
+- W3A-07 (info): switching the quadrupole term off did not give the code
+  before wave 3.
+- W3B-01 (low): the Q34 bound failed for short segments (1e-5 … 7.4e-5 at
+  0.01 skin depths, 7.5e-5 … 3e-4 at 1 m), because the logarithmic region of
+  the λ grid had 64 nodes; pre-existing, at most 8e-9 in a solved reactance;
+  the close rule 3.5e-8 off instead of the stated 2.7e-9.
+- W3B-02 (medium, text): `carson_series` on generated networks of 5 … 30
+  houses reads X +3.6 … +20.7 % and R +1.9 … +7.8 % at 1 kHz and X +21 …
+  +44 % at 50 Hz, which no text stated.
+- W3B-03 (low): the overlap check had no tolerance: cables 1e-14 m inside
+  the touching distance were flagged over their whole length.
+- W3B-04 (info, decision): drops of one tap in a row at the touching
+  distance move the 5-house radial network's X at 1 kHz by −2.0 / −2.7 %
+  (decision D9).
+- W3B-05, W3B-07 … W3B-09 (low, texts): star networks warn too, and the
+  stream's limitation and roadmap texts were not taken over; the stretch
+  tiling moves generated networks (the 10-house star with sites 2.8e-7, the
+  80-house radial network 3.4e-8); the errors of `penetration_depth` in
+  three and four layers (44 … 77 % at 1 km, 1 kHz) and
+  `per_metre_mutual_impedance` 6.8e-7 off at 1 km for buried pairs; rows 34
+  and 39 of this page.
+- W3B-06 (low): `to_bustype` and `save_bustype_to_db` validated the preset
+  and dropped it.
+- W3B-10 … W3B-12 (info): the 100 km conductor warns as unconverged, and so
+  does one of 37 km; the mutual of two long close conductors moved by
+  2.6e-5 … 4e-5, not 8e-6; `penetration_depth` read `"50"` and `True` as
+  frequencies and raised `ZeroDivisionError` at 1e-320 Hz, and
+  `PenetrationDepth` could not be compared or hashed; a proposed test of
+  audit W2R2 reads a phrase that D2 removed.
+
+Confirmed: the blend is continuous; translation invariance holds (7.7e-14
+over local shifts, 4.7e-11 at UTM coordinates); the cross-layer rod is within
+1.6e-6 of an exact closed form; chunking is bit-identical; golden 497
+quantities identical, 6 within round-off, 60 moved within their bounds; the
+jump of a ring on an interface that `w4axi` found is resolved (≤ 0.0005 %).
+`penetration_depth` agrees with the auditor's own reflection coefficient to
+1.8e-9 in one to four layers; Q34 has no step (≤ 6.5e-12 over 6700 lengths);
+W2B-05 is bounded (2 km: 1.22 s, 0.21 GB); `fw1r3` and `fw2r2` are
+bit-identical in the golden cases and right in the auditor's own attacks
+(pieces against the lumped pair ≤ 4.6e-15; W2R2-02 within 1.4e-14 of the
+former path). Taken up by `fw3xl` (W3A, with the far-image option),
+`fw3perf` (W3B-01 … -08, -10, -11; -04 with D9) and the coordinator
+(W3B-09, -12).
+
+### Streams `fw3xl` and `fw3perf`: fixes of audits W3A and W3B, the far-image option and D9
+
+- **`fw3xl` (W3A-01, -05):** the far-image work follows the pair class and
+  the upper half of the symmetric matrix (bit-identical, round-off in the
+  symmetric half): 16 house grids take 3.8 times the point kernel in
+  homogeneous soil and 1.6 times in two-layer soil (h₁ = 5 m) with numba (5.8
+  and 1.4 times without); against the solve before wave 3 the TN 40-house
+  network takes 1.84 times with numba and 3.63 times without (4.2 and 9.7
+  times before the fix), eight 9.4 m pieces among the 16 house grids 1.5
+  times (2.8), thin top layers 3.6 … 4.5 times (7 … 8.7). Without numba the
+  far-image term holds 80 instead of 161 MiB.
+- **`fw3xl` (W3A-02, -03, -04, -06):** image pairs act at the transverse
+  distance max(ρ⊥, a), collinear images and images within one wire radius
+  of their segment keep the reduced kernel, far images have no radius term,
+  and the image corrections are symmetric: the ring 1 cm above 1000/30 Ω·m
+  −0.004 % instead of +1.60 %, a strip 0.1 m above the interface −3.8e-6
+  instead of +6.8e-5, the rod through the interface within 1.4e-6 of its
+  exact value. The near-interface warning fires for the point kernel only;
+  the texts are corrected.
+- **The far-image option (the author's decision of 2026-11-15):**
+  `Engine.image_far_field = "point"` keeps the far Tagg/Sunde images and the
+  images of the cross-layer correction beyond the near-pair reach as point
+  sources, the continuous switch and the transverse distance stay; networks
+  move by 2e-5 … 1.8e-4 against the default (16 house grids 0.4 m above a
+  1000/10 Ω·m interface 4.25e-4, audit W3R2A-04), surface potentials by up
+  to 0.8 %, and the TN 40-house network solves in 0.46 of the default's time
+  (0.84 of the solve before wave 3); recorded in
+  `metadata["series"]["far_field"]`. Since stream `fw3r2a` the point form
+  keeps the near image pairs on the cross-layer path: networks 3e-6 …
+  4.3e-4, the TN 40-house network 0.49 of the default's time and 0.91 of the
+  solve before wave 3.
+- **Golden (`fw3xl`):** W3A-02 moves four cases by at most 3.2e-7
+  (`line_img2_ring_rods_within_layer`; 3.19e-7, audit W3R2A-07); the other
+  fixes and the option are bit-identical in every stored case.
+- **`fw3perf` (W3B):** the logarithmic region of the λ grid has 256 nodes:
+  the self term is within 1.1e-9 of a refined rule and an independent
+  reference from 1 m and 0.01 skin depths to 3 km, close pairs within about
+  4e-8, at no measurable cost. The overlap check allows round-off at the
+  touching distance, and `find_close_wires` calls such wires close; the live
+  BusType keeps the preset as the last line of its description
+  (`groundfield rho_preset: <name>`, read back by `bustype_rho_preset`);
+  `penetration_depth` refuses bool, str, complex and subnormal frequencies,
+  and `PenetrationDepth` compares by value and is hashable; texts of W3B-02,
+  -05, -07, -08, -10. Golden: the five `sommerfeld` cases move by 4.8e-18 …
+  2.2e-11.
+- **`fw3perf` (D9):** service drops that leave one tap in one direction lie
+  side by side at the touching distance, sorted by length and centred on
+  their former axis, so that only neighbours touch
+  (`PlannedBranch.axis_offset_m`): X at 1 kHz of the radial 5-house network
+  −2.33 / −2.70 % (`carson_series` / `sommerfeld`), radial 10 −2.31 /
+  −2.82 %, star 10 −1.06 / −1.27 %, radial 80 / 200 ≤ 5e-4, radial 30
+  ≤ 1.1e-6; no golden case moves.
+
+### Audits W3R2A and W3R2B: round 2 on the wave-3 fixes
+
+W3R2A attacked `fw3xl` and the far-image option (snapshot `ac556ec`), W3R2B
+`fw3perf` and D9 (snapshot `df16521`). Findings:
+
+- W3R2A-01 (medium): with `image_far_field="point"` wires wholly below the
+  layer interface lose accuracy as their segments get longer: a 75 m strip
+  below a 0.5 m top layer reads −1.0e-3 … −1.8e-3 at 2.5 m segments,
+  −1.7 … −4.6 % at 7.5 m and up to −58 % at 37.5 m against an exact
+  reference (the default within 1.3e-6); 16 house grids with a 75 m bare
+  conductor in 40 m pieces +1.13 % against the default.
+- W3R2A-02 (low): `far_field` of the public `solve_image_2layer` is not
+  validated; any other value runs the point form, and the field then
+  disagrees with the solve.
+- W3R2A-03 (low): within one wire radius of the interface Z is not monotone
+  in the gap (a ring in 1000/30 Ω·m: 5.993 → 7.319 → 5.992 Ω).
+- W3R2A-04 (low, texts): "the point form moves networks by 2e-5 … 1.8e-4"
+  is too narrow (4.25e-4), and "as before wave 3" is misleading (up to
+  2.3e-4 from the D2 blend, which the option keeps).
+- W3R2A-05 … W3R2A-07 (info): "integrated exactly" overstates the axis value
+  for short strips near the interface (a 2 m strip 5 mm above 1000/30 Ω·m
+  +3.0e-4); direct pairs of different wires keep the reduced kernel (two
+  strips 1 cm above the interface, 5 cm apart, −3.5e-4); a bound comment in
+  `w3xl.toml` (3.4e-7 against the measured 3.19e-7).
+- W3R2B-01 (medium): the D9 rows held only to 1e-11 m: any placement jitter
+  from 1 nm to 1 mm put the drops back on one axis (the 10-house radial
+  network: 19 / 20 / 14 overlaps), and X at 1 kHz jumped by +2.37 % /
+  +2.90 % (`carson_series` / `sommerfeld`) at 1 nm.
+- W3R2B-02 (low): the overlap tolerance of 1e-11 m lies below the spacing of
+  floating-point numbers at projected coordinates: rows translated to
+  (5e5, 5.8e6) give 4 / 10 / 98 false overlaps for the radial networks of
+  5 / 80 / 200 houses.
+- W3R2B-03 (medium, text): the stated `carson_series` error is exceeded (the
+  80-house radial network +49.7 % at 50 Hz; R up to +11.1 % at 1 kHz and
+  0.9 % at 50 Hz; the default `sommerfeld` 1.0e-3 from a refined one, stated
+  4e-4).
+- W3R2B-04 (low, text): the base error of a 1 m self term is 3.0e-4 /
+  6.4e-4 in 30/1000 and 10/10 000 Ω·m, not 7.5e-5.
+- W3R2B-05 (info): a `PenetrationDepth` built directly is not validated, and
+  f = +0.0 and −0.0 compare equal but hash differently.
+- W3R2B-06 (low): loading refused only blank presets ("station\nfoo" lost
+  the preset, " station " read back as "station", unknown names passed), and
+  every user line that merely starts with the marker was deleted.
+- W3R2B-07, W3R2B-08 (info): the start points of a row leave their tap by up
+  to (n − 1)/2 touching distances, and stars of 40 … 180 houses have rows
+  too (the 60-house star X −1.0e-3); the self-term bound of 1.1e-9 reaches
+  3.4e-9 in 10/10 000 Ω·m and 1.8e-9 under a 0.3 m top layer.
+
+Confirmed: the paths of the option (round trips, several frequencies,
+`solve_mutual_field`, no effect with the point kernel, the `mom` family or
+homogeneous soil); with D2 and W3A-02 switched off at run time the point
+form reproduces the code before wave 3 to 6.6e-7 in the upper layer and
+5.7e-6 on the cross-layer path; the W3A-01 matrices are bit-identical but
+for the diagonal rule (Z −5.4e-14); W3A-02 against the auditor's exact
+references (strips with a gap of at least one radius ≤ 5.5e-5, the ring
+−0.0039 %, reciprocity ≤ 4e-11). The D9 geometry of 80 AP1 networks and 58
+variants: every conductor that is not a row drop, every electrode and every
+junction bit-identical, the rows equal to the auditor's own construction,
+up to 277 overlaps → 0 without jitter, old plans rebuilt bit-identically;
+the D9 moves agree between three constructions; W3B-01 holds (self terms
+within 1.1e-9 for the stream's soils, close pairs 3.5e-8), golden 43 cases
+bit-identical and 5 within 4.8e-18 … 2.2e-11. Outside the round, W3R2B
+found that `plan()` followed by `build()` drew the placement jitter again
+and that a tie of the star topology flips under jitter (the 10-house star:
+X −11.8 %, now on the roadmap). Taken up by `fw3r2a` (W3R2A), `fw3r2b`
+(W3R2B-01, -02, -05, -06, the texts of -03 and -07, `plan()` / `build()`)
+and the coordinator (the texts of W3R2B-04, -08).
+
+### Stream `fw3r2a`: fixes of audit W3R2A
+
+- **The point form below the interface (W3R2A-01):** on the cross-layer path
+  `image_far_field="point"` keeps every image family with all its images;
+  the near pairs within 7.5 segment lengths are Galerkin integrals blended
+  into the point form, a segment's own image follows the switch of every
+  pair, and only the dense far term stays out. The 75 m strip below a 0.5 m
+  top layer is within 1.1e-5 of its exact value at every segment length
+  (−1.06e-5 at 0.5 m in 1000/30 Ω·m, the option's own far-pair error;
+  −3.1e-7 at 37.5 m, where it read −58 %), and 16 house grids with the 75 m
+  conductor in 37.5 m pieces read −3.65e-6 against the default instead of
+  +1.13 %. The default and the series path in point form are bit-identical.
+- **Its cost:** on cross-layer worlds the point form takes 0.49 … 0.94 of
+  the default's time; below thin top layers it keeps the Galerkin near image
+  pairs it used to save (1.5 … 2.4 times the solve before wave 3 instead of
+  1.2). The TN 40-house network in 1000/30 Ω·m with h₁ = 1.5 m is a
+  cross-layer world (its transformer rods reach below h₁): its point form
+  moves by 2.3e-4 and takes 0.91 of the solve before wave 3 (0.83 before the
+  fix).
+- **`far_field` (W3R2A-02):** `solve_image_2layer`, the series kernel, the
+  image families and the field correction raise `ValueError` for any value
+  but `"quadrupole"` or `"point"`.
+- **Within one wire radius (W3R2A-03):** the image blend runs over a tenth
+  of the wire radius; the bump of 22 % of the ring in 1000/30 Ω·m is gone,
+  and a step of at most 0.17 % onto the interface remains (wires 0 < g < a/2
+  from the interface move by up to −18 %: the ring 1.75 mm above, 7.319 →
+  5.985 Ω; the ring 1 cm above stays at −0.004 %).
+- **Texts (W3R2A-04 … -07):** the point form moves networks by 3e-6 …
+  4.3e-4 against the default (16 house grids 0.4 m above a 1000/10 Ω·m
+  interface) and is not the result before wave 3 (16 grids in 1000/30 Ω·m,
+  h₁ = 1.5 m: +2.32e-4); the line kernel is exact for long wires with an end
+  effect O(a²/(d·ℓ)) (a 2 m strip at one wire radius +3.03e-4); direct pairs
+  of different wires keep their convention (−3.50e-4 against a
+  circumference-averaged direct term); the golden comment gives 3.19e-7.
+- **Left open (before the stream as well):** in point form a ring at the
+  interface differs by up to 2.96e-4 between the series and the cross-layer
+  path (the default by 1.3e-6), and `solve_mutual_matrix(symmetrize=False)`
+  of a cross-layer world is asymmetric by 2.3e-8 in both forms.
+- **Golden:** 563 of 563 quantities identical; 29 new tests.
+
+### Stream `fw3r2b`: fixes of audit W3R2B
+
+- **Rows under jitter (W3R2B-01):** two drops of one node belong to one row
+  when their start points lie within the touching distance d_t of each other
+  and the shorter drop's end lies within d_t of the longer drop's line;
+  drops that are not exactly parallel lie along one common normal
+  (`PlannedBranch.axis_offset_normal_xy`), each at least d_t from the
+  others, and a drop that would overlap a drop of a row joins it, also a
+  drop of a tap 1 … 4 cm away on the same trunk (from 2 cm of jitter). The
+  10-house radial network at 1 nm of jitter: −8.5e-10 / −1.1e-9 instead of
+  +2.4 % / +2.9 %; no generated network reports an overlap with `jitter_m`
+  0 … 0.1 m (240 networks, star and radial, 5 … 200 houses); every network
+  without jitter is bit-identical.
+- **Projected coordinates (W3R2B-02):** the tolerance at the touching
+  distance is the larger of 1e-9 of it and 16 units in the last place of the
+  pair's largest coordinate; local worlds keep their findings bit for bit.
+- **Values and documents (W3R2B-05, -06):** a `PenetrationDepth` built
+  directly is validated and its hash agrees with `==`; `metadata["rho_preset"]`
+  must be a known preset name or null, and only exact preset lines of a
+  description are removed or replaced.
+- **`plan()` and `build()`:** `build()` right after `plan()` on the same
+  generator gives the world of that plan; successive calls still draw
+  successive realisations.
+- **Golden:** 563 of 563 quantities identical.
+
+## Wave 4: a conforming `fem` (Q37, Q40, D6)
+
+Wave 4 replaced the equivalent-hemisphere reduction of `fem` by conforming
+finite-element models (user decision Q37): an axisymmetric model (stream
+`w4axi`, part A) and a three-dimensional model for every other world (stream
+`w4fem3d`, part B), which also quantified the overlap of concrete shells at
+junctions (Q40). Its dependencies follow decision D6.
+
+### Stream `w4axi`: the conforming axisymmetric model (part A)
+
+Rods on one vertical axis and horizontal rings centred on it are solved as
+the solid bodies they are (a cylinder with flat end faces, a torus), in any
+number of horizontal layers, bare or with a concrete shell, each electrode
+one port: linear triangles on a graded tensor mesh conforming to every
+electrode surface and layer interface, an O-grid around the ring wire, the
+monopole Dirichlet-to-Neumann condition on a box 1000 lengths away, and the
+port conductance matrix extrapolated from two nested levels; no new
+dependency. The network of the shared pipeline runs on top. In short:
+
+- **Accuracy:** within about 1e-4 of independent references (thin-wire
+  limits, elliptic and Hankel rings, finite volumes of the solid rod) at
+  0.2 … 2 s per solve; the limit cases of the reduction — a ring 1 cm above an
+  interface (+191 … +308 % without a message), a rod reaching 1 µm … 8 cm
+  into a more conductive top layer (−44 … −78 %, warning only), a ring
+  exactly on an interface, rods through one, clusters of several electrodes
+  and several clusters — are solved within 1e-4 (within 2e-3 by the 3-D
+  model of part B where they are not axisymmetric; audit W4A-01 found the
+  exception of a ring wire at an interface, see below).
+- **Numbers:** every `fem` result moves: the stored 3 m rods −4.65 % /
+  −4.57 % (Dwight's rod ignored the head depth), the B2 rod / B3 ring
+  −0.70 % / −0.35 %, a ring with a bonded central rod +20 %, a ring 1 cm
+  above a conductive layer −67 %, a rod 2 cm into a conductive top layer
+  +164 %. Every other world was refused until part B.
+- **Options:** `FemOptions.n_radial`, `n_axial` and `z_far_factor` are gone
+  (2026.11 names); the point sources of `fem` count against
+  `Engine.max_segments` (found in the stream's own attack); benchmark B1
+  checks `fem` against Weber's disc.
+- **For `image_2layer`:** the stream's references found a ring 1 cm above an
+  interface 1.7 % above the exact thin ring, a jump of 0.03 … 0.38 % between
+  the two sides for a ring on an interface, and a truncated series in
+  30/10 000 Ω·m (−1.0 %); wave 3 resolved the jump, and audit W3A-02 found
+  the cause of the first.
+- **Golden:** `fem_rod_hom` −4.65 % and `fem_rod_two_layer_deep` −4.57 %
+  (`w4fem.toml`); the other 47 cases are bit-identical.
+
+### Stream `w4fem3d`: the three-dimensional conforming model (part B; Q40, D6)
+
+Every world that is not axisymmetric — strips, polylines, stars, meshes,
+grids, rods and rings side by side, several clusters with their transfer
+resistances, galvanic distributed conductors with every leaking piece a port
+— is solved with smoothed line sources and an analytic radius correction in
+an isotropic tetrahedral mesh refined towards them, partially penalised
+immersed layer interfaces, conjugate gradients with an algebraic multigrid,
+and two nested levels extrapolated. It needs the optional extra `fem3d`
+(scikit-fem, BSD-3-Clause; pyamg, MIT; decision D6) and raises `ImportError`
+naming it otherwise. In short:
+
+- **Against part A:** within 2.0e-3 for rods and rings in one to three
+  layers, inside its own error estimate.
+- **The AP1 station** in the corner soils of the AP1 grid lies between the
+  thin-wire engines: `image_2layer` +0.7 … +3.0 % above it, `mom` −0.4 …
+  −0.9 % below; 1.5 … 3 minutes and 3.6 … 4.4 GB per solve.
+- **Brace effect** (the open point of `w2mom`): +49.09 / +317.99 % at
+  ρ_c = 1000 / 5000 Ω·m, which confirms the per-segment value of the
+  concrete-shell page (+49.2 / +318.5 %) to 0.1 / 0.5 points.
+- **Q40:** against the concrete resolved as a volume, each junction of
+  encased wires acts like at most about one shell radius of wire (a corner
+  −1.5 cm, a crossing −3 … −6 cm, a T-joint within ±5 cm; 5 mm bar, 5 cm
+  cover, ρ_c 1 000 / 5 000 Ω·m); the generators' house mesh changes by less
+  than 0.6 %, so no correction rule is applied.
+- **Golden:** nothing moves (every golden `fem` case is axisymmetric and
+  stays on part A bit for bit); the 3-D model has no golden case.
+
+### Audit W4A: the axisymmetric model and the shared network
+
+The first wave-4 audit checked part A and the network on top of it
+(snapshot `4e37760`) against references without groundfield code:
+axisymmetric boundary elements for the solid cylinder and torus with the
+Tagg/Sunde images as rings, and cell-centred finite volumes of a rod with a
+shell. Findings:
+
+- W4A-01 (medium): a ring wire cut by an interface to a more conductive
+  layer, or within 0.05 wire radii of it, is off by up to 6.0e-3 at the
+  default; the error estimate lies below the error in 7 of 14 cases, and the
+  levels are not monotone.
+- W4A-02, W4A-03 (low): `extrapolate=False` reports an error estimate of 0
+  for a level-0 ring 6.2e-3 low; `model="auto"` ends in a bare `ValueError`
+  for a ring diagonal to a rod's end edge, without falling back to the 3-D
+  model or naming a remedy.
+- W4A-04 (low): tutorial T09 still says that `fem` refuses every other
+  world.
+- W4A-05 (medium): the node limit of 4 M admits about 16 GB (3.1 / 3.8 /
+  12.6 GB at 0.80 / 0.91 / 3.21 M nodes), and no memory figure is
+  documented.
+- W4A-06 (low): the provenance line of the validation page names Linux and
+  2026-11-14 for `fem` rows measured on macOS on 2026-11-15.
+- W4A-07 (medium): the known limitation on rings near an interface quotes
+  +3.6 % at 1 cm only; closer in, `image_2layer` reads +8.6 … +93 % (at
+  1.5 … 0.95 wire radii) without a warning, and `diagnose()` is silent.
+- W4A-08, W4A-09 (low): the dispatch threshold of 3 nm sends a rod 1 µm off
+  the ring axis to the 3-D model (40.7 s / 2.35 GB instead of 1.8 s /
+  0.61 GB, −1.43e-3, and it needs the extra); stale or overstated texts
+  ("every other world is refused", "lower bound / monotone", "within 5 %").
+- W4A-10, W4A-11 (info): `predicted_nodes` is 1.5 … 2.3 % low for rings; the
+  second methods of the validation table are thin-wire models or none (the
+  solid-body boundary elements: −1.07e-5 … −3.0e-5).
+
+Confirmed: the default `fem` agrees with the boundary elements to 1.0e-5 …
+1.5e-4 for rods, rings, rings near and on interfaces, rods through and
+near interfaces and two-port worlds, with an error estimate of 10 … 130 times
+the error; three layers and concrete shells against further references; the
+network (U = R·I to 8e-17, one branch matrix for `fem` and `image_2layer`,
+round trips, a UTM world and the D5 warning); the refusals, the light import
+and the extra; golden 559 of 563 quantities identical, the 4 that move in the
+two declared `fem` cases. Taken up by the wave-4 fixes below.
+
+### Audit W4B: the three-dimensional model
+
+Findings of audit W4B on the three-dimensional model of stream `w4fem3d`;
+filled in at the release.
+
+### Fixes of wave 4
+
+The fixes of audits W4A and W4B and the second audit round of wave 4;
+filled in at the release.

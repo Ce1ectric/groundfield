@@ -41,7 +41,8 @@ narratives are kept here, verbatim, one page per pass.
 - Where a later pass found a published statement to be wrong, the page carries
   a correction box above the original text; the text itself is not changed.
   Pass 9 has such a box (the corrections of finding 10.82), and so has the
-  pass-10 page for three statements in the work-stream fragments.
+  pass-10 page for statements of the work-stream fragments that later audits
+  found wrong.
 - *Roadmap candidates* of a pass are ideas, not commitments; the current plan
   is on the [roadmap](../roadmap.md).
 
@@ -53,6 +54,9 @@ narratives are kept here, verbatim, one page per pass.
 - Pass 9 numbers its findings F01 to F57.
 - Pass 10 numbers its findings 10.01 to 10.95 and keeps the pass-9 number where
   a finding was already known (for example F01/F30 with 10.16).
+- The adversarial audits of the release preparation of 2026.11.0 number their
+  findings per audit and round (for example A2G-04, D3A-02, R6A-01, W1A-02,
+  W3R2B-08); the pass-10 page records them with the streams that fixed them.
 - From 2026.11.0 on, regression tests carry the marker
   `@pytest.mark.finding("10.NN")`; `pytest --finding 10.28` runs the tests of
   one finding.
