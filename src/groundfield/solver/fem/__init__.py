@@ -172,7 +172,7 @@ def solve_fem(
     extrapolate: bool = True,
     r_far_factor: float = 1000.0,
     far_field: str = "robin",
-    max_nodes: int = 4_000_000,
+    max_nodes: int = 2_000_000,
     max_nodes_3d: int = 2_000_000,
     model: str = "auto",
     source_radius: float | None = None,
@@ -195,15 +195,19 @@ def solve_fem(
         branches) and ``segment_length`` (the display segments that carry
         the leakage distribution of the result) are used.
     refinement
-        Refinement level of the coarser of the two meshes (each level
-        bisects every interval of the graded mesh lines, about four times
-        the nodes). ``0`` (default) gives a port resistance within about
-        1e-4 of the converged value for rods and rings.
+        Refinement level of the coarser of the two meshes (axisymmetric
+        model: each level bisects every interval of the graded mesh lines,
+        about four times the nodes; 3-D model: about eight times). ``0``
+        (default) gives a port resistance within about 1e-4 of the
+        converged value for coaxial rods and rings (3.3e-4 for a ring wire
+        within 1.05 radii of an interface to a more conductive layer).
     extrapolate
         Solve at ``refinement`` and ``refinement + 1`` and extrapolate the
-        port conductance matrix with the observed second order (default).
-        ``False`` solves the level ``refinement`` alone, whose resistance
-        is a lower bound (see *Notes*).
+        port conductance matrix with the second order (default). ``False``
+        solves the level ``refinement`` alone; its resistance usually lies
+        below the converged value (see *Notes*) and
+        ``metadata["fem_error_estimate"]`` is ``NaN`` (one level has no
+        estimate).
     r_far_factor
         Size of the truncation box in characteristic lengths (the
         electrodes' size, or the depth of the deepest interface times the
@@ -215,10 +219,12 @@ def solve_fem(
         truncation studies).
     max_nodes
         Resource limit of the axisymmetric model: the node count of the
-        finer mesh, predicted before anything is assembled.
+        finer mesh, estimated before anything is assembled (the estimate
+        errs high). Default 2 million: the solve needs about 4 GB per
+        million nodes of the finer mesh, so about 8 GB at the limit.
     max_nodes_3d
         Resource limit of the three-dimensional model: the node count of
-        its finer mesh (about 3 GB per million nodes), predicted before
+        its finer mesh (3.0 ... 3.4 GB per million nodes), predicted before
         meshing and counted before the finer level is built.
     model
         ``"auto"`` (default): the axisymmetric model where it applies (rods
@@ -255,16 +261,22 @@ def solve_fem(
         extrapolated port resistance matrix in Ω, ports in world order,
         ``fem_ports``), ``fem_port_resistance_levels`` (per mesh level),
         ``fem_error_estimate`` (largest relative difference of a diagonal
-        entry between the extrapolated and the finer level), ``fem_mesh``
-        (size and time per level) and ``fem_r_far`` (box size in m).
+        entry between the extrapolated and the finer level; ``NaN`` with
+        ``extrapolate=False``), ``fem_model`` (``"axisymmetric"`` or
+        ``"3d"``: the model that ran), ``fem_mesh`` (size and time per
+        level) and ``fem_r_far`` (box size in m).
 
     Raises
     ------
     BackendCapabilityError
         With ``model="axisymmetric"``: if the world is not axisymmetric (an
         electrode other than a rod or a ring, a rod or ring off the common
-        axis, a galvanic distributed conductor) or its electrodes touch, or
-        a ring wire reaches within 5 % of its radius to the soil surface.
+        axis by more than 1e-3 of the smallest wire radius or gap, a
+        galvanic distributed conductor), its electrodes touch, a ring wire
+        reaches within 5 % of its radius to the soil surface, or a ring has
+        no room for its mesh block (within about a wire radius, diagonally,
+        of a rod's end edge); ``model="auto"`` solves these worlds with the
+        three-dimensional model.
         3-D model: a wire too close to the soil surface or an interface for
         its smoothed source, resolved concrete around a wire that is not
         straight along x, y or z. The message names the backends that solve
@@ -293,9 +305,15 @@ def solve_fem(
 
     Notes
     -----
-    Without extrapolation the conductance converges monotonically from
-    above (the resistance from below) under refinement, by the
-    minimum-energy principle on the nested tensor part of the mesh.
+    Without extrapolation the resistance of the axisymmetric model
+    converges at second order and, in every case tested away from
+    interfaces, from below; this is not guaranteed (the O-grid of a ring
+    is not nested between levels), and next to an interface cut into a
+    ring's mesh block it did not hold before that block was refined (audit
+    W4A-01). The error estimate bounds the error of the extrapolated value
+    while both levels lie on the same side of the converged value and the
+    finer level's error is at most 1/2.5 of the coarser level's (about
+    1/3.9 is observed for rods and rings).
     """
     from groundfield.soil.models import HomogeneousSoil, MultiLayerSoil, TwoLayerSoil
     from groundfield.solver import _frame
@@ -365,15 +383,21 @@ def solve_fem(
 
 
 def _is_axisymmetric(world: "World", engine: "Engine") -> bool:
-    """Whether the axisymmetric model accepts ``world`` (no galvanic conductor)."""
-    from groundfield.solver.fem._axisymmetric import coaxial_electrodes
-    from groundfield.solver.registry import BackendCapabilityError
+    """Whether the axisymmetric model accepts ``world`` (no galvanic conductor).
 
+    Runs the classification of the axisymmetric model without building the
+    refusal's remedy text, including the room of every ring's mesh block
+    (audit W4A-03: a ring without it ended ``model="auto"`` in a bare
+    ``ValueError``).
+    """
+    from groundfield.solver.fem._axisymmetric import NotAxisymmetric, classify
+
+    del engine
     if _galvanic_conductors(world):
         return False
     try:
-        coaxial_electrodes(world, engine)
-    except BackendCapabilityError:
+        classify(world)
+    except NotAxisymmetric:
         return False
     return True
 
@@ -405,6 +429,10 @@ def _solve(
         earth = solid_earth(
             world, engine, extra_segments=extra, **solid_options, **rest
         )
+        if not options["extrapolate"]:
+            # one level has no estimate (audit W4A-02), as in the
+            # axisymmetric model
+            earth.metadata["fem_error_estimate"] = math.nan
         approximation = (
             "thin wires as smoothed line sources with an analytic radius "
             "correction in three-dimensional finite elements"

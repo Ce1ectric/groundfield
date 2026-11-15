@@ -22,7 +22,11 @@ spaced uniformly in $\\ln \\rho$, so the circle is inscribed exactly and
 the block conforms to the tensor grid around it. A layer interface that
 passes through such a block (a ring within about its wire radius of the
 interface) is cut into the O-grid elements
-(:func:`cut_at_depth`), so every element lies in one layer.
+(:func:`cut_at_depth`), so every element lies in one layer. Next to such
+an interface the field varies on the scale of the gap between the wire
+and the interface (and of the narrow wedge where an interface cuts the
+wire near its edge), so that block has eight times the lines
+(``MeshParameters.near_interface_intervals``; audit W4A-01).
 
 Grading. The spacing at a feature $x_f$ with size $h_f$ grows linearly
 with the distance, $h(x) = \\min_f\\,(h_f + g\\,|x - x_f|)$ with the growth
@@ -34,9 +38,13 @@ function exactly (:func:`graded_lines`).
 
 Refinement. Level $\\ell$ bisects every interval of the level-0 lines
 $\\ell$ times (and doubles the angular and radial resolution of every
-O-grid), so the tensor part of the finite-element spaces is nested and
-the discrete conductance falls monotonically towards the exact value
-(Dirichlet principle).
+O-grid), so the tensor part of the finite-element spaces is nested. The
+O-grid is not: its layers move with the level and the polygon inscribed
+in the wire grows towards the circle. The discrete conductance therefore
+converges at second order but is not guaranteed to fall monotonically
+(it does in every case tested away from interfaces; next to an interface
+cut into a block it did not before that block was refined, audit
+W4A-01).
 """
 
 from __future__ import annotations
@@ -163,12 +171,18 @@ class RingGeometry:
         (chosen by the caller so that the block stays clear of the soil
         surface, the axis, the other electrodes and of every interface
         farther than $1.05\\,a$ from the wire axis).
+    near_interface
+        Whether a layer interface lies within $1.05\\,a$ of the wire axis
+        (it is cut into the block); the block then has
+        ``MeshParameters.near_interface_intervals`` per side instead of
+        ``box_intervals``.
     """
 
     radius: float
     depth: float
     wire_radius: float
     half_width: float
+    near_interface: bool = False
 
 
 @dataclass(frozen=True)
@@ -190,12 +204,25 @@ class MeshParameters:
     box_intervals
         Intervals of the tensor grid per side of an O-grid block at level
         0 (even, so that the horizontal diameter of the wire is a line).
+    near_interface_intervals
+        Intervals of the tensor grid per side of the block of a ring wire
+        within $1.05\\,a$ of a layer interface, at level 0. The gap between
+        the wire and the interface, and the narrow wedge where the
+        interface cuts the wire near its edge, make the field vary over
+        $\\sqrt{2a\\,|d - a|}$ along the wire's cross section ($d$: distance
+        of the interface from the wire axis; 0.14 a at $d = 1.01\\,a$). With
+        ``box_intervals`` the levels converged at first order and not
+        monotonically there (up to 6e-3 off, audit W4A-01); with 64 the
+        default lies within 3.3e-4 of an independent boundary-element model
+        at $d = 0.95 \\ldots 1.05\\,a$ and the estimate bounds the error, at
+        about four times the nodes of the ring.
     """
 
     growth: float = 0.2
     end_size: float = 0.002
     box_half_width: float = 3.0
     box_intervals: int = 8
+    near_interface_intervals: int = 64
 
 
 @dataclass
@@ -254,6 +281,13 @@ def _box_points(centre: float, c: float, n: int) -> list[float]:
     return [centre - c + k * step for k in range(n)] + [centre + c]
 
 
+def block_intervals(ring: RingGeometry, params: MeshParameters) -> int:
+    """Level-0 intervals of the tensor grid per side of a ring's block."""
+    if ring.near_interface:
+        return params.near_interface_intervals
+    return params.box_intervals
+
+
 def mesh_lines(
     rods: list[RodGeometry],
     rings: list[RingGeometry],
@@ -275,7 +309,7 @@ def mesh_lines(
         z_feat += [(rod.z_top, h), (rod.z_bottom, h)]
         bodies.append((rod.z_top, rod.z_bottom, h))
     for ring in rings:
-        n = params.box_intervals
+        n = block_intervals(ring, params)
         step = 2.0 * ring.half_width / n
         s_feat += [(x, step) for x in _box_points(ring.radius, ring.half_width, n)]
         z_feat += [(x, step) for x in _box_points(ring.depth, ring.half_width, n)]
@@ -391,13 +425,58 @@ def _boundary_edges(triangles: np.ndarray) -> np.ndarray:
     return unique[counts == 1]
 
 
+def _o_grid_size(
+    s_lines: np.ndarray, z_lines: np.ndarray, ring: RingGeometry
+) -> tuple[int, int]:
+    """Perimeter nodes $P$ and radial layers of a ring's O-grid (as built)."""
+    c = ring.half_width
+    n_s = _index(s_lines, ring.radius + c) - _index(s_lines, ring.radius - c)
+    n_z = _index(z_lines, ring.depth + c) - _index(z_lines, ring.depth - c)
+    perimeter = 2 * (n_s + n_z)
+    # build_mesh: ceil(ln(max distance / a) / (2 pi / P)), the largest
+    # distance being the block's corner; the tiny offset keeps the count
+    # an upper bound if round-off of the node coordinates crosses an integer.
+    x = math.log(math.sqrt(2.0) * c / ring.wire_radius) / (2.0 * math.pi / perimeter)
+    return perimeter, max(1, math.ceil(x + 1e-9))
+
+
 def predicted_nodes(
-    s_lines: np.ndarray, z_lines: np.ndarray, rings: list[RingGeometry], level: int
+    s_lines: np.ndarray,
+    z_lines: np.ndarray,
+    rings: list[RingGeometry],
+    level: int,
+    interfaces: list[float] | tuple[float, ...] = (),
 ) -> int:
-    """Upper bound of the node count of :func:`build_mesh` (before the cuts)."""
+    """Node count of :func:`build_mesh` estimated before it is built.
+
+    An estimate that errs high: the tensor nodes (including those inside
+    the rods and the O-grid blocks, which the mesh drops), the O-grid
+    nodes of every ring as :func:`build_mesh` lays them out, and for every
+    interface cut into a block the most nodes a straight cut can add
+    ($2P + 4n + 2$ for $P$ perimeter nodes and $n$ layers: each layer
+    polygon is convex and crossed at most twice, each ray at most once,
+    and every quadrilateral passed adds at most one diagonal). Up to audit
+    W4A-10 the O-grid count grew like $2^\\ell$ instead of $4^\\ell$, and
+    the estimate was 1.5 ... 2.3 % low for a single ring.
+
+    Parameters
+    ----------
+    s_lines, z_lines
+        The tensor lines of the level (:func:`mesh_lines`).
+    rings
+        The rings, with their block half-widths.
+    level
+        Refinement level (kept for the signature; the lines carry it).
+    interfaces
+        Depths in m of the layer interfaces inside the box.
+    """
+    del level
     n = s_lines.size * z_lines.size
     for ring in rings:
-        n += 8 * ring.half_width / max(ring.wire_radius, 1e-300) * 4 * 2**level
+        perimeter, layers = _o_grid_size(s_lines, z_lines, ring)
+        n += perimeter * layers
+        cuts = sum(1 for h in interfaces if abs(ring.depth - h) < ring.half_width)
+        n += cuts * (2 * perimeter + 4 * layers + 2)
     return int(n)
 
 

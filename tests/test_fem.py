@@ -921,3 +921,306 @@ def test_the_result_survives_a_json_round_trip_and_reports_its_mesh() -> None:
     )
     assert md["kernel"] == "line" and md["n_segments"] == len(res.point_sources)
     assert res.cluster_impedance("ring")[0] == res.cluster_impedance("ring")[1]
+
+
+# ---------------------------------------------------------------------
+# Audit W4A (wave 4, round 1)
+# ---------------------------------------------------------------------
+
+# Ring r0 = 2 m, a = 5 mm, wire axis at t = 2 m, a layer interface d from
+# the wire axis with the more conductive layer beyond it: 30 Ohm m below a
+# ring in 1000 Ohm m ("below") or above it ("above"). Reference: the
+# axisymmetric boundary elements of auditor W4A (solid torus, Tagg/Sunde
+# image rings, three nested levels, observed-order Richardson; shares no
+# code with groundfield), resistance in Ohm.
+_NEAR_CONTACT_BEM = [
+    ("below", 0.95, 7.069669),
+    ("below", 0.99, 7.422543),
+    ("below", 1.001, 7.856169),
+    ("below", 1.01, 8.551903),
+    ("below", 1.02, 9.087345),
+    ("below", 1.04, 9.908426),
+    ("below", 1.05, 10.252321),
+    ("above", 0.95, 13.373675),
+    ("above", 0.99, 13.726851),
+    ("above", 1.001, 14.160322),
+    ("above", 1.01, 14.855686),
+    ("above", 1.02, 15.390882),
+    ("above", 1.04, 16.211641),
+    ("above", 1.05, 16.555421),
+]
+_FAST_NEAR_CONTACT = {("below", 0.99), ("below", 1.01), ("above", 1.04)}
+
+
+def _near_contact_ring(side: str, d_over_a: float) -> gf.World:
+    a, t = 0.005, 2.0
+    if side == "below":
+        soil = _two(1000.0, 30.0, t + d_over_a * a)
+    else:
+        soil = _two(30.0, 1000.0, t - d_over_a * a)
+    return _ring_world(soil, r0=2.0, depth=t, radius=a)
+
+
+@pytest.mark.parametrize(
+    ("side", "d_over_a", "bem"),
+    [
+        c
+        if (c[0], c[1]) in _FAST_NEAR_CONTACT
+        else pytest.param(*c, marks=pytest.mark.slow)
+        for c in _NEAR_CONTACT_BEM
+    ],
+)
+def test_a_ring_next_to_a_more_conductive_layer_is_within_1e_3_and_its_estimate(
+    side, d_over_a, bem
+) -> None:
+    """Up to audit W4A-01 an interface within 1.05 a of the wire axis was cut
+    into the O-grid with the block's default resolution: the gap between the
+    wire and the interface was unresolved, the levels converged at first order
+    and not monotonically, and the default read up to 6.0e-3 off with an
+    estimate below the error in 7 of these 14 cases."""
+    # audit W4A-01
+    res = _engine().solve(_near_contact_ring(side, d_over_a))
+    error = abs(res.cluster_impedance("g1")[0].real / bem - 1.0)
+    assert error < 1e-3, error
+    assert res.metadata["fem_error_estimate"] >= error
+
+
+@pytest.mark.parametrize(
+    ("d_over_a", "bem", "fem23"),
+    [
+        (0.99, 7.422543, 7.414592),
+        (1.01, 8.551903, 8.550181),
+        (1.04, 9.908426, 9.908191),
+    ],
+)
+def test_w4a_01_the_error_estimate_covers_a_ring_next_to_a_conductive_layer(
+    d_over_a, bem, fem23
+) -> None:
+    """Auditor W4A's test: the default and the finer level lie within the
+    error estimate (plus the spread of the two references, the BEM and fem at
+    levels 2/3 of the base) of the BEM."""
+    # audit W4A-01
+    assert abs(fem23 / bem - 1.0) < 1.2e-3  # the two references
+    res = _engine().solve(_near_contact_ring("below", d_over_a))
+    z = res.cluster_impedance("g1")[0].real
+    est = res.metadata["fem_error_estimate"]
+    finer = res.metadata["fem_port_resistance_levels"][-1][0][0]
+    tol = abs(fem23 / bem - 1.0)
+    assert abs(z / bem - 1.0) <= est + tol
+    assert abs(finer / bem - 1.0) <= est + tol
+
+
+def test_a_ring_cut_deeper_by_a_conductive_layer_keeps_second_order() -> None:
+    """The interface at 0.9 a through the wire (1000/30 Ohm m): at the
+    block's default resolution the default read -1.2e-3 against fem's own
+    levels 1/2 at the refined block; levels now converge at second order."""
+    # audit W4A-01
+    from groundfield.solver.fem._axisymmetric import axisymmetric_earth
+
+    w = _near_contact_ring("below", 0.9)
+    eng = _engine()
+    r = [
+        1.0
+        / axisymmetric_earth(w, eng, refinement=k, extrapolate=False).conductance[0, 0]
+        for k in range(3)
+    ]
+    assert r[0] < r[1] < r[2]
+    assert 3.5 < (r[1] - r[0]) / (r[2] - r[1]) < 4.6
+
+
+def test_a_single_level_reports_no_error_estimate() -> None:
+    """Up to audit W4A-02 ``extrapolate=False`` reported an estimate of 0.0
+    although the level-0 ring is 6.2e-3 low; a single level has no
+    estimate."""
+    # audit W4A-02
+    res = _engine(options={"fem": {"extrapolate": False}}).solve(_ring_world(H100))
+    assert math.isnan(res.metadata["fem_error_estimate"])
+    assert res.metadata["fem_extrapolated"] is False
+
+
+def _ring_over_a_rod_head() -> gf.World:
+    """Auditor W4A's world: a ring diagonal to a rod's head edge (Euclidean
+    gap 1.06 a, so the overlap check passes; Chebyshev gap 0.75 a, no room
+    for the ring's O-grid block)."""
+    a = 0.008
+    w = gf.create_world(soil=H100)
+    gf.create_electrode(
+        w, "rod", name="rod", position=(0, 0, 0.5), length=3.0, wire_radius=a
+    )
+    gf.create_electrode(
+        w,
+        "ring",
+        name="ring",
+        center=(0, 0, 0.5 - 0.75 * a),
+        radius=1.75 * a,
+        wire_radius=a,
+    )
+    gf.create_source(w, attached_to="rod", magnitude=1.0)
+    return w
+
+
+def test_a_ring_without_room_for_its_block_is_not_axisymmetric() -> None:
+    """Up to audit W4A-03 the block check ran after the classification, so
+    ``auto`` and ``axisymmetric`` ended in a bare ``ValueError`` ("no room
+    for the mesh block"). The check is part of the classification now:
+    ``auto`` takes the 3-D model, ``axisymmetric`` refuses with a remedy."""
+    # audit W4A-03
+    from groundfield.solver.fem import _is_axisymmetric
+
+    w = _ring_over_a_rod_head()
+    assert _is_axisymmetric(w, _engine()) is False
+    text = _fem_error(w)
+    assert "no room" in text and "'ring'" in text, text
+    assert "'image'" in text and "model='auto'" in text, text
+
+
+@pytest.mark.slow
+def test_w4a_03_auto_mode_does_not_end_in_a_bare_mesh_error() -> None:
+    """Auditor W4A's test: ``auto`` either solves the world (3-D model) or
+    refuses it with a ``BackendCapabilityError`` that names ``image``."""
+    # audit W4A-03
+    pytest.importorskip("skfem")
+    pytest.importorskip("pyamg")
+    w = _ring_over_a_rod_head()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        try:
+            _engine().solve(w)
+        except gf.BackendCapabilityError as exc:
+            assert "'image'" in str(exc)
+        except ValueError as exc:  # pragma: no cover - the base
+            pytest.fail(f"bare ValueError in model='auto': {exc}")
+
+
+@pytest.mark.parametrize("offset", [1e-9, 1e-6])
+def test_a_rod_a_micrometre_off_the_ring_axis_is_solved_axisymmetric(offset) -> None:
+    """Up to audit W4A-08 the common axis had a tolerance of 1e-9 of the world
+    size (3 nm here): a rod 1 um off the ring's axis went to the 3-D model
+    (40.7 s, 2.35 GB, -1.43e-3). The tolerance scales with the wire radius
+    now: the axisymmetric reading is off by O((offset / r)^2), below 1e-6."""
+    # audit W4A-08
+    w = gf.create_world(soil=H100)
+    gf.create_electrode(w, "ring", name="ring", center=(0, 0, 0.8), radius=2.0)
+    gf.create_electrode(w, "rod", name="rod", position=(offset, 0, 0.5), length=3.0)
+    gf.create_conductor(w, start="ring", end="rod")
+    gf.create_source(w, attached_to="ring", magnitude=1.0)
+    res = _engine(options={"fem": {"model": "axisymmetric"}}).solve(w)
+    assert res.metadata["fem_model"] == "axisymmetric"
+    centred = _ring_and_rod(H100, bonded=True)
+    z0 = _engine().solve(centred).cluster_impedance("ring")[0].real
+    assert abs(res.cluster_impedance("ring")[0].real / z0 - 1.0) < 1e-6
+
+
+def test_a_rod_well_off_the_ring_axis_is_not_axisymmetric() -> None:
+    # audit W4A-08
+    from groundfield.solver.fem import _is_axisymmetric
+
+    w = gf.create_world(soil=H100)
+    gf.create_electrode(w, "ring", name="ring", center=(0, 0, 0.8), radius=2.0)
+    gf.create_electrode(w, "rod", name="rod", position=(1e-3, 0, 0.5), length=3.0)
+    gf.create_conductor(w, start="ring", end="rod")
+    gf.create_source(w, attached_to="ring", magnitude=1.0)
+    assert _is_axisymmetric(w, _engine()) is False
+
+
+def test_the_node_limit_defaults_to_two_million() -> None:
+    """Audit W4A-05: the axisymmetric model needs about 4 GB per million
+    nodes; the old limit of 4 million admitted about 16 GB."""
+    # audit W4A-05
+    import inspect
+
+    from groundfield.solver.fem import solve_fem
+    from groundfield.solver.fem._axisymmetric import axisymmetric_earth
+    from groundfield.solver.registry import FemOptions
+
+    assert FemOptions().max_nodes == 2_000_000
+    assert inspect.signature(solve_fem).parameters["max_nodes"].default == 2_000_000
+    sig = inspect.signature(axisymmetric_earth)
+    assert sig.parameters["max_nodes"].default == 2_000_000
+
+
+def _cost_worlds() -> dict[str, gf.World]:
+    """Auditor W4A's worlds of the cost study (s07) and a cut ring."""
+    two = _two(100.0, 400.0, 2.0)
+    out = {"ring": _ring_world(H100)}
+    w = gf.create_world(soil=two)
+    gf.create_electrode(
+        w, "ring", name="g1", center=(0, 0, 0.8), radius=2.0, wire_radius=0.008
+    )
+    gf.create_electrode(
+        w, "rod", name="rod", position=(0, 0, 0.5), length=3.0, wire_radius=0.008
+    )
+    gf.create_conductor(w, start="g1", end="rod")
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    out["ring_rod_2l"] = w
+    w = gf.create_world(soil=two)
+    for k in range(8):
+        gf.create_electrode(
+            w,
+            "ring",
+            name="g1" if k == 0 else f"r{k}",
+            center=(0, 0, 0.6 + 0.2 * k),
+            radius=1.0 + 1.5 * k,
+            wire_radius=0.005,
+        )
+    gf.create_electrode(
+        w, "rod", name="rod", position=(0, 0, 0.5), length=3.0, wire_radius=0.008
+    )
+    for k in range(1, 8):
+        gf.create_conductor(w, start="g1", end=f"r{k}")
+    gf.create_conductor(w, start="g1", end="rod")
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    out["8rings_rod"] = w
+    out["cut_ring"] = _near_contact_ring("below", 0.99)
+    out["ring_on_interface"] = _ring_world(_two(1000.0, 30.0, 2.0), depth=2.0)
+    return out
+
+
+@pytest.mark.parametrize("name", list(_cost_worlds()))
+def test_the_predicted_node_count_bounds_the_mesh(name) -> None:
+    """Up to audit W4A-10 the prediction, documented as an upper bound, was
+    1.5 ... 2.3 % low for a ring (its O-grid count grew like 2^level instead
+    of 4^level), so ``max_nodes`` let slightly larger meshes through. It
+    counts the O-grid exactly now and bounds the nodes an interface cut
+    adds: a limit one node below the finer mesh refuses the solve."""
+    # audit W4A-10
+    from groundfield.diagnostics import ResourceLimitError
+    from groundfield.solver._layered import as_layer_stack
+    from groundfield.solver.fem import _axisymmetric as ax
+    from groundfield.solver.fem._mesh import (
+        MeshParameters,
+        RingGeometry,
+        RodGeometry,
+        build_mesh,
+        mesh_lines,
+        predicted_nodes,
+    )
+
+    w = _cost_worlds()[name]
+    eng = _engine()
+    params = MeshParameters()
+    _, els = ax.coaxial_electrodes(w, eng)
+    stack = as_layer_stack(w.soil)
+    depths = [float(d) for d in np.cumsum(stack.h)]
+    rhos = np.asarray(stack.rhos, dtype=float)
+    els = ax.block_half_widths(els, depths, params)
+    rods = [e.geometry for e in els if isinstance(e.geometry, RodGeometry)]
+    rings = [e.geometry for e in els if isinstance(e.geometry, RingGeometry)]
+    extent = max(
+        [1.0]
+        + [r.z_bottom for r in rods]
+        + [max(g.radius, g.depth) + g.wire_radius for g in rings]
+    )
+    contrast = float(rhos.max() / rhos.min())
+    r_far = 1000.0 * max(extent, (depths[-1] if depths else 0.0) * contrast)
+    inside = [d for d in depths if d < r_far]
+    counts = []
+    for level in (0, 1):
+        lines = mesh_lines(rods, rings, inside, r_far, params, level)
+        mesh = build_mesh(rods, rings, inside, r_far, params, level, lines=lines)
+        counts.append((lines, mesh.nodes.shape[0]))
+    with pytest.raises(ResourceLimitError, match="max_nodes"):
+        ax.axisymmetric_earth(w, eng, max_nodes=counts[1][1] - 1)
+    for level, (lines, n) in enumerate(counts):
+        predicted = predicted_nodes(*lines, rings, level, inside)
+        assert n <= predicted <= 1.15 * n, (level, n, predicted)

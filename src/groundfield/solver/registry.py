@@ -403,8 +403,9 @@ class FemOptions(BackendOptions):
         le=6,
         description=(
             "Refinement level of the coarser mesh (count): each level bisects "
-            "every interval of the graded mesh lines (about four times the "
-            "nodes). The finer mesh is one level above it."
+            "every interval of the graded mesh lines of the axisymmetric model "
+            "(about four times the nodes) and refines every tetrahedron of the "
+            "3-D model into eight. The finer mesh is one level above it."
         ),
     )
     extrapolate: bool = Field(
@@ -412,8 +413,9 @@ class FemOptions(BackendOptions):
         description=(
             "Solve at refinement and refinement + 1 and extrapolate the port "
             "conductance matrix to zero mesh size (Richardson, second order). "
-            "False solves the level refinement alone (a lower bound of the "
-            "resistance)."
+            "False solves the level refinement alone, without an error "
+            "estimate (fem_error_estimate is NaN); its resistance usually lies "
+            "below the converged value, which is not guaranteed."
         ),
     )
     r_far_factor: float = Field(
@@ -434,11 +436,14 @@ class FemOptions(BackendOptions):
         ),
     )
     max_nodes: int = Field(
-        default=4_000_000,
+        default=2_000_000,
         gt=0,
         description=(
-            "Resource limit (count): the predicted node count of the finer "
-            "mesh above which the solve is refused (ResourceLimitError)."
+            "Resource limit of the axisymmetric model (count): the node count "
+            "of the finer mesh, estimated before anything is assembled (the "
+            "estimate errs high), above which the solve is refused "
+            "(ResourceLimitError). The axisymmetric solve needs about 4 GB per "
+            "million nodes, so about 8 GB at the default."
         ),
     )
     max_nodes_3d: int = Field(
@@ -448,7 +453,7 @@ class FemOptions(BackendOptions):
             "Resource limit of the three-dimensional model (count): the node "
             "count of its finer mesh, predicted before meshing and counted "
             "before the finer level is built (ResourceLimitError above it). "
-            "The 3-D solve needs about 3 GB per million nodes."
+            "The 3-D solve needs 3.0 ... 3.4 GB per million nodes."
         ),
     )
     model: Literal["auto", "axisymmetric", "3d"] = Field(
