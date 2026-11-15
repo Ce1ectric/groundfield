@@ -13,7 +13,9 @@ A :class:`FieldResult` is the unified return value of
   evaluate the appropriate Green's function (homogeneous or 2-layer)
   inside :meth:`potential`.
 - ``sources`` — the source snapshot of the solve, read by
-  :meth:`FieldResult.input_impedance`.
+  :meth:`FieldResult.input_impedance`: the impressed current of every
+  current source; the impressed voltage and the solved current of every
+  voltage source.
 - ``metadata`` — the core keys every backend reports (see
   :data:`groundfield.solver.engine.CORE_METADATA_KEYS`), including the
   ``provenance`` block, plus backend-specific keys.
@@ -63,7 +65,7 @@ import math
 import platform
 import re
 import sys
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Union
 
 import numpy as np
@@ -86,6 +88,7 @@ if TYPE_CHECKING:  # pragma: no cover - type-hint imports only
     import pandas as pd
 
     from groundfield.solver.engine import Engine
+    from groundfield.sources import Source
     from groundfield.world import World
 
 __all__ = [
@@ -105,6 +108,9 @@ _SoilUnion = Union[HomogeneousSoil, TwoLayerSoil, MultiLayerSoil]
 
 # 3-D coordinate
 _Point3D = tuple[float, float, float]
+
+#: Source kinds with a driving-point impedance (:meth:`FieldResult.input_impedance`).
+_SOURCE_KINDS = ("current", "voltage")
 
 
 class PointSource(BaseModel):
@@ -139,15 +145,23 @@ class PointSource(BaseModel):
 class SourceRecord(BaseModel):
     """Snapshot of one source as it was solved.
 
-    Filled by :meth:`Engine.solve`; not instantiated directly by the
-    user. :meth:`FieldResult.input_impedance` reads it, so the result
-    stays self-contained after the world has changed.
+    Filled by :meth:`Engine.solve` (and, for a world with voltage
+    sources, by the backend); not instantiated directly by the user.
+    :meth:`FieldResult.input_impedance` reads it, so the result stays
+    self-contained after the world has changed.
+
+    For a current source ``current`` is the impressed current and
+    ``voltage`` is empty. For a voltage source ``voltage`` is the
+    impressed voltage $U$ and ``current`` the source current $I$ the
+    solve returned — the current the source drives into ``attached_to``
+    (and takes back from ``return_to``), the same sign convention as a
+    current source.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(..., description="Source name in the world.")
-    kind: str = Field(..., description="Source kind, e.g. ``'current'``.")
+    kind: str = Field(..., description="Source kind: ``'current'`` or ``'voltage'``.")
     attached_to: str = Field(..., description="Feeding electrode / node.")
     return_to: str | None = Field(
         default=None,
@@ -156,10 +170,65 @@ class SourceRecord(BaseModel):
     current: list[complex] = Field(
         default_factory=list,
         description=(
-            "Impressed source current per frequency in A (complex "
-            "phasor). Empty for non-current sources."
+            "Source current per frequency in A (complex phasor): impressed "
+            "(current source) or solved (voltage source; empty if the "
+            "backend did not report it)."
         ),
     )
+    voltage: list[complex] = Field(
+        default_factory=list,
+        description=(
+            "Impressed source voltage per frequency in V (complex phasor), "
+            "attached_to against return_to (or remote earth). Empty for "
+            "current sources."
+        ),
+    )
+
+
+def _source_records(
+    sources: Sequence[Source],
+    n_freq: int,
+    voltage_source_currents: Sequence[dict[str, complex]] | None = None,
+) -> list[SourceRecord]:
+    """Snapshot of ``sources`` for :attr:`FieldResult.sources`.
+
+    Parameters
+    ----------
+    sources
+        Sources of the solved world.
+    n_freq
+        Number of solved frequencies.
+    voltage_source_currents
+        Solved current in A per voltage-source name, one mapping per
+        frequency; ``None`` leaves the currents of voltage sources empty.
+
+    Returns
+    -------
+    list[SourceRecord]
+        One record per source, in world order.
+    """
+    records = []
+    for src in sources:
+        phasor = complex(src.magnitude * np.exp(1j * np.deg2rad(src.phase_deg)))
+        current: list[complex] = []
+        voltage: list[complex] = []
+        if src.kind == "current":
+            current = [phasor] * n_freq
+        elif src.kind == "voltage":
+            voltage = [phasor] * n_freq
+            if voltage_source_currents:
+                current = [complex(m[src.name]) for m in voltage_source_currents]
+        records.append(
+            SourceRecord(
+                name=src.name,
+                kind=src.kind,
+                attached_to=src.attached_to,
+                return_to=src.return_to,
+                current=current,
+                voltage=voltage,
+            )
+        )
+    return records
 
 
 # ---------------------------------------------------------------------
@@ -792,7 +861,7 @@ class FieldResult(BaseModel):
         return members, u
 
     def input_impedance(self, source: str | None = None) -> list[complex]:
-        """Driving-point impedance seen by a current source.
+        """Driving-point impedance seen by a source.
 
         Definition:
 
@@ -804,9 +873,17 @@ class FieldResult(BaseModel):
         with $\\varphi_a$ the potential of the galvanic cluster the
         source feeds (``attached_to``), $\\varphi_r$ the potential of
         the return cluster (``return_to``; zero for a return through
-        remote earth) and $I_s$ the impressed source current. Cluster
-        potentials are the length-weighted averages used by
+        remote earth) and $I_s$ the source current. Cluster potentials
+        are the length-weighted averages used by
         :meth:`cluster_impedance`.
+
+        * **Current source:** $I_s$ is the impressed current.
+        * **Voltage source** (since 2026.11): the solve fixes
+          $\\varphi_a - \\varphi_r = U$, so $Z_\\text{in} = U / I_s$ with
+          the impressed voltage $U$ and the solved source current $I_s$
+          (:attr:`SourceRecord.voltage`, :attr:`SourceRecord.current`).
+          It equals the impedance a 1 A current source at the same
+          terminals reports, to round-off.
 
         This is the impedance a measurement instrument or a fault sees
         at the feeding point. It differs from :meth:`cluster_impedance`
@@ -819,8 +896,8 @@ class FieldResult(BaseModel):
         Parameters
         ----------
         source
-            Name of the current source. May be omitted when the result
-            carries exactly one current source.
+            Name of the source. May be omitted when the result carries
+            exactly one source.
 
         Returns
         -------
@@ -832,9 +909,9 @@ class FieldResult(BaseModel):
         ------
         ValueError
             If the result carries no source snapshot (hand-built
-            results), no current source, or several current sources
-            and ``source`` is omitted; if the named source is not a
-            current source.
+            results), no source, or several sources and ``source`` is
+            omitted; if the record of a voltage source carries no solved
+            current (a backend that does not report it).
         KeyError
             If ``source`` is unknown, or the feeding / return electrode
             has no potential data in this result.
@@ -850,28 +927,39 @@ class FieldResult(BaseModel):
                 "input_impedance needs the source snapshot of the solve; "
                 "this result carries none (hand-built FieldResult?)."
             )
-        current_sources = [s for s in self.sources if s.kind == "current"]
+        candidates = [s for s in self.sources if s.kind in _SOURCE_KINDS]
         if source is None:
-            if not current_sources:
+            if not candidates:
                 raise ValueError("The result carries no current source.")
-            if len(current_sources) > 1:
-                names = ", ".join(s.name for s in current_sources)
+            if len(candidates) > 1:
+                kinds = {s.kind for s in candidates}
+                label = f"{kinds.pop()} sources" if len(kinds) == 1 else "sources"
+                names = ", ".join(s.name for s in candidates)
                 raise ValueError(
-                    f"The result carries several current sources ({names}); "
-                    "pass source=<name>."
+                    f"The result carries several {label} ({names}); pass source=<name>."
                 )
-            record = current_sources[0]
+            record = candidates[0]
         else:
             by_name = {s.name: s for s in self.sources}
             if source not in by_name:
                 known = ", ".join(sorted(by_name)) or "none"
                 raise KeyError(f"Unknown source {source!r} (known: {known}).")
             record = by_name[source]
-            if record.kind != "current":
+            if record.kind not in _SOURCE_KINDS:
                 raise ValueError(
                     f"Source {source!r} is a {record.kind!r} source; the input "
-                    "impedance is defined for current sources."
+                    "impedance is defined for current and voltage sources."
                 )
+        if record.kind == "voltage":
+            if len(record.current) != len(record.voltage):
+                raise ValueError(
+                    f"Voltage source {record.name!r}: the result carries no "
+                    "solved source current (the backend did not report it)."
+                )
+            return [
+                u / i if i != 0 else complex("nan")
+                for u, i in zip(record.voltage, record.current, strict=True)
+            ]
         u_a = self._terminal_potential(record.name, "feeds", record.attached_to)
         if record.return_to is None:
             u_r = [0j] * len(u_a)
@@ -1229,10 +1317,12 @@ class FieldResult(BaseModel):
 
             ``"sources"``: one row per frequency and recorded source
             with ``frequency_hz``, ``source``, ``kind``,
-            ``attached_to``, ``return_to``, ``current_a`` (impressed
-            current in A, complex) and ``input_impedance_ohm``
-            (:meth:`input_impedance` in Ω, complex), the impedance seen
-            at the feeding point.
+            ``attached_to``, ``return_to``, ``current_a`` (source
+            current in A, complex: impressed, or solved for a voltage
+            source), ``voltage_v`` (impressed voltage in V of a voltage
+            source, complex; ``nan`` for a current source) and
+            ``input_impedance_ohm`` (:meth:`input_impedance` in Ω,
+            complex), the impedance seen at the feeding point.
 
         Returns
         -------
@@ -1320,7 +1410,7 @@ class FieldResult(BaseModel):
         nan = complex("nan")
         z_in: dict[str, list[complex]] = {}
         for record in self.sources:
-            if record.kind != "current":
+            if record.kind not in _SOURCE_KINDS:
                 continue
             try:
                 z_in[record.name] = list(self.input_impedance(record.name))
@@ -1333,6 +1423,7 @@ class FieldResult(BaseModel):
             "attached_to": [],
             "return_to": [],
             "current_a": [],
+            "voltage_v": [],
             "input_impedance_ohm": [],
         }
         for k, f in enumerate(self.frequencies):
@@ -1346,6 +1437,9 @@ class FieldResult(BaseModel):
                 rows["current_a"].append(
                     complex(record.current[k]) if k < len(record.current) else nan
                 )
+                rows["voltage_v"].append(
+                    complex(record.voltage[k]) if k < len(record.voltage) else nan
+                )
                 rows["input_impedance_ohm"].append(complex(z[k]) if k < len(z) else nan)
         return pd.DataFrame(
             {
@@ -1355,6 +1449,7 @@ class FieldResult(BaseModel):
                 "attached_to": pd.Series(rows["attached_to"], dtype=object),
                 "return_to": pd.Series(rows["return_to"], dtype=object),
                 "current_a": pd.Series(rows["current_a"], dtype=complex),
+                "voltage_v": pd.Series(rows["voltage_v"], dtype=complex),
                 "input_impedance_ohm": pd.Series(
                     rows["input_impedance_ohm"], dtype=complex
                 ),

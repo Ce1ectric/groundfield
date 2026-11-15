@@ -54,7 +54,6 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any, Literal, Self
 
-import numpy as np
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -77,6 +76,7 @@ from groundfield.solver.registry import (
     warn_external,
 )
 from groundfield.solver.result import FieldResult, SourceRecord, solve_provenance
+from groundfield.solver.result import _source_records as _result_source_records
 from groundfield.utils.logging import get_logger
 from groundfield.utils.suggest import did_you_mean
 
@@ -237,23 +237,12 @@ def _inert_message(name: str) -> str:
 
 
 def _source_records(world: "World", n_freq: int) -> list[SourceRecord]:
-    """Snapshot of ``world.sources`` for :attr:`FieldResult.sources`."""
-    records = []
-    for src in world.sources:
-        current: list[complex] = []
-        if src.kind == "current":
-            i = complex(src.magnitude * np.exp(1j * np.deg2rad(src.phase_deg)))
-            current = [i] * n_freq
-        records.append(
-            SourceRecord(
-                name=src.name,
-                kind=src.kind,
-                attached_to=src.attached_to,
-                return_to=src.return_to,
-                current=current,
-            )
-        )
-    return records
+    """Snapshot of ``world.sources`` for :attr:`FieldResult.sources`.
+
+    The currents of voltage sources are left empty here: they are solved
+    quantities, which the backend reports in the records it returns.
+    """
+    return _result_source_records(world.sources, n_freq)
 
 
 _GUARDED_WORLDS: ContextVar[frozenset[int]] = ContextVar(

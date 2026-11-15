@@ -39,10 +39,11 @@ solver grown by copying:
 deprecated_alias_of=..., experimental=..., forward=...)`.
 
 - **Capabilities** (`BackendCapabilities`): soil layer counts, conductor
-  models, concrete shells, two-terminal sources, junctions, source
-  kernels. `Engine.solve` checks a world before the backend runs. Hard
-  mismatches (layer count, concrete shells, an explicitly requested
-  kernel, junctions) raise `BackendCapabilityError` — a subclass of
+  models, concrete shells, two-terminal sources, junctions, voltage
+  sources (amendment below), source kernels. `Engine.solve` checks a world
+  before the backend runs. Hard mismatches (layer count, concrete shells,
+  an explicitly requested kernel, junctions, voltage sources) raise
+  `BackendCapabilityError` — a subclass of
   `ValueError` and `NotImplementedError`, so earlier `except` clauses keep
   working — and name a backend that can solve the world; soft ones (a
   conductor model the backend reduces, `return_to` ignored) warn with
@@ -127,3 +128,40 @@ keep working until 2027.5 at the earliest (ADR-0013).
 - Review pass 10 (2026-11-07), findings 10.74–10.77, 10.79, 10.81,
   decision question 9.
 - ADR-0002 (engine family) and its amendment 2026.11.
+
+## Amendment 2026.11 — impressed voltage sources in the pipeline (finding 10.51)
+
+`VoltageSource` was a data model only: up to 0.15.0 every backend dropped
+it with a warning and solved to zero potentials, the release preparation
+made it raise. Decision (scope of the 2026.11 release, 2026-11-14): the
+shared pipeline solves it by **modified nodal analysis**. Step 2 lists the
+voltage sources next to the impressed currents
+(`_pipeline.impressed_voltages`); step 5 appends, after the branch block,
+one unknown per voltage source — its current $I_v$, entering Kirchhoff's
+current law at `attached_to` ($-I_v$ on the left-hand side) and
+`return_to` ($+I_v$) — and one row $\varphi_a - \varphi_r = U$
+($\varphi_r = 0$ for remote earth). The image family and the point-matching
+family call the same helpers (`_topology._voltage_source_entries`), so the
+cross-layer path, inductive branches, frequency sweeps and junction
+terminals need no code of their own. A voltage-source terminal is a driven
+node: its cluster does not float. A world without voltage sources assembles
+the same matrix as before, bit for bit (golden suite strict against the
+base). The backend reports the solved currents in `FieldResult.sources`
+(`SourceRecord.current`, with the impressed `SourceRecord.voltage`);
+`input_impedance()` is $U/I$.
+
+`World.check` rejects what makes the system singular: a voltage source
+with both terminals in one ideally bonded cluster, and voltage sources that
+close a loop through ideal bonds or remote earth (union-find over clusters
+with remote earth as one more node). A voltage source of 0 V is an ideal
+short and allowed. The capability `voltage_sources` is declared by `image`,
+`image_2layer`, `mom` and `mom_sommerfeld`; `fem` raises
+`BackendCapabilityError`. `solve_mutual_*` ignore the sources of the world,
+as before. Validation (`tests/test_voltage_sources.py`): the voltage solve
+equals the 1 A current-source solve scaled by $U/Z_\text{in}$ in every
+backend, two- and three-layer soil, the cross-layer path and inductive
+conductors at 0, 50 and 1000 Hz (at most $1.4\cdot 10^{-15}$ relative); a
+two-terminal source equals $U/(Z_{11}+Z_{22}-Z_{12}-Z_{21})$ of
+`solve_mutual_matrix`, three voltage sources the hand-inverted transfer
+matrix of three 1 A solves, a rod Dwight's formula (−0.012 %) and its far
+field the hemispherical $\rho I/(2\pi r)$.

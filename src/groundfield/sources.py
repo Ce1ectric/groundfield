@@ -1,10 +1,12 @@
-"""Source models for current injection.
+"""Source models: impressed currents and impressed voltages.
 
 Grounding studies are dominated by **current sources**: ground-fault
 currents, test currents in loop measurements, lightning partial
 currents. A source feeds a *node* of the network — an electrode or a
 leakage-free junction (:class:`~groundfield.geometry.junction.Junction`)
-— and, optionally, takes its current back at a second node.
+— and, optionally, takes its current back at a second node. A
+**voltage source** impresses a potential difference between the same
+two terminals instead and the solve returns its current.
 
 One-terminal and two-terminal sources
 -------------------------------------
@@ -24,11 +26,48 @@ remote earth.
 
 Voltage sources
 ---------------
-:class:`VoltageSource` is kept as a data model (worlds written by
-earlier releases load), but no backend implements an impressed voltage:
-solving a world that contains one raises :class:`NotImplementedError`.
-The problem is linear, so a voltage $U$ at the feeding point is the
-current source $I = U / Z_\\text{in}$ — solve with 1 A and scale.
+A :class:`VoltageSource` is an ideal voltage $U = |U|\\,e^{j\\varphi}$
+(RMS phasor, ``magnitude`` in V) between ``attached_to`` and
+``return_to``, or between ``attached_to`` and remote earth (the
+potential reference) for ``return_to=None``:
+
+$$
+\\varphi_a - \\varphi_r = U .
+$$
+
+Its current $I$ is an unknown of the solve (modified nodal analysis:
+one constraint row and one current unknown per voltage source in the
+nodal system of electrodes, junctions and conductor branches) and
+follows the sign convention of a current source: it flows from the
+source into ``attached_to`` and back out of ``return_to``. The result
+reports it in :attr:`~groundfield.solver.result.SourceRecord.current`,
+the impressed voltage in :attr:`~groundfield.solver.result.SourceRecord.voltage`,
+and ``input_impedance()`` is $U / I$. The problem is linear: a voltage
+source gives the solution of a 1 A current source at the same terminals
+scaled by $U / Z_\\text{in}$, also with several sources, conductors,
+inductive coupling and layered soil (to round-off,
+``tests/test_voltage_sources.py``).
+
+* Several voltage and current sources superpose; for one voltage
+  source alone the others are shorted (0 V), the current sources open.
+* A voltage source of 0 V is an ideal short between its terminals (or
+  to remote earth); the solve returns the current through it.
+* The source is ideal (no internal impedance). A series impedance is a
+  junction at the source terminal and a finite conductor to the
+  electrode (``lumped_series_resistance_ohm``, or an inductive
+  conductor model).
+* Rejected before any numerics run (:meth:`World.check
+  <groundfield.world.World.check>`): a voltage source whose terminals
+  are bonded into one cluster by ideal conductors (short circuit), and
+  voltage sources that form a loop through ideal bonds or remote earth
+  (two of them from one cluster to remote earth, a ring of two-terminal
+  ones) — the loop fixes one potential difference twice.
+* Backends without the registry capability ``voltage_sources`` (the
+  experimental ``fem``) raise
+  :class:`~groundfield.solver.registry.BackendCapabilityError`.
+
+Up to 0.15.0 every backend dropped voltage sources with a warning, so a
+world driven by one solved to zero potentials (review finding 10.51).
 
 Notes
 -----
@@ -106,22 +145,32 @@ class CurrentSource(_SourceBase):
 
 
 class VoltageSource(_SourceBase):
-    """Impressed voltage source — not implemented by any backend.
+    """Impressed (ideal) voltage source.
 
-    Kept as a data model so that worlds written by earlier releases
-    load. Solving a world that contains a voltage source raises
-    :class:`NotImplementedError` (up to 0.15.0 it solved to all-zero
-    potentials with a warning). Use a :class:`CurrentSource` instead:
-    the problem is linear, so the voltage $U$ at the feeding point
-    corresponds to the current $I = U / Z_\\text{in}$, with
-    $Z_\\text{in}$ from
-    :meth:`~groundfield.solver.result.FieldResult.input_impedance` of
-    a 1 A solve.
+    Fixes the potential of ``attached_to`` at $U$ above ``return_to``,
+    or above remote earth for ``return_to=None``:
+    $\\varphi_a - \\varphi_r = U = |U|\\,e^{j\\varphi}$. The source
+    current $I$ (from the source into ``attached_to``) is solved for
+    and reported in :attr:`~groundfield.solver.result.SourceRecord.current`;
+    :meth:`~groundfield.solver.result.FieldResult.input_impedance` is
+    $U / I$. See the module docstring for the semantics, the checks and
+    the backends that solve it.
+
+    Attributes
+    ----------
+    magnitude
+        Voltage amplitude in V (RMS in the frequency domain); finite.
+        0 V is an ideal short (its current is still solved for); a world
+        needs at least one source of non-zero magnitude.
+    phase_deg
+        Phase angle in degrees; finite. Default 0.
     """
 
     kind: Literal["voltage"] = "voltage"
     magnitude: float = Field(..., allow_inf_nan=False, description="|U| in V.")
-    phase_deg: float = Field(default=0.0, allow_inf_nan=False)
+    phase_deg: float = Field(
+        default=0.0, allow_inf_nan=False, description="Phase angle in degrees."
+    )
 
 
 #: Discriminated union over the concrete source subclasses. The

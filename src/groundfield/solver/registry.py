@@ -255,6 +255,11 @@ class BackendCapabilities:
         (``World.junctions``): conductors ending on them and sources
         attached to them. A world with junctions is rejected by a
         backend without this capability.
+    voltage_sources
+        Whether the backend solves impressed voltage sources
+        (:class:`~groundfield.sources.VoltageSource`, modified nodal
+        analysis; 2026.11). A world with a voltage source is rejected by
+        a backend without this capability.
     kernels
         Source kernels the backend implements (``"point"``,
         ``"line"``). Empty for backends without a source kernel
@@ -269,6 +274,7 @@ class BackendCapabilities:
     two_terminal_sources: bool = False
     kernels: AbstractSet[str] = frozenset({"point"})
     junctions: bool = False
+    voltage_sources: bool = False
 
     def __post_init__(self) -> None:
         for name, allowed in (
@@ -898,6 +904,9 @@ def _hard_problems(
     junctions = [j.name for j in world.junctions]
     if junctions and not caps.junctions:
         problems.append(f"it does not support junction nodes ({junctions})")
+    voltage = [s.name for s in world.sources if s.kind == "voltage"]
+    if voltage and not caps.voltage_sources:
+        problems.append(f"it does not implement impressed voltage sources ({voltage})")
     if (
         kernel is not None
         and kernel_explicit
@@ -923,6 +932,16 @@ def _capable_backends(
         if not _hard_problems(run, world, kernel, kernel_explicit):
             names.append(f"'{name}'" + (" (experimental)" if run.experimental else ""))
     return names
+
+
+def _voltage_capable_backends() -> str:
+    """Registered backends that solve voltage sources, for messages."""
+    names = [
+        f"'{n}'"
+        for n in available_backends()
+        if _capabilities(_REGISTRY[n]).voltage_sources
+    ]
+    return ", ".join(names) if names else "none"
 
 
 def check_capabilities(
@@ -1076,6 +1095,7 @@ def _register_builtins() -> None:
             two_terminal_sources=True,
             kernels=_IMAGE_KERNELS,
             junctions=True,
+            voltage_sources=True,
         ),
         forward={"two_layer": "image_2layer", "multi_layer": "image_nlayer"},
         summary="Homogeneous soil, closed-form image-charge sum.",
@@ -1090,6 +1110,7 @@ def _register_builtins() -> None:
             two_terminal_sources=True,
             kernels=_IMAGE_KERNELS,
             junctions=True,
+            voltage_sources=True,
         ),
         summary="Two-layer soil, Tagg / Sunde image series.",
     )
@@ -1105,6 +1126,7 @@ def _register_builtins() -> None:
             two_terminal_sources=True,
             kernels=_IMAGE_KERNELS,
             junctions=True,
+            voltage_sources=True,
         ),
         deprecated_alias_of="image",
         summary="Layered soil routed to image (n = 1) or image_2layer (n = 2).",
@@ -1116,7 +1138,8 @@ def _register_builtins() -> None:
         summary="Deprecated name of the image auto-dispatch (10.76).",
     )
     # The point-matching family runs the shared inject / build_topology
-    # steps (10.75): return_to and junction nodes are honoured.
+    # steps (10.75): return_to, junction nodes and voltage sources are
+    # honoured.
     register_backend(
         "mom",
         "groundfield.solver.mom:solve_mom",
@@ -1124,6 +1147,7 @@ def _register_builtins() -> None:
             soils={"homogeneous", "two_layer"},
             two_terminal_sources=True,
             junctions=True,
+            voltage_sources=True,
         ),
         summary="Method of moments, point-matching collocation.",
     )
@@ -1134,6 +1158,7 @@ def _register_builtins() -> None:
             soils={"homogeneous", "two_layer", "multi_layer"},
             two_terminal_sources=True,
             junctions=True,
+            voltage_sources=True,
         ),
         options_model=MomSommerfeldOptions,
         summary="Method of moments with Sommerfeld quadrature, any n.",

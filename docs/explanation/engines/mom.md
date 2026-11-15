@@ -91,6 +91,7 @@ equal.
 
 `mom` runs the shared pipeline of the image family (discretise, inject,
 topology, branches; ADR-0014): two-terminal sources (`return_to`),
+voltage sources (one current unknown and one constraint row each),
 junction nodes and inductive conductors behave exactly as with `image`.
 Concrete-shell electrodes are rejected by the registry (only the image
 family consumes the shell coefficient).

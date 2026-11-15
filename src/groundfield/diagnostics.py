@@ -577,8 +577,8 @@ def _nodal_unknowns(world: "World", layer_interfaces=None) -> int:
     grid, an arm of a star, a straight run of a polyline, user decisions
     Q30 and Q44 —, its part in every further soil layer, every leaking
     conductor sub-piece), per node (one per electrode cluster, junction and
-    interior conductor node) and per branch (lumped conductors and every
-    chain sub-piece). Its matrix has $n^2$ entries and is allocated whole,
+    interior conductor node), per branch (lumped conductors and every
+    chain sub-piece) and per voltage source (its current, 2026.11). Its matrix has $n^2$ entries and is allocated whole,
     so a long conductor chain of fine sub-pieces dominates the memory long
     before the leakage segments do (audit round 2, A2S-02: a 100 m PEN in
     2000 isolated pieces, 12 segments and about 4000 unknowns, took
@@ -600,7 +600,8 @@ def _nodal_unknowns(world: "World", layer_interfaces=None) -> int:
     Returns
     -------
     int
-        Owners plus nodes plus branches; an electrode counts as one owner
+        Owners plus nodes plus branches plus one unknown (the source
+        current) per voltage source; an electrode counts as one owner
         per straight wire and soil layer and one node (every electrode its
         own cluster).
     """
@@ -613,6 +614,8 @@ def _nodal_unknowns(world: "World", layer_interfaces=None) -> int:
             crossings = sum(1 for h in interfaces if lower[2] < h < upper[2])
         n += 1 + _straight_wire_count(e) * (1 + crossings)
     n += sum(_conductor_unknowns(c) for c in world.conductors)
+    # Modified nodal analysis: one current unknown per voltage source.
+    n += sum(1 for s in world.sources if s.kind == "voltage")
     return n
 
 

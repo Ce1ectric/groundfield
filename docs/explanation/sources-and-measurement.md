@@ -12,8 +12,10 @@ fall-of-potential measurement is wired since 2026.11.
 
 The engines solve a linear network: soil multiport, conductor branches
 and nodes (see the [engine family](engines/index.md#network-equations)).
-Sources enter as impressed node currents, so every quantity is linear in
-the source currents and results of several sources superpose. The
+Current sources enter as impressed node currents, voltage sources as a
+fixed potential difference between their terminals whose current is an
+unknown (modified nodal analysis), so every quantity is linear in the
+source values and results of several sources superpose. The
 potential reference is **remote earth**: $\varphi \to 0$ far away from
 all electrodes. A potential of an electrode is therefore its earth
 potential rise (EPR) against remote earth, and a voltage between two
@@ -40,9 +42,24 @@ superposition of two one-terminal injections
 
 Sources are validated before any work is done (`World.check`, called by
 every solve): unknown node names raise with a did-you-mean suggestion,
-magnitudes must be finite and non-zero, a source whose two terminals end
-in one cluster (a short circuit) raises, and voltage sources raise
-`NotImplementedError` — they were never solved (finding 10.66).
+magnitudes must be finite, a current source must not be 0 A, a source whose
+two terminals end in one cluster (a short circuit) raises, and so do voltage
+sources that form a loop (finding 10.66).
+
+## Voltage sources
+
+A `VoltageSource` holds `attached_to` at the voltage $U$ above `return_to`
+(or above remote earth) — an instrument that drives a test voltage, the
+feeding voltage of a fault loop. Its current is solved for and reported
+like the impressed current of a current source
+(`result.sources[k].current`, `input_impedance()` $= U/I$). The answer is
+the 1 A current-source solve scaled by $U/Z_\text{in}$; a voltage source
+saves that step and keeps several voltage-driven terminals in one solve,
+where scaling would need the transfer matrix of all of them. A voltage
+behind an internal impedance is a junction at the terminal, a finite
+conductor to the electrode and the source at the junction. Up to 0.15.0
+voltage sources were dropped with a warning (finding 10.51); they are
+solved since 2026.11 ([sources](../reference/api/sources.md)).
 
 ## Junctions
 
@@ -128,12 +145,12 @@ and the feed lead — not the reading; `measured_impedance` is the reading.
 
 ## Validity
 
-- The source model is ideal: an impressed current, no internal impedance.
-  Voltage sources are not solved.
-- Two-terminal sources and junctions are supported by the image family and
-  the `mom` family (registry capabilities `two_terminal_sources`,
-  `junctions`); `fem` ignores `return_to` (with a warning) and rejects
-  junctions.
+- The source model is ideal: an impressed current or an impressed voltage,
+  no internal impedance (model one with a junction and a finite conductor).
+- Two-terminal sources, junctions and voltage sources are supported by the
+  image family and the `mom` family (registry capabilities
+  `two_terminal_sources`, `junctions`, `voltage_sources`); `fem` ignores
+  `return_to` (with a warning) and rejects junctions and voltage sources.
 - Measured readings include the coupling of the leads only if the leads
   are modelled as inductive conductors (`inductance_model="neumann"`).
 

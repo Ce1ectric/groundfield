@@ -107,10 +107,19 @@ def _solved_source_current(
     result: "FieldResult", source: "Source", frequency_index: int
 ) -> complex:
     """Source current of the solve: the snapshot in ``result.sources`` when
-    present (the world may have been edited since), else the world's source."""
+    present (the world may have been edited since), else the world's source.
+
+    The current of a voltage source is a solved quantity: it is read from
+    the snapshot only.
+    """
     for record in result.sources:
-        if record.name == source.name and record.kind == "current" and record.current:
+        if record.name == source.name and record.kind == source.kind and record.current:
             return complex(record.current[frequency_index])
+    if source.kind == "voltage":
+        raise ValueError(
+            f"Voltage source '{source.name}': the result carries no solved "
+            "source current (FieldResult.sources)."
+        )
     return _source_current(source)
 
 
@@ -131,8 +140,8 @@ def _unique_clusters(result: "FieldResult") -> dict[str, list[str]]:
 
 
 def _resolve_source(world: "World", source_name: str | None) -> "Source":
-    """Pick a current source from the world (single-source default)."""
-    current_sources = [s for s in world.sources if s.kind == "current"]
+    """Pick a current or voltage source from the world (single-source default)."""
+    current_sources = [s for s in world.sources if s.kind in ("current", "voltage")]
     if not current_sources:
         raise ValueError("World contains no current source.")
     if source_name is None:
@@ -421,7 +430,8 @@ def split_factor(
     The denominator :math:`I_\\text{src}` is the source current of the
     solve, read from the snapshot :attr:`FieldResult.sources` when the
     result carries one (since review pass 10); otherwise from the
-    world's source.
+    world's source. For a voltage source it is the solved source current
+    (since 2026.11).
 
     Not to be confused with the *Reduktionsfaktor*
     -----------------------------------------------

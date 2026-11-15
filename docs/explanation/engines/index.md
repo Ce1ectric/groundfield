@@ -127,6 +127,23 @@ matrix. Sources inject $+I$ at `attached_to` and, if set, $-I$ at
 source floats: it takes the potential the field imposes with zero net
 current, which keeps transfer impedances reciprocal.
 
+An impressed voltage source (`VoltageSource`, since 2026.11) is added by
+modified nodal analysis: its current $I_v$ becomes one more unknown, which
+enters Kirchhoff's current law at `attached_to` and `return_to`, and one
+more row fixes $\varphi_a - \varphi_r = U$ ($\varphi_r = 0$ for remote
+earth). With the terminal incidence $S$ the system grows by one block row
+and column,
+
+$$
+\begin{bmatrix} Z & -C & 0 & 0 \\ C^{\top} & 0 & B^{\top} & -S \\ 0 & B & -Z_b(\omega) & 0 \\ 0 & S^{\top} & 0 & 0 \end{bmatrix}
+\begin{bmatrix} \mathbf I_e \\ \boldsymbol\varphi_n \\ \mathbf I_b \\ \mathbf I_v \end{bmatrix}
+=
+\begin{bmatrix} \mathbf 0 \\ \mathbf I_\text{in} \\ \mathbf 0 \\ \mathbf U \end{bmatrix},
+$$
+
+and the solution of a world without voltage sources is unchanged. The
+`mom` family borders its segment-level system the same way.
+
 ## The registered backends
 
 Backends are registered in `groundfield.solver.registry` with their solve
@@ -140,16 +157,16 @@ frequencies, segments, soil kind, earth model, solve time, series controls,
 provenance) into every result. The table is generated from the registry:
 
 <!-- generated:begin registry -->
-| Name | Status | What it runs | Soil layers | Kernel (default first) | `return_to`, junctions | Concrete shells | Conductor models | Options |
+| Name | Status | What it runs | Soil layers | Kernel (default first) | `return_to`, junctions, voltage sources | Concrete shells | Conductor models | Options |
 |---|---|---|---|---|---|---|---|---|
-| `image` | current | Homogeneous soil, closed-form image-charge sum; forwards two_layer → `image_2layer`, multi_layer → `image_nlayer` | 1, 2 | `line`, `point` | yes, yes | yes | distributed, inductive, lumped, skin | — |
-| `image_2layer` | current | Two-layer soil, Tagg / Sunde image series | 2 | `line`, `point` | yes, yes | yes | distributed, inductive, lumped, skin | — |
-| `image_nlayer` | deprecated name of `image` | Layered soil routed to image (n = 1) or image_2layer (n = 2) | 1, 2 | `line`, `point` | yes, yes | yes | distributed, inductive, lumped, skin | — |
-| `cim` | deprecated name of `image` | Deprecated name of the image auto-dispatch (10.76) | 1, 2 | `line`, `point` | yes, yes | yes | distributed, inductive, lumped, skin | — |
-| `mom` | current | Method of moments, point-matching collocation | 1, 2 | `point` | yes, yes | no | distributed, inductive, lumped, skin | — |
-| `mom_sommerfeld` | current | Method of moments with Sommerfeld quadrature, any n | 1, 2, ≥ 3 | `point` | yes, yes | no | distributed, inductive, lumped, skin | `MomSommerfeldOptions` |
-| `bem` | deprecated name of `mom` | Deprecated name of 'mom' (10.76) | 1, 2 | `point` | yes, yes | no | distributed, inductive, lumped, skin | — |
-| `fem` | experimental | Axisymmetric finite elements of an equivalent hemisphere | 1, 2, ≥ 3 | none (volume mesh) | no, no | no | lumped | `FemOptions` |
+| `image` | current | Homogeneous soil, closed-form image-charge sum; forwards two_layer → `image_2layer`, multi_layer → `image_nlayer` | 1, 2 | `line`, `point` | yes, yes, yes | yes | distributed, inductive, lumped, skin | — |
+| `image_2layer` | current | Two-layer soil, Tagg / Sunde image series | 2 | `line`, `point` | yes, yes, yes | yes | distributed, inductive, lumped, skin | — |
+| `image_nlayer` | deprecated name of `image` | Layered soil routed to image (n = 1) or image_2layer (n = 2) | 1, 2 | `line`, `point` | yes, yes, yes | yes | distributed, inductive, lumped, skin | — |
+| `cim` | deprecated name of `image` | Deprecated name of the image auto-dispatch (10.76) | 1, 2 | `line`, `point` | yes, yes, yes | yes | distributed, inductive, lumped, skin | — |
+| `mom` | current | Method of moments, point-matching collocation | 1, 2 | `point` | yes, yes, yes | no | distributed, inductive, lumped, skin | — |
+| `mom_sommerfeld` | current | Method of moments with Sommerfeld quadrature, any n | 1, 2, ≥ 3 | `point` | yes, yes, yes | no | distributed, inductive, lumped, skin | `MomSommerfeldOptions` |
+| `bem` | deprecated name of `mom` | Deprecated name of 'mom' (10.76) | 1, 2 | `point` | yes, yes, yes | no | distributed, inductive, lumped, skin | — |
+| `fem` | experimental | Axisymmetric finite elements of an equivalent hemisphere | 1, 2, ≥ 3 | none (volume mesh) | no, no, no | no | lumped | `FemOptions` |
 <!-- generated:end registry -->
 
 Backend-specific settings live in `Engine.options`, keyed by backend name

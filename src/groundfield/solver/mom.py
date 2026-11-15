@@ -41,7 +41,9 @@ Method
    = \\begin{bmatrix} 0 \\\\ I_\\text{in} \\end{bmatrix}
    $$
 
-   (plus one row and column per finite conductor branch), where $C$ is
+   (plus one row and column per finite conductor branch and per
+   impressed voltage source, whose current is an unknown and whose row
+   fixes $\\varphi_a - \\varphi_r = U$), where $C$ is
    the segment-to-node membership matrix: every segment midpoint of a
    node sits at the node potential, and the segment currents of a node
    add up to its injected current. $Z$ is symmetric; the bordered
@@ -133,21 +135,24 @@ from groundfield.solver._series import (
     SeriesTruncationWarning,
     _series_tail_bound,
 )
+from groundfield.solver._topology import _voltage_source_entries, _voltage_source_rhs
 from groundfield.solver.image_2layer import _two_layer_self_kernel_factory
 from groundfield.solver.result import FieldResult, PointSource
 from groundfield.utils.logging import get_logger
 
 if TYPE_CHECKING:  # pragma: no cover
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
 
     from groundfield.soil.models import SoilModel
     from groundfield.solver._discretize import _Segment
     from groundfield.solver._pipeline import (
         BranchModel,
         Discretisation,
+        ImpressedVoltage,
         SelfKernel,
         Topology,
     )
+    from groundfield.solver._topology import VoltageTerminals
     from groundfield.solver.engine import Engine
     from groundfield.world import World
 
@@ -278,6 +283,7 @@ def _floating_clusters(
     cluster_id: dict[str, str],
     finite_branches: list[tuple[str, str, float]],
     electrode_names: set[str],
+    driven_nodes=(),
 ) -> set[str]:
     """Electrode clusters with neither a source nor a finite branch.
 
@@ -285,8 +291,11 @@ def _floating_clusters(
     reported per-electrode currents are made to sum to exactly zero (see
     :func:`_node_results`), so :meth:`FieldResult.cluster_impedance`
     returns ``nan`` for them instead of a ratio of round-off.
+    ``driven_nodes`` names further driven nodes (the terminals of the
+    voltage sources).
     """
     sourced = {cluster_id[e] for e, ic in elec_input_current.items() if ic != 0j}
+    sourced |= {cluster_id[n] for n in driven_nodes}
     linked = {a for a, _b, _R in finite_branches} | {b for _a, b, _R in finite_branches}
     roots = {cluster_id[e] for e in electrode_names}
     return roots - sourced - linked
@@ -370,6 +379,8 @@ def _point_matching_solve(
     omega: float = 0.0,
     inductance_matrix: np.ndarray | None = None,
     carson_correction: np.ndarray | None = None,
+    voltage_sources: list[VoltageTerminals] | None = None,
+    source_currents: list[complex] | None = None,
 ) -> tuple[np.ndarray, dict[str, complex]]:
     """Solve the point-matching linear system on segment level.
 
@@ -404,6 +415,15 @@ def _point_matching_solve(
     ``finite_branches in (None, [])`` the system collapses exactly to
     the bordered (N_a + K_a) × (N_a + K_a) system of the module docstring.
 
+    Impressed voltage sources (2026.11) border the system once more, as
+    in the image family (modified nodal analysis,
+    :func:`~groundfield.solver._topology._voltage_source_entries`): one
+    unknown per source, its current, after the branch currents, and one
+    row $\\varphi_a - \\varphi_r = U$. ``voltage_sources`` holds
+    ``(root_a, root_r, U)`` per source (cluster roots, ``root_r`` ``None``
+    for remote earth, U in V); ``source_currents``, if given, receives
+    their currents in A.
+
     Unknown set (review pass 10, 10.29): *every* node of a component
     (nodes joined by finite branches) that has galvanic contact to the
     soil, also when the component carries no source. A source-free
@@ -435,9 +455,10 @@ def _point_matching_solve(
         cluster_input.setdefault(cluster_id[ename], 0j)
         cluster_input[cluster_id[ename]] += ic
 
+    voltage_sources = list(voltage_sources or [])
     seg_currents = np.zeros(n_segments, dtype=complex)
     cluster_potential: dict[str, complex] = {}
-    if not cluster_input:
+    if not cluster_input and not voltage_sources:
         # No source anywhere: the (non-singular) system has the zero
         # solution.
         return seg_currents, cluster_potential
@@ -489,8 +510,9 @@ def _point_matching_solve(
     # Reduced reaction matrix on the active segments.
     Z_active = Z[np.ix_(active_seg_indices_arr, active_seg_indices_arr)]
 
-    # Build the augmented system A · x = b.
-    n_unknowns = N_a + K_a + M_a
+    # Build the augmented system A · x = b (voltage sources last).
+    n_volt = len(voltage_sources)
+    n_unknowns = N_a + K_a + M_a + n_volt
     A = np.zeros((n_unknowns, n_unknowns))
     # Block 1: Z_seg · I_seg − C_s · phi_n = 0
     A[:N_a, :N_a] = Z_active
@@ -514,6 +536,10 @@ def _point_matching_solve(
         A[N_a + K_a + m, N_a + ka] = +1.0
         A[N_a + K_a + m, N_a + kb] = -1.0
         A[N_a + K_a + m, N_a + K_a + m] = -R
+    if n_volt:
+        _voltage_source_entries(
+            A, voltage_sources, cluster_idx, node_offset=N_a, first=N_a + K_a + M_a
+        )
 
     # Right-hand side.
     b_re = np.zeros(n_unknowns)
@@ -522,6 +548,8 @@ def _point_matching_solve(
         ic = cluster_input.get(c, 0j)
         b_re[N_a + k] = ic.real
         b_im[N_a + k] = ic.imag
+    if n_volt:
+        _voltage_source_rhs(b_re, b_im, voltage_sources, first=N_a + K_a + M_a)
 
     use_inductive = inductance_matrix is not None and omega != 0.0 and M_a > 0
 
@@ -532,6 +560,7 @@ def _point_matching_solve(
         sol_re, sol_im = sol[:, 0], sol[:, 1]
         I_active = sol_re[:N_a] + 1j * sol_im[:N_a]
         phi_active = sol_re[N_a : N_a + K_a] + 1j * sol_im[N_a : N_a + K_a]
+        i_volt = sol_re[N_a + K_a + M_a :] + 1j * sol_im[N_a + K_a + M_a :]
     else:
         # Inductive coupling: the branch block carries jω·L, with
         # ``inductance_matrix`` covering the full ``finite_branches``
@@ -575,10 +604,13 @@ def _point_matching_solve(
         sol = np.linalg.solve(A_c, b_c)
         I_active = sol[:N_a]
         phi_active = sol[N_a : N_a + K_a]
+        i_volt = sol[N_a + K_a + M_a :]
 
     seg_currents[active_seg_indices_arr] = I_active
     for k, c in enumerate(active_clusters):
         cluster_potential[c] = complex(phi_active[k])
+    if source_currents is not None:
+        source_currents[:] = [complex(i) for i in i_volt]
 
     return seg_currents, cluster_potential
 
@@ -803,6 +835,7 @@ def _point_matching_step(
     branches: BranchModel,
     Z: np.ndarray,
     potentials: Callable[[np.ndarray], np.ndarray],
+    voltages: Sequence[ImpressedVoltage] = (),
 ) -> tuple[Solution, list[dict[str, complex]]]:
     """Solve step of the point-matching family (replaces pipeline step 5).
 
@@ -821,6 +854,10 @@ def _point_matching_step(
     potentials
         ``seg_currents -> segment-midpoint potentials`` of the Green's
         function.
+    voltages
+        Voltage sources of the world
+        (:func:`~groundfield.solver._pipeline.impressed_voltages`); their
+        currents are returned in :attr:`Solution.voltage_source_currents`.
 
     Returns
     -------
@@ -833,6 +870,8 @@ def _point_matching_step(
     """
     n_freq = len(engine.frequencies)
     n_segments = len(disc.segments)
+    terminals = [v.terminals(topo.cluster_id) for v in voltages]
+    v_currents: list[dict[str, complex]] = []
 
     def _solve_at(omega: float) -> tuple[np.ndarray, np.ndarray, dict[str, complex]]:
         correction = (
@@ -840,6 +879,7 @@ def _point_matching_step(
             if branches.earth_correction is not None
             else None
         )
+        source_currents: list[complex] = []
         sc, node_phi = _point_matching_solve(
             Z=Z,
             elec_input_current=node_currents,
@@ -850,7 +890,13 @@ def _point_matching_step(
             omega=omega if branches.has_inductance else 0.0,
             inductance_matrix=branches.inductance_matrix,
             carson_correction=correction,
+            voltage_sources=terminals or None,
+            source_currents=source_currents if terminals else None,
         )
+        if terminals:
+            v_currents.append(
+                {v.name: i for v, i in zip(voltages, source_currents, strict=True)}
+            )
         ph = np.zeros(n_segments, dtype=complex)
         if sc.any():
             ph = potentials(sc)
@@ -870,6 +916,7 @@ def _point_matching_step(
         sc_per_freq = [sc] * n_freq
         phi_per_freq = [ph] * n_freq
         node_phi_per_freq = [node_phi] * n_freq
+        v_currents = v_currents * n_freq
     owner_currents = [
         {
             name: complex(sc[idxs].sum())
@@ -883,6 +930,7 @@ def _point_matching_step(
             owner_currents=owner_currents,
             segment_currents=sc_per_freq,
             segment_potentials=phi_per_freq,
+            voltage_source_currents=v_currents,
         ),
         node_phi_per_freq,
     )
@@ -901,6 +949,7 @@ def _point_matching_result(
     solution: Solution,
     node_potentials: list[dict[str, complex]],
     metadata: dict,
+    voltages: Sequence[ImpressedVoltage] = (),
 ) -> FieldResult:
     """Build the result of the point-matching family (pipeline step 6).
 
@@ -927,7 +976,11 @@ def _point_matching_result(
         cluster_id=topo.cluster_id,
         electrode_names=real_set,
         floating=_floating_clusters(
-            node_currents, topo.cluster_id, topo.finite_branches, real_set
+            node_currents,
+            topo.cluster_id,
+            topo.finite_branches,
+            real_set,
+            _pipeline.voltage_terminal_nodes(voltages),
         ),
         n_freq=n_freq,
     )
@@ -986,6 +1039,7 @@ def _point_matching_result(
         soil=green.soil,
         clusters=clusters,
         metadata=metadata,
+        sources=_pipeline.solved_source_records(world, n_freq, solution),
     )
 
 
@@ -1029,6 +1083,7 @@ def solve_point_matching(
     # ``assemble_branches``) reaches this family unchanged.
     disc = _pipeline.discretise(world, engine, green.layer_interfaces)
     node_currents = _pipeline.inject(world, where=green.where, stacklevel=stacklevel)
+    voltages = _pipeline.impressed_voltages(world)
     topo = _pipeline.build_topology(world, disc)
     branches = _pipeline.assemble_branches(world, engine, topo)
     # Burial-depth validation of the galvanic image construction, as in
@@ -1046,6 +1101,7 @@ def solve_point_matching(
         branches=branches,
         Z=Z,
         potentials=lambda sc: green.segment_potentials(kernel, Z, arrays, sc),
+        voltages=voltages,
     )
     metadata = {
         "world_name": world.name,
@@ -1068,6 +1124,7 @@ def solve_point_matching(
         solution=solution,
         node_potentials=node_potentials,
         metadata=metadata,
+        voltages=voltages,
     )
 
 

@@ -158,13 +158,15 @@ def test_non_finite_phase_is_rejected() -> None:
 
 
 @pytest.mark.finding("10.51")
-def test_voltage_source_raises_not_implemented_naming_the_alternative() -> None:
+def test_voltage_source_solves_and_fixes_the_feeding_potential() -> None:
+    """Since 2026.11 a voltage source is solved (it raised before; up to
+    0.15.0 it solved to zero potentials). ``tests/test_voltage_sources.py``
+    validates it against scaled current-source solves and closed forms."""
     w = _world()
     w.add_source(VoltageSource(name="v1", attached_to="g1", magnitude=230.0))
-    with pytest.raises(
-        NotImplementedError, match=r"(?s)CurrentSource.*input_impedance"
-    ):
-        w.solve(_engine())
+    res = _solve(w)
+    assert abs(res.electrode_potentials["g1"][0] - 230.0) < 1e-9
+    assert res.sources[0].current[0].real > 0.0
 
 
 # ---------------------------------------------------------------------

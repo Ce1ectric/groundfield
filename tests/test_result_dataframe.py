@@ -34,6 +34,7 @@ SOURCE_COLUMNS = [
     "attached_to",
     "return_to",
     "current_a",
+    "voltage_v",
     "input_impedance_ohm",
 ]
 

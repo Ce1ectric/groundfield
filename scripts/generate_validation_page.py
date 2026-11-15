@@ -1033,7 +1033,8 @@ def registry_table() -> str:
 
     lines = [
         "| Name | Status | What it runs | Soil layers | Kernel (default first) "
-        "| `return_to`, junctions | Concrete shells | Conductor models | Options |",
+        "| `return_to`, junctions, voltage sources | Concrete shells "
+        "| Conductor models | Options |",
         "|---|---|---|---|---|---|---|---|---|",
     ]
     for name in registry.available_backends(include_deprecated=True):
@@ -1062,7 +1063,8 @@ def registry_table() -> str:
         lines.append(
             f"| `{name}` | {status} | {_cell(summary)}{_cell(forward)} | "
             f"{soils(impl)} | {kernel} | "
-            f"{yes(caps.two_terminal_sources)}, {yes(caps.junctions)} | "
+            f"{yes(caps.two_terminal_sources)}, {yes(caps.junctions)}, "
+            f"{yes(caps.voltage_sources)} | "
             f"{yes(caps.concrete_shells)} | {', '.join(sorted(caps.conductors))} | "
             f"{'`' + options + '`' if options != '—' else options} |"
         )

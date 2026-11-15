@@ -602,19 +602,21 @@ def create_source(
         ``None``.
     kind
         ``"current"`` (default) or ``"voltage"`` (:data:`SourceKind`).
-        No backend implements voltage sources: a world containing one
-        raises :class:`NotImplementedError` when solved.
+        A voltage source fixes ``attached_to`` at ``magnitude`` volts
+        above ``return_to`` (or remote earth); its current is solved for
+        (:class:`~groundfield.sources.VoltageSource`; not by ``fem``).
     magnitude
         Amplitude in A (current source) or V (voltage source), RMS;
-        finite. A source of magnitude 0 is rejected when the world is
-        solved.
+        finite. A current source of magnitude 0 is rejected when the
+        world is solved; a voltage source of 0 V is an ideal short.
     phase_deg
         Phase angle in degrees; finite.
     return_to
         Optional second terminal (electrode or junction, or its name):
         the source injects $+I$ at ``attached_to`` and $-I$ at
         ``return_to`` (auxiliary electrode of a fall-of-potential
-        measurement, return conductor end). ``None`` (default) returns
+        measurement, return conductor end); a voltage source holds
+        ``attached_to`` at $U$ above it. ``None`` (default) returns
         the current through remote earth.
 
     Returns
