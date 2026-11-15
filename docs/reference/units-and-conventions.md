@@ -61,8 +61,8 @@ carry a lower-case unit suffix (`depth_m`, `concrete_rho_ohm_m`,
   stars, grids, the generated house mesh). In two-layer soil an image
   distance of six segment lengths — $2nh_1$ for wires at one depth, or
   $2(nh_1 - z)$ — puts every segment's own image pair on the switch, whose
-  far form there is the point form: the spread reaches
-  0.8 … 2.6 · 10⁻⁵ in the impedance and up to 5.5 · 10⁻⁵ in touch voltages
+  far form there is the point form: the spread can reach
+  0.8 … 2.6 · 10⁻⁵ in the impedance and 5.5 · 10⁻⁵ in touch voltages
   (the generated house mesh at its default 0.8 m depth with $h_1$ = 2.3 m
   and 0.5 m segments: 9.6 · 10⁻⁶ and 1.5 · 10⁻⁵; a 12 m strip 0.6 m deep
   with $h_1$ = 2.1 m: 1.4 · 10⁻⁵ between two positions 8.3 m apart)
