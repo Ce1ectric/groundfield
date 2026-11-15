@@ -239,3 +239,91 @@ def test_w3a_02_a_rod_through_the_interface_keeps_the_reduced_collinear_images(
             res = gf.create_engine(segment_length=ds).solve(w)
         dev = float(res.cluster_impedance("r")[0].real) / exact - 1.0
         assert abs(dev) < 2e-6, (ds, dev)
+
+
+def _gap_world(kind: str, rho1: float, rho2: float, gap: float, a: float = 0.005):
+    """A ring (r0 2 m, h_1 2 m, ds 0.1 m) or a 10 m strip (h_1 1 m, ds 0.5 m)
+    at ``gap`` m above the interface (negative: below), auditor W3R2A's R6."""
+    h1 = 2.0 if kind == "ring" else 1.0
+    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=rho1, rho_2=rho2, h_1=h1))
+    if kind == "ring":
+        gf.create_electrode(
+            w, "ring", name="e", center=(0, 0, h1 - gap), radius=2.0, wire_radius=a
+        )
+    else:
+        gf.create_electrode(
+            w,
+            "strip",
+            name="e",
+            start=(0, 0, h1 - gap),
+            end=(10, 0, h1 - gap),
+            wire_radius=a,
+        )
+    gf.create_source(w, attached_to="e", magnitude=1.0)
+    return w, 0.1 if kind == "ring" else 0.5
+
+
+def _counter_trend(values: list[float]) -> float:
+    """Largest relative move of a sequence against its overall direction.
+
+    Zero for a monotone sequence; a bump that rises by 22 % and falls back
+    gives 0.22.
+    """
+    trend = 1.0 if values[-1] >= values[0] else -1.0
+    worst = 0.0
+    for k, vk in enumerate(values):
+        for vl in values[k + 1 :]:
+            worst = max(worst, trend * (vk - vl) / abs(vk))
+    return worst
+
+
+# audit W3R2A-03
+@pytest.mark.parametrize("kind", ["ring", "strip"])
+@pytest.mark.parametrize(
+    "soil", [(1000.0, 30.0), (30.0, 1000.0)], ids=["1000_30", "30_1000"]
+)
+def test_w3r2a_03_z_is_monotone_through_one_radius_of_the_interface(kind, soil) -> None:
+    """Z(gap) through ±a of the interface moves against its trend by ≤ 0.2 %.
+
+    An image within the wire radius of its segment blends into the reduced
+    kernel of the direct pair. Blended over ``a``, the self image of a wire
+    at ``d = 2g < a`` from its image took ``ρ_eff² = a² + (1 - d²/a²) d²``,
+    which peaks at ``d = a/√2``: a ring in 1000/30 read 5.993 → 7.319 →
+    5.992 Ohm between g = a/2, 0.35a and 0 (+22 %, auditor W3R2A, R6), a strip
+    +24 %. Blended over ``a/10`` the bump is gone; what remains is the step
+    between the blend and the cross-layer path at the interface (0.16 % for
+    the ring), which the interface-continuity test bounds at the interface
+    itself
+    (``tests/test_cross_layer_line_kernel.py::test_ring_resistance_is_continuous_through_a_deep_interface``).
+    """
+    rho1, rho2 = soil
+    a = 0.005
+    fractions = (1.0, 0.75, 0.5, 0.35, 0.25, 0.1, 0.05, 0.0)
+    gaps = [a * f for f in fractions] + [-a * f for f in reversed(fractions[:-1])]
+    z = []
+    for g in gaps:
+        w, ds = _gap_world(kind, rho1, rho2, g, a)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            res = gf.Engine(segment_length=ds, frequencies=[50.0]).solve(w)
+        z.append(float(res.cluster_impedance("e")[0].real))
+    assert _counter_trend(z) <= 2e-3, list(zip(gaps, z, strict=True))
+
+
+# audit W3R2A-03 (the auditor's test, with the remaining step)
+def test_w3r2a_03_a_ring_approaching_a_conductive_interface_does_not_gain_resistance() -> (
+    None
+):
+    """A ring above a more conductive lower layer loses resistance as it
+    approaches the interface (098bbbc: 10.126 / 8.370 / 6.877 / 5.992 Ohm at
+    g = 2.5 / 1.75 / 1 / 0 mm, a = 5 mm); the snapshot of the audit read
+    5.993 / 7.319 / 6.742 / 5.992 Ohm. The last step, onto the interface
+    (the cross-layer path), may rise by the 0.16 % of the blend."""
+    z = []
+    for g in (0.0025, 0.00175, 0.001, 0.0):
+        w, ds = _gap_world("ring", 1000.0, 30.0, g)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            res = gf.Engine(segment_length=ds, frequencies=[50.0]).solve(w)
+        z.append(float(res.cluster_impedance("e")[0].real))
+    assert all(z1 >= z2 - 2e-3 * z1 for z1, z2 in zip(z[:-1], z[1:], strict=True)), z

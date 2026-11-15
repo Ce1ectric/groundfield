@@ -90,6 +90,7 @@ from groundfield.solver._line_kernel import (
     SparseCorrection,
     _point_values,
     add_symmetric,
+    far_field_is_quadrupole,
     far_image_rows,
     far_images,
     galerkin_pairs,
@@ -809,13 +810,17 @@ class _LayeredImageFamilies:
     and source.
 
     With ``far_field = "point"`` (``Engine.image_far_field``, the author's
-    decision of 2026-11-15) the line form is that of the base of wave 3:
-    only the image in the interface of a pair in one layer (``ρ_1 K`` at
-    ``q - z_s`` for the upper layer, ``-ρ_2 K`` for the lower) is a Galerkin
-    integral, for the pairs within
-    :data:`~groundfield.solver._line_kernel.SWITCH_FACTOR` segment lengths
-    (blended, user decision D2) and on the diagonal at every distance; every
-    other image keeps the point form of the spectral quadrature.
+    decision of 2026-11-15) the dense far-field term is left out: every image
+    keeps its Galerkin integral for the pairs within
+    :data:`~groundfield.solver._line_kernel.SWITCH_FACTOR` segment lengths,
+    blended into the point form of the spectral quadrature (user decision
+    D2), and so does a segment's own image (the diagonal), as every pair of
+    the series path in that form; farther images are point sources. Up to
+    audit W3R2A-01 only the interface image of a pair in one layer was a
+    Galerkin integral (the base of wave 3), so the own surface and
+    transmitted images of a long segment below the interface were point
+    sources: a 75 m strip below a 0.5 m top layer read up to -58 % at a
+    segment length of 37.5 m.
     """
 
     def __init__(
@@ -825,9 +830,12 @@ class _LayeredImageFamilies:
         soil: TwoLayerSoil,
         far_field: str = "quadrupole",
     ):
-        from groundfield.solver._line_kernel import IMAGE_QUADRUPOLE_REACH
+        from groundfield.solver._line_kernel import (
+            IMAGE_QUADRUPOLE_REACH,
+            SWITCH_FACTOR,
+        )
 
-        self.quadrupole = far_field == "quadrupole"
+        self.quadrupole = far_field_is_quadrupole(far_field)
         self.line = line
         self.layer = lower.astype(np.intp)
         rho_1, rho_2, h_1 = soil.rho_1, soil.rho_2, soil.h_1
@@ -835,9 +843,12 @@ class _LayeredImageFamilies:
         c = 2.0 * rho_1 * rho_2 / (rho_1 + rho_2)
         q = 2.0 * h_1
         has = (bool((~lower).any()), bool(lower.any()))
-        # Images up to the depth where their quadrupole term is tapered off
-        # (and their weight above the floor of the spectral module).
-        reach = IMAGE_QUADRUPOLE_REACH[1] * float(line.length.max())
+        # Images up to the depth where their quadrupole term is tapered off,
+        # or, in point form, where no pair is near any more (and their
+        # weight above the floor of the spectral module).
+        reach = (
+            IMAGE_QUADRUPOLE_REACH[1] if self.quadrupole else SWITCH_FACTOR
+        ) * float(line.length.max())
         z_max = float(line.mid[:, 2].max())
         m_max = int(np.ceil((reach + 2.0 * z_max) / q)) + 1
         weights = []
@@ -867,13 +878,6 @@ class _LayeredImageFamilies:
             ([(1.0, 0.0, -1.0)], table(0.0, 0.0, 0.0, -rho_2 * K * K)),
         ]
         self.groups = [(images, tab) for images, tab in groups if images and tab.any()]
-        if not self.quadrupole:
-            # The interface image of pairs in one layer only (base of wave 3).
-            self.groups = [
-                ([(w, off, sgn) for w, off, sgn in images if off == q and sgn < 0], tab)
-                for images, tab in self.groups
-            ]
-            self.groups = [(images, tab) for images, tab in self.groups if images]
         z = line.mid[:, 2]
         self.far = [
             far_images(z, line, images) if self.quadrupole else FarImages()
@@ -974,24 +978,7 @@ class _LayeredImageFamilies:
         a = line.radius
         out = np.zeros(n)
         if not self.quadrupole:
-            # The interface image at every distance, untapered (base of wave 3).
-            for images, tab in self.groups:
-                coef_diag = tab[self.layer, self.layer]
-                for weight, offset, sign in images:
-                    img = line.image(offset, sign)
-                    dz = line.mid[:, 2] - img.mid[:, 2]
-                    idx = np.arange(n)
-                    exact = galerkin_pairs(
-                        line,
-                        idx,
-                        img,
-                        idx,
-                        transverse=True,
-                        shift=image_shift(line, img),
-                    )
-                    value = exact - 1.0 / np.sqrt(a * a + dz * dz)
-                    out += (weight * coef_diag) * value
-            return out
+            return self._point_diagonal()
         for (_, tab), far in zip(self.groups, self.far, strict=True):
             coef_diag = tab[self.layer, self.layer]
             for (weight, offset, sign), shortest in zip(
@@ -1013,6 +1000,43 @@ class _LayeredImageFamilies:
                 )
                 value = exact - 1.0 / np.sqrt(a[idx] * a[idx] + dz[idx] * dz[idx])
                 out[idx] += (weight * coef_diag[idx]) * (taper[idx] * value)
+        return out
+
+    def _point_diagonal(self) -> np.ndarray:
+        """The diagonal in point form (``far_field = "point"``), in Ω.
+
+        A segment's own image is treated as every pair (and as the self pair
+        of the series path, :func:`~groundfield.solver._line_kernel.series_corrections`):
+        the Galerkin integral minus the point value at ``s = a`` within
+        :data:`~groundfield.solver._line_kernel.NEAR_FACTOR` segment lengths
+        of vertical distance, blended into the point form up to
+        :data:`~groundfield.solver._line_kernel.SWITCH_FACTOR` (the weight of
+        :func:`~groundfield.solver._line_kernel.switch_pairs`, on the same
+        ``Δz``), the point form beyond (audit W3R2A-01).
+        """
+        from groundfield.solver._line_kernel import NEAR_FACTOR, _switch
+
+        line = self.line
+        a = line.radius
+        z = line.mid[:, 2]
+        out = np.zeros(z.shape[0])
+        lim = NEAR_FACTOR * line.length
+        for images, tab in self.groups:
+            coef_diag = tab[self.layer, self.layer]
+            for weight, offset, sign in images:
+                # Δz of switch_pairs(..., image=(z, offset, sign)), bit for bit.
+                d = (z - sign * z) - offset
+                w, _ = _switch(d * d, lim)
+                idx = np.flatnonzero((w > 0.0) & (coef_diag != 0.0))
+                if not idx.size:
+                    continue
+                img = line.image(offset, sign)
+                dz = z[idx] - img.mid[idx, 2]
+                exact = galerkin_pairs(
+                    line, idx, img, idx, transverse=True, shift=image_shift(line, img)
+                )
+                value = exact - 1.0 / np.sqrt(a[idx] * a[idx] + dz * dz)
+                out[idx] += (weight * coef_diag[idx]) * (w[idx] * value)
         return out
 
 
@@ -1330,6 +1354,8 @@ class _TwoLayerGreen:
         self.tol = tol
         self.ds = ds
         self.kernel = kernel
+        # Checked here, before it is recorded (audit W3R2A-02).
+        far_field_is_quadrupole(far_field)
         self.far_field = far_field
         # Wires are cut where the resistivity changes only, like in every
         # other backend: TwoLayerSoil(rho, rho, h) is cut nowhere, as
@@ -1506,8 +1532,10 @@ def solve_image_2layer(
     TypeError
         If ``world.soil`` is no soil model.
     ValueError
-        If the world has no electrodes, or the geometry fails a
-        discretisation guard (thin wire, burial depth).
+        If the world has no electrodes, if ``far_field`` is not one of
+        ``"quadrupole"`` and ``"point"`` (audit W3R2A-02; before, every other
+        value ran the point form and was recorded as given), or if the
+        geometry fails a discretisation guard (thin wire, burial depth).
 
     Warns
     -----

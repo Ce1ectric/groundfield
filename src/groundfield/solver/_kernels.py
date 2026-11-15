@@ -47,6 +47,7 @@ from groundfield.solver._line_kernel import (
     LineSegments,
     SparseCorrection,
     add_symmetric,
+    far_field_is_quadrupole,
     far_image_rows,
     far_images,
     field_corrections,
@@ -659,7 +660,7 @@ class TwoLayerSeriesKernel:
         far_field: str = "quadrupole",
     ):
         self.rho_1 = rho_1
-        self.quadrupole = far_field == "quadrupole"
+        self.quadrupole = far_field_is_quadrupole(far_field)
         self.pref = rho_1 / (4.0 * np.pi)
         self.series = series
         self.line = line
@@ -1024,7 +1025,7 @@ def _line_field_correction(
     when ``images`` are given, their far quadrupole terms with
     ``far_field = "quadrupole"``) — see :mod:`groundfield.solver._line_kernel`.
     """
-    quadrupole = far_field == "quadrupole"
+    quadrupole = far_field_is_quadrupole(far_field)
     from scipy.sparse import csr_matrix
 
     m, n = points.shape[0], line.mid.shape[0]

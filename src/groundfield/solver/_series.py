@@ -108,7 +108,9 @@ def series_far_field(metadata: Mapping[str, Any] | None) -> str:
     in ``FieldResult.metadata["series"]["far_field"]``; the post-solve field
     evaluation of the line kernel uses the same form as the solve. Results
     without the record (hand-built, or written before the option existed)
-    get ``"quadrupole"``, the default.
+    get ``"quadrupole"``, the default. A solve records a value of
+    ``FAR_FIELD_FORMS`` only: an unknown form raises ``ValueError`` before
+    it runs (audit W3R2A-02).
 
     Parameters
     ----------

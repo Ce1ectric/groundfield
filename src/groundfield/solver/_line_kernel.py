@@ -60,25 +60,37 @@ Images
 The soil-surface image is treated like a direct pair. The Tagg/Sunde
 images of a two-layer soil (``n >= 1``) and the images of the cross-layer
 correction (``image_2layer._LayeredImageFamilies``) are at least
-:math:`2(h_1 - z)` away from a segment. Near image pairs are Galerkin
-integrals in which the line potential of the image at a point of the
-observer uses the transverse distance :math:`\\max(\\rho_\\perp, a)` of the
-point from the image's axis (:func:`galerkin_pairs`, audit W3A-02): the
-mean value of a line potential over the wire's circumference, exact for a
+:math:`2(h_1 - z)` away from a segment.
+
+Near image pairs are Galerkin integrals in which the line potential of the
+image at a point of the observer uses the transverse distance
+:math:`\\max(\\rho_\\perp, a)` of the point from the image's axis
+(:func:`galerkin_pairs`, audit W3A-02). That is the mean value of the
+potential of a long line over the wire's circumference: exact for a long
 parallel image at any distance, and the reduced kernel for a collinear one
-(:math:`\\rho_\\perp = 0`, a rod against its own image); an image within the
-wire radius of its own segment (a wire within :math:`a/2` of the interface)
-blends into the reduced kernel of the direct pair it then nearly coincides
-with, so that a wire on the interface is continuous between the series and
-the cross-layer path (:func:`image_shift`). Far images carry
-the quadrupole term without the radius term (:func:`image_quadrupole_rows`,
-tapered off between 60 and 120 segment lengths of vertical distance,
-:data:`IMAGE_QUADRUPOLE_REACH`, and left out below
-:data:`IMAGE_QUADRUPOLE_TOL`), or stay point sources with
-``Engine.image_far_field = "point"``. The far-image work follows the pair
-(:class:`FarImages`: an image is evaluated on the pairs whose longer segment
-reaches it, audit W3A-01) and, in the reaction matrix, which is symmetric,
-on its upper half (:func:`add_symmetric`).
+(:math:`\\rho_\\perp = 0`, a rod against its own image). The ends of a
+finite image add a remainder of order :math:`a^2/(d\\,\\ell)`, ``d`` the
+distance of the image and ``ℓ`` the length of the wire: a 2 m strip 5 mm
+above a 1000 / 30 Ω·m interface reads +3.0e-4 against the circumference
+average, a 10 m strip +5.5e-5 (audit W3R2A-05). Direct pairs of different
+wires keep the reduced kernel, the convention of the direct term: two strips
+1 cm above a 1000 / 30 Ω·m interface, 5 cm apart, read -3.5e-4 against their
+mutual resistance with the circumference average of the direct term too
+(audit W3R2A-06). An image within :data:`IMAGE_BLEND_WIDTH` of a wire radius
+of its own segment (a wire within :math:`a/20` of the interface) blends into
+the reduced kernel of the direct pair it then nearly coincides with, so that
+a wire on the interface is continuous between the series and the
+cross-layer path (:func:`image_shift`).
+
+Far images carry the quadrupole term without the radius term
+(:func:`image_quadrupole_rows`, tapered off between 60 and 120 segment
+lengths of vertical distance, :data:`IMAGE_QUADRUPOLE_REACH`, and left out
+below :data:`IMAGE_QUADRUPOLE_TOL`), or stay point sources with
+``Engine.image_far_field = "point"``, whose near image pairs stay Galerkin
+integrals. The far-image work follows the pair (:class:`FarImages`: an image
+is evaluated on the pairs whose longer segment reaches it, audit W3A-01)
+and, in the reaction matrix, which is symmetric, on its upper half
+(:func:`add_symmetric`).
 """
 
 from __future__ import annotations
@@ -91,7 +103,9 @@ from numpy.polynomial.legendre import leggauss
 __all__ = [
     "FAR_FIELD_FORMS",
     "FarImages",
+    "far_field_is_quadrupole",
     "add_symmetric",
+    "IMAGE_BLEND_WIDTH",
     "IMAGE_QUADRUPOLE_REACH",
     "IMAGE_QUADRUPOLE_TOL",
     "NEAR_FACTOR",
@@ -125,6 +139,36 @@ SWITCH_FACTOR: float = 7.5
 #: flag ``FAR_IMAGE_QUADRUPOLE``).
 FAR_FIELD_FORMS: tuple[str, ...] = ("quadrupole", "point")
 
+
+def far_field_is_quadrupole(far_field: object) -> bool:
+    """Whether ``far_field`` is the quadrupole form, after checking it.
+
+    Parameters
+    ----------
+    far_field
+        A value of :data:`FAR_FIELD_FORMS` (``Engine.image_far_field``).
+
+    Returns
+    -------
+    bool
+        ``True`` for ``"quadrupole"``, ``False`` for ``"point"``.
+
+    Raises
+    ------
+    ValueError
+        For any other value (audit W3R2A-02: the kernels tested
+        ``far_field == "quadrupole"``, so ``"Point"`` or ``""`` silently ran
+        the point form and was recorded as given, while the field evaluation
+        fell back to the quadrupole form).
+    """
+    if not isinstance(far_field, str) or far_field not in FAR_FIELD_FORMS:
+        raise ValueError(
+            "far_field (Engine.image_far_field) must be one of "
+            f"{', '.join(repr(f) for f in FAR_FIELD_FORMS)}; got {far_field!r}."
+        )
+    return far_field == "quadrupole"
+
+
 #: ``(SWITCH_FACTOR / NEAR_FACTOR)²``: end of the blend in ``r² / lim²``.
 _SWITCH_U: float = (SWITCH_FACTOR / NEAR_FACTOR) ** 2
 
@@ -153,6 +197,19 @@ IMAGE_QUADRUPOLE_REACH: tuple[float, float] = (60.0, 120.0)
 #: family within the reach of a house grid below h_1 = 0.5 m, 26 remain
 #: (Z moves by less than 1e-10).
 IMAGE_QUADRUPOLE_TOL: float = 1e-9
+
+#: Width of the blend of an image pair into the reduced kernel of the direct
+#: pair, in wire radii (:func:`galerkin_pairs`): an image less than
+#: ``IMAGE_BLEND_WIDTH · a`` from its own segment (a horizontal wire less than
+#: half that from the interface) takes the weight
+#: ``1 - (shift / (IMAGE_BLEND_WIDTH · a))²`` of the reduced kernel. Blended
+#: over one radius (fw3xl), the self image of a wire ``d = 2g < a`` from its
+#: image took ``ρ_eff² = a² + (1 - d²/a²) d²``, which peaks at ``d = a/√2``:
+#: a ring 1.75 mm above a 1000/30 Ohm m interface (a = 5 mm) read 7.319
+#: instead of about 5.99 Ohm, +22 % (audit W3R2A-03). Over a tenth of a
+#: radius the bump is below 0.2 %, and the wire on the interface keeps the
+#: same value on both paths (``tests/test_cross_layer_line_kernel.py``).
+IMAGE_BLEND_WIDTH: float = 0.1
 
 #: Tolerance of ``|t_i · t_j|`` for the closed-form parallel integral.
 _PARALLEL_TOL = 1e-10
@@ -582,18 +639,21 @@ def galerkin_pairs(
         (the reduced kernel left out ``a²/(2ρ²)`` of it: 8 % of the
         interface image of a wire 1 cm above the interface), and a collinear
         image (``ρ_⊥ = 0``, a rod against its own image) keeps the reduced
-        kernel, which is exact there. Direct pairs and the soil-surface image
-        keep the reduced kernel.
+        kernel, which is exact there. The axis value is the circumference
+        average of a long line; the ends of a finite image add a remainder
+        of order ``a²/(d ℓ)`` (audit W3R2A-05, see the module docstring).
+        Direct pairs and the soil-surface image keep the reduced kernel.
     shift
         With ``transverse``: per source of ``src`` the distance in m of the
         image from its own segment, across the segment's axis. An image within
-        the wire radius of its segment (a wire within ``a/2`` of the
-        interface) nearly coincides with it and takes the reduced kernel of
-        the direct pair, blended with the weight
-        ``max(0, 1 - shift²/a²)``: with the transverse distance alone the
-        series path and the cross-layer path of the same wire on the
-        interface differed by ``(ρ_1 - ρ_2)`` times the difference of the
-        two kernels (0.14 % for a ring on a 1000/30 interface).
+        :data:`IMAGE_BLEND_WIDTH` ``· a`` of its segment (a wire within
+        ``a/20`` of the interface) nearly coincides with it and takes the
+        reduced kernel of the direct pair, blended with the weight
+        ``max(0, 1 - (shift / (IMAGE_BLEND_WIDTH · a))²)``: with the
+        transverse distance alone the series path and the cross-layer path of
+        the same wire on the interface differed by ``(ρ_1 - ρ_2)`` times the
+        difference of the two kernels (0.14 % for a ring on a 1000/30
+        interface).
 
     Returns
     -------
@@ -626,7 +686,8 @@ def galerkin_pairs(
     a2 = 0.5 * (obs.radius[i] ** 2 + src.radius[j] ** 2)
     blend = np.zeros(i.shape[0])
     if transverse and shift is not None:
-        blend = np.maximum(1.0 - shift[j] * shift[j] / a2, 0.0)
+        width = IMAGE_BLEND_WIDTH * IMAGE_BLEND_WIDTH * a2
+        blend = np.maximum(1.0 - shift[j] * shift[j] / width, 0.0)
     out = np.empty(i.shape[0])
     par = np.abs(np.einsum("pk,pk->p", ti, tj)) > 1.0 - _PARALLEL_TOL
     if par.any():
