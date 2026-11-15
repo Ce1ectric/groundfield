@@ -394,7 +394,9 @@ def _materialise_foundation(
     mesh with cross-braces is one owner per wire line; a rectangle without
     braces (a ring, or a mesh with ``n_x = n_y = 1``) is one owner per
     side, at every angle (user decision Q38); a building outline is one
-    closed polyline. None of them depends on whether a shell is configured
+    closed polyline with one owner per straight side (one current per
+    straight wire, user decisions Q30, Q44). None of them depends on whether
+    a shell is configured
     or on the deprecated ``concrete_model``, which has no effect. The
     concrete shell (ADR-0012) puts the radius :math:`r_b` and the
     coefficient :math:`C` on every wire of the foundation, the cross-braces

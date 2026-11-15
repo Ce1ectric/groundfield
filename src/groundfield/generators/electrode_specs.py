@@ -196,8 +196,9 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
       gets exactly one internal horizontal plus one internal
       vertical wire.
 
-    The image family solves one uniform leakage current per electrode
-    (an *owner*); the owners of a foundation depend only on its
+    The image family solves one uniform leakage current per straight wire
+    (an *owner*; user decisions Q30, Q44): an outline is one owner per
+    straight side. The owners of a foundation depend only on its
     structure, never on the orientation, on whether a shell is configured
     (audit A2G-04) or on the deprecated :attr:`concrete_model`, which has
     no effect (user decision Q38). A ``"mesh"`` foundation is one straight

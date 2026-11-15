@@ -82,7 +82,8 @@ rectangle, is the connection point of conductors attached to `<name>` by
 name); use `cluster_impedance` or the sum over the wires for the
 foundation. A rectangle at a multiple of 90° is rotated exactly (no
 round-off), so the local −y side stays the first wire. A polygon outline
-is one closed wire. The deprecated `concrete_model` has
+is one closed polyline with one owner per straight side (one current per
+straight wire, user decisions Q30, Q44). The deprecated `concrete_model` has
 no effect (drop the argument, see [Deprecations](../deprecations.md)); an
 outline narrower than `MIN_FOUNDATION_SIDE_M` (1 m) is widened to it, with
 a warning, for both `foundation_outline="ombr"` and `"polygon"`.

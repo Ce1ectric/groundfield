@@ -443,3 +443,19 @@ def test_site_contact_wires_lists_the_horizontal_electrodes_in_world_order() -> 
         )
         == []
     )
+
+
+# audit W1B-07
+def test_the_router_rules_name_every_horizontal_electrode() -> None:
+    """Rules 2 and 4 of the router apply to every horizontal earth electrode
+    of a building (foundation, ring, strip; rule 0, user decision Q43); up to
+    then they named the foundation only."""
+    from groundfield.generators import _pen_routing
+
+    text = " ".join((_pen_routing.__doc__ or "").split())
+    rule2 = text.split("2. **")[1].split("3. **")[0]
+    rule4 = text.split("4. **")[1].split("What follows")[0]
+    assert "horizontal electrode wires (foundation, ring, strip" in rule2
+    assert "the wires of the building's foundation" not in rule2
+    assert "horizontal electrodes (foundation, ring, strip)" in rule4
+    assert "without a foundation" not in rule2 + rule4

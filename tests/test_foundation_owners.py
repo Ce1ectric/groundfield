@@ -1,7 +1,8 @@
 r"""Uniform-current owners of generated foundation electrodes.
 
-The image family solves for one uniform leakage current per electrode (an
-"owner"). Up to 2026.11 the generator built an axis-aligned bare mesh
+The image family solves for one uniform leakage current per straight wire
+(an "owner"; an outline is one owner per straight side, user decisions Q30,
+Q44). Up to 2026.11 the generator built an axis-aligned bare mesh
 foundation as one ``grid_mesh`` electrode (one owner over perimeter and
 braces) but a rotated one, and since 10.12-10.14 every encased one, as one
 electrode per wire. So a shell that is electrically absent
@@ -25,7 +26,8 @@ orientation, on whether a shell is configured or on ``concrete_model``):
   up to 50 over the AP1 soils for a short side of at least 1 m, bare or in
   concrete up to 0.2 m thick (audit D2B-02, R2B-01), and equal for a
   square;
-* a ``polygon_xy_m`` outline is one closed polyline.
+* a ``polygon_xy_m`` outline is one closed polyline, one owner per straight
+  side (user decisions Q30, Q44).
 
 ``concrete_model`` therefore has no effect. It is deprecated (user
 decisions Q21 and Q38): ``"distributed"`` warns at the user's line, the
@@ -1316,3 +1318,36 @@ def test_the_texts_quote_one_owner_up_to_2_2_percent_and_the_scanned_rectangle()
 
     for doc in (materialise.__doc__, spec.model_fields["concrete_model"].description):
         assert "2.1 %" not in " ".join((doc or "").split())
+
+
+# audit W1A-04 (user decisions Q30, Q44)
+_STALE_OWNER_PHRASES = (
+    r"uniform leakage current per electrode",
+    r"\bis one closed wire\b",
+    r"one closed polyline,? one owner\b",
+    r"one closed polyline \(one owner\)",
+    r"\boutline (\(`{1,2}polygon_xy_m`{1,2}\) )?is one closed polyline\s*[.;]",
+)
+
+
+@pytest.mark.finding("10.22")
+def test_no_text_describes_the_owners_of_before_q30_and_q44() -> None:
+    """Since user decisions Q30 and Q44 the image family solves one current
+    per straight wire, and a building outline is one owner per straight side.
+    The source and the documentation (outside the audit records and the
+    release notes) no longer say one uniform current per electrode or one
+    closed wire for an outline (audit W1A-04: ``electrode_specs.py``,
+    ``materialise.py`` and the generators API page still did)."""
+    root = pathlib.Path(gf.__file__).resolve().parents[2]
+    files = [
+        *sorted((root / "src").rglob("*.py")),
+        *sorted(p for p in (root / "docs").rglob("*.md") if "audit" not in p.parts),
+    ]
+    assert len(files) > 100
+    hits = []
+    for path in files:
+        text = " ".join(path.read_text(encoding="utf-8").split())
+        for phrase in _STALE_OWNER_PHRASES:
+            for match in re.finditer(phrase, text):
+                hits.append(f"{path.relative_to(root)}: {match.group(0)!r}")
+    assert not hits, hits
