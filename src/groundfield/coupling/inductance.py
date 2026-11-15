@@ -3213,6 +3213,15 @@ _STRETCH_TOL = 1e-9
 #: Gauss-Legendre nodes of a tilted stretch: _STRETCH_MIN_NODES plus
 #: _STRETCH_NODES_PER_SCALE per change of the offset by the image distance
 #: h_i + h_j, at most _STRETCH_MAX_NODES.
+#: A tilted pair whose smallest distance along the overlap exceeds this
+#: multiple of the change of its offset keeps the mid-point entry: the error
+#: of the mid-point value is then about (change / d)^2 / 24 of the entry,
+#: below 5e-5 for a ratio of 30. Measured (stream w3perf): with 30 the
+#: generated 100-house star keeps every entry (the stretch rule acts on no
+#: pair there; for every pair it would cost 5.5 s of QUADPACK per frequency
+#: for 1.8e-6 of X), and a core crossing its shield's axis adds up in pieces
+#: within 8.0e-6 of the loop reactance (ratio 10: 1.7e-5, 3: 8.7e-5).
+_STRETCH_MIDPOINT_RATIO = 30.0
 _STRETCH_MIN_NODES = 4
 _STRETCH_NODES_PER_SCALE = 8.0
 _STRETCH_MAX_NODES = 32
@@ -3241,8 +3250,10 @@ def _tilted_stretch_entries(
     over it with Gauss–Legendre nodes, $\\sum_k w_k\\,\\Delta Z'(d(t_k))$
     (4 nodes plus 8 per change of the offset by the image distance
     $h_i + h_j$, at most 32). A pair whose offset changes by less than
-    :data:`_STRETCH_TOL` of the overlap keeps the single entry at the
-    mid-point distance ``d_mid``. On one depth two wires are no closer than
+    :data:`_STRETCH_TOL` of the overlap, or whose smallest distance along the
+    overlap exceeds :data:`_STRETCH_MIDPOINT_RATIO` times that change (the
+    mid-point value is then exact to second order), keeps the single entry
+    at the mid-point distance ``d_mid``. On one depth two wires are no closer than
     touching, $r_i + r_j$, as for collinear conductors.
     """
     overlap = hi - lo
@@ -3260,8 +3271,17 @@ def _tilted_stretch_entries(
     # change of the horizontal offset vector along the overlap (a pair crossing
     # at mid-length has equal distances at both ends)
     ends = offset(np.array([lo, hi]))
-    change = math.hypot(*(ends[1, :2] - ends[0, :2]))
+    a, b = ends[0, :2], ends[1, :2] - ends[0, :2]
+    change = math.hypot(*b)
     if change <= _STRETCH_TOL * max(overlap, d_mid):
+        return [(i, j, d_mid, overlap, sign)]
+    # Where the distance stays well above its change along the overlap, d(t)
+    # is nearly linear and the mid-point value is exact to second order (a
+    # relative error of about (change / d)^2 / 24 of the entry); only pairs
+    # that come close to each other within the overlap (a core crossing its
+    # shield's axis, wires leaving a junction) need the integral.
+    s_min = min(1.0, max(0.0, -float(a @ b) / float(b @ b)))
+    if math.hypot(*(a + s_min * b)) > _STRETCH_MIDPOINT_RATIO * change:
         return [(i, j, d_mid, overlap, sign)]
     scale = max(float(heights[i] + heights[j]), 1e-3)
     n = int(
