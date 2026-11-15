@@ -478,13 +478,19 @@ Findings 10.35, 10.36, 10.45, 10.46 (F50, F52) and 10.60.
    from $z + z'$); one segment twice gets the self rule, so a core and its
    shield on one axis keep a loop without earth-return correction. Other
    pairs keep the tensor rule bit for bit. Against a refined rule (panels
-   δ/128, first panel $(z + z')/16$, spacing 0.005) and an independent
-   reduction with $S$ summed at every node, at 50 Hz and 1 kHz from 0.01 δ
-   to 3 km (buried at 0.7 m in 100, 1000/30 and 30/1000 Ω·m, overhead at
-   10 m over 10 Ω·m), the self correction is within 1.1e-9 and has no step
-   where the rule changes (below 3e-13); close pairs (wires 1 mm … 1 m apart,
-   a core tilted by 1e-4 rad, collinear neighbours, a 30° junction) are
-   within 2.7e-9 of the refined graded rule. Cost (W2B-05): the pieces of a
+   δ/128, first panel $(z + z')/16$, spacing 0.005, 1024 logarithmic λ
+   nodes) and an independent reference (closed-form direct part, the
+   $\mathrm{Ji}_0$ kernel of the spectral part; audit W3B), at 50 Hz and
+   1 kHz from 1 m and 0.01 δ to 3 km (buried at 0.7 m in 100, 1000/30 and
+   30/1000 Ω·m, overhead at 10 m over 10 Ω·m), the self correction is
+   within 1.1e-9 and has no step where the rule changes (below 3e-13); close
+   pairs (wires 1 mm … 1 m apart, a core tilted by 1e-4 rad, collinear
+   neighbours, a 30° junction) are within about 4e-8 (3.5e-8 for two 1 m
+   wires 1 mm apart in 30 over 1000 Ω·m at 1 kHz, 2.7e-9 at a quarter skin
+   depth). The logarithmic region of the λ grid has 256 nodes since audit
+   W3B-01: with 64 the skin-scale part of $S$ was under-resolved, and
+   segments of 1 m … 0.01 δ were 1e-5 … 3e-4 off (about 1e-8 of a solved
+   impedance); 256 cost nothing measurable. Cost (W2B-05): the pieces of a
    long sub-segment stood at different depths when it was inclined, each
    pair of them got its own λ grid, and the grid cache held 512 of them —
    one lumped conductor of 2 km from a rod at 0.5 m to a junction at

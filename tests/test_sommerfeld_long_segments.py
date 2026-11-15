@@ -187,6 +187,9 @@ _REFINED = {
     "_SELF_T_SPACING": 0.005,
     "_GRADING_START": 1.0 / 16.0,
     "_FAR_WIDTHS": 160.0 * 32.0,  # uniform panels up to 40 skin depths
+    # audit W3B-01: the logarithmic region of the lambda grid, which S(rho)
+    # of every rule shares (64 nodes left 1e-5 ... 3e-4 at 1 m)
+    "_N_LOG_NODES": 1024,
 }
 
 
@@ -298,3 +301,83 @@ def test_the_self_correction_has_no_step_at_a_quarter_skin_depth(name) -> None:
     jump = (hi - lo) - (lo - lo2)  # minus the smooth increment
     assert abs(jump.real / lo.real) < 1e-9
     assert abs(jump.imag / lo.imag) < 1e-9
+
+
+# ---------------------------------------------------------------------
+# audit W3B-01: an independent reference for the self term
+# ---------------------------------------------------------------------
+
+_XG24, _WG24 = np.polynomial.legendre.leggauss(24)
+
+
+def _ein(z: complex) -> complex:
+    """Ein(z) = int_0^z (1 - e^-t)/t dt (entire), by mpmath."""
+    mp = pytest.importorskip("mpmath")
+    mp.mp.dps = 40
+    z = mp.mpc(z)
+    if abs(z) < 1:
+        return complex(
+            mp.nsum(
+                lambda k: (-1) ** (k + 1) * z**k / (k * mp.factorial(k)), [1, mp.inf]
+            )
+        )
+    return complex(mp.e1(z) + mp.log(z) + mp.euler)
+
+
+def _self_correction_homogeneous(
+    length: float, z: float, f: float, rho: float
+) -> complex:
+    """dZ (image 'none') of a horizontal buried segment with itself (auditor
+    W3B): jwmu0/4pi [2 int_0^L (L-u)(e^{-gu}-1)/u du + 2 L int F(l) (Ji0(lL)
+    - J1(lL)) dl], F = (u-l)/(u+l) e^{-2 u z}/u, Ji0 the integral of J0
+    (scipy.special.itj0y0): closed forms and a composite Gauss rule in lambda
+    written here, none of the library's quadrature."""
+    from scipy import special
+
+    w = 2 * math.pi * f
+    g = complex(np.sqrt(1j * w * MU0 / rho))
+    direct = 2 * (
+        -length * _ein(g * length) - ((1 - complex(np.exp(-g * length))) / g - length)
+    )
+    decay = 2 * z
+    lo = 1e-9 / decay
+    knee = max(min(1.0 / decay, 1.0 / length) * 0.5, lo * 10)
+    top = 70.0 / decay
+    width = min(math.pi / (6 * length), 1.0 / (6 * decay), top / 100)
+    n = int(math.ceil((top - knee) / width))
+    edges = np.concatenate(
+        [[0.0], np.geomspace(lo, knee, 200), np.linspace(knee, top, n + 1)[1:]]
+    )
+    a, b = edges[:-1], edges[1:]
+    lam = (0.5 * (b - a)[:, None] * _XG24 + 0.5 * (a + b)[:, None]).ravel()
+    wts = (0.5 * (b - a)[:, None] * _WG24).ravel()
+    u = np.sqrt(lam * lam + g * g)
+    F = (u - lam) / (u + lam) * np.exp(-u * decay) / u
+    kern = special.itj0y0(lam * length)[0] - special.j1(lam * length)
+    spectral = complex(np.sum(wts * F * kern))
+    return 1j * w * MU0 / (4 * math.pi) * (direct + 2 * length * spectral)
+
+
+# audit W3B-01
+@pytest.mark.parametrize(("length", "f"), [(1.0, 50.0), (7.1176, 50.0), (1.0, 1000.0)])
+def test_w3b_01_the_self_correction_of_short_segments_meets_its_bound(
+    length, f
+) -> None:
+    """Base 098bbbc: 7.5e-5 (1 m, 50 Hz), 1.1e-5 (0.01 skin depths, 7.1 m),
+    2.5e-5 (1 m, 1 kHz) off the independent reference of auditor W3B: the
+    64-node logarithmic region of the lambda grid (``_N_LOG_NODES``) missed
+    the skin-scale part of S(rho), which every rule of the self term and of
+    close pairs shares. With 256 nodes (now) within 2e-8."""
+    earth = LayeredEarth((100.0,), ())
+    seg = np.array([[[0.0, 0.0, 0.7], [length, 0.0, 0.7]]])
+    got = build_sommerfeld_correction_matrices(
+        seg,
+        None,
+        omegas=[2 * math.pi * f],
+        earth=earth,
+        image="none",
+        method="tabulated",
+    )[0, 0, 0]
+    ref = _self_correction_homogeneous(length, 0.7, f, 100.0)
+    assert got.real == pytest.approx(ref.real, rel=2e-8, abs=0)
+    assert got.imag == pytest.approx(ref.imag, rel=2e-8, abs=0)

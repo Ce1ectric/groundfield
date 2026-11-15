@@ -114,13 +114,19 @@ Q34
 - the other pairs keep the tensor rule (16x16, composite for segments longer
   than a quarter skin depth).
 
-The self correction is within 1.1e-9 of a refined rule and of an
-independent one-dimensional reduction from 0.01 skin depths to 3 km at
-50 Hz and 1 kHz and has no step where the rule changes (below 3e-13);
-close pairs are within 2.7e-9 of a refined graded rule (evidence of stream
-w3perf). Both rules cost at most linearly in the length: a lumped conductor
-of 2 km between a rod and a junction is solved in 1.1 s within 0.21 GB
-(audit W2B-05: 28 s, 1.6 GB, about $L^{2.7}$).
+The self correction is within 1.1e-9 of a refined rule (1024 logarithmic
+$\\lambda$ nodes) and of an independent reference (closed-form direct part,
+the $\\mathrm{Ji}_0$ kernel of the spectral part; audit W3B) from 1 m and
+0.01 skin depths to 3 km at 50 Hz and 1 kHz and has no step where the rule
+changes (below 3e-13); close pairs are within about 4e-8 of the same two
+references (3.5e-8 for two 1 m wires 1 mm apart in 30 over 1000 Ω·m at
+1 kHz, 2.7e-9 at a quarter skin depth). Up to audit W3B-01 the logarithmic
+region of the $\\lambda$ grid had 64 nodes and short segments missed the
+skin-scale part of $S$: 1e-5 … 7.4e-5 at 0.01 skin depths, up to 3e-4 at
+1 m (9e-9 of the input impedance of a 200 m PEN in 1 m pieces). Both
+rules cost at most linearly in the length: a lumped conductor of 2 km
+between a rod and a junction is solved in 1.1 s within 0.21 GB (audit
+W2B-05: 28 s, 1.6 GB, about $L^{2.7}$).
 
 The $\\lambda$ quadrature (review pass 10, finding 10.36) follows the
 F14 policy of :mod:`groundfield.coupling.layered_green`: a
@@ -226,7 +232,14 @@ _OUTER_GL_NODES, _OUTER_GL_WEIGHTS = np.polynomial.legendre.leggauss(16)
 # --- lambda quadrature policy (review pass 10, finding 10.36) ---------
 #
 # Log region: n_log Gauss nodes in t = ln(lambda) on [eps, lambda_b].
-_N_LOG_NODES = 64
+# 256 since audit W3B-01: the region spans about 24 e-folds and holds the
+# skin-scale part of S(rho) (lambda ~ |gamma|) that dominates the self term
+# and close pairs of short segments; with 64 nodes S(0 ... 1 m) was 1.3e-4
+# off (100 Ohm m, 50 Hz) and a 1 m self correction 7.5e-5; with 128 nodes
+# S was 6e-9 off, with 256 it is within 7e-13 (three soils, 50 Hz and
+# 1 kHz). No measurable cost (40-house star, a 200 m PEN in 1 m pieces: the
+# same time with 64, 128 and 256 nodes).
+_N_LOG_NODES = 256
 # Gauss order of the panels of the linear region.
 _PANEL_ORDER = 8
 # Target: two panels (16 nodes) per J0 period 2 pi / rho_max.
@@ -282,10 +295,10 @@ _MAX_PIECES = 512
 # summed at every node (_SELF_DIRECT_BUDGET) or, for long segments, comes
 # from a not-a-knot cubic spline in t = ln(rho + z) with nodes
 # _SELF_T_SPACING apart (at least _SELF_MIN_TABLE). Within 1.1e-9 of a
-# refined rule from 0.01 skin depths to 3 km at 50 Hz and 1 kHz (buried at
-# 0.7 m in 100, 1000/30 and 30/1000 Ohm m, overhead at 10 m over 10 Ohm m;
-# an independent reduction with S summed at every node agrees likewise),
-# steps where the rule changes below 3e-13.
+# refined rule (with 1024 log nodes) from 1 m and 0.01 skin depths to 3 km
+# at 50 Hz and 1 kHz (buried at 0.7 m in 100, 1000/30 and 30/1000 Ohm m,
+# overhead at 10 m over 10 Ohm m; the independent Ji0 reference of audit
+# W3B agrees likewise), steps where the rule changes below 3e-13.
 _SELF_T_SPACING = 0.02
 _SELF_MIN_TABLE = 16
 # S(rho) is summed at every node of the self rule while that needs at most
@@ -2696,8 +2709,14 @@ def per_metre_mutual_impedance(
     its radius (or GMR). The $\\lambda$ quadrature is the one of the segment
     pairs (finding 10.36) with four times the nodes. For a homogeneous earth
     this is Carson's (overhead) and Pollaczek's (buried) impedance; it agrees
-    with both, and with the two-layer Pollaczek integral of
-    :mod:`groundfield.references.pollaczek`, to about 1e-8.
+    with Carson to 2e-9 and with the two-layer Pollaczek integral of
+    :mod:`groundfield.references.pollaczek` to 5e-8 of the impedance
+    (0.1 … 300 m). Against an independent integral (audit W3B-08: composite
+    Gauss, checked against mpmath to 2e-15; one to four layers, 50 Hz and
+    1 kHz, 1 cm … 1 km) it is within 6e-8 of the earth-return correction up
+    to 300 m and 7e-7 at 1 km for buried pairs, 4e-8 for overhead pairs;
+    the remainder is not the logarithmic region of the $\\lambda$ grid (the
+    same with 256 and 1024 nodes there).
 
     Parameters
     ----------
@@ -2734,10 +2753,11 @@ def per_metre_mutual_impedance(
         )
     x = float(distance)
     dz = abs(float(z_i) - float(z_j))
-    # The segment-pair policy with four times the nodes (256 in the log region,
-    # at least 256 panels): a reference, 8e-6 off with the pair grid at
-    # x = 0.1 m, within 1e-8 of Carson and of the two-layer Pollaczek
-    # integral (groundfield.references.pollaczek) with this one.
+    # The segment-pair policy with four times the nodes (1024 in the log
+    # region since audit W3B-01, 256 before; at least 256 panels): a
+    # reference, 8e-6 off with the pair grid at x = 0.1 m, within 1e-8 of
+    # Carson and of the two-layer Pollaczek integral
+    # (groundfield.references.pollaczek) with this one.
     p_ref = math.sqrt(omega * MU_0 / earth.rhos[plan.ref_layer - 1])
     lb, lm, rm, gt = _grid_params(
         z_sum=plan.decay, rho_max=x, p_ref=p_ref, scales=plan.scales(omega, earth)

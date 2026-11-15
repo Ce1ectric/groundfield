@@ -41,6 +41,7 @@ _REFINED = {
     "_SELF_T_SPACING": 0.005,
     "_GRADING_START": 1.0 / 16.0,
     "_FAR_WIDTHS": 160.0 * 8.0,
+    "_N_LOG_NODES": 1024,  # audit W3B-01
 }
 
 
@@ -99,6 +100,26 @@ def test_a_close_pair_is_within_its_bound_of_a_refined_rule(
     ref = _matrix(seg, earth, f, method="exact", refined=True)[0, 1]
     assert got.real == pytest.approx(ref.real, rel=1e-8, abs=0)
     assert got.imag == pytest.approx(ref.imag, rel=1e-8, abs=0)
+
+
+# audit W3B-01
+@pytest.mark.parametrize("method", ["exact", "tabulated"])
+@pytest.mark.parametrize("earth", [HOM, LAYERED], ids=["100", "30_over_1000"])
+@pytest.mark.parametrize("f", [50.0, 1000.0])
+@pytest.mark.parametrize("name", ["beside_1mm", "beside_20cm", "tilted_1e-4"])
+def test_w3b_01_a_short_close_pair_is_within_its_bound_of_a_refined_rule(
+    name, f, earth, method
+) -> None:
+    """Two 1 m segments: within 1e-7 of the refined rule, whose lambda grid
+    has 1024 logarithmic nodes (measured worst 3.5e-8, 1 mm apart in 30 over
+    1000 Ohm m at 1 kHz; the independent reference of auditor W3B gives the
+    same 3.5e-8). Base 098bbbc: 7.5e-5 ... 3.0e-4 off (the 64-node
+    logarithmic region missed the skin-scale part of S(rho))."""
+    seg = _pair(name, 1.0)
+    got = _matrix(seg, earth, f, method=method)[0, 1]
+    ref = _matrix(seg, earth, f, method="exact", refined=True)[0, 1]
+    assert got.real == pytest.approx(ref.real, rel=1e-7, abs=0)
+    assert got.imag == pytest.approx(ref.imag, rel=1e-7, abs=0)
 
 
 # user decision Q34

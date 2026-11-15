@@ -140,10 +140,14 @@ What 2026.11 changed (ADR-0006 amendment):
   distance below half the longer segment) get a graded rule along their
   line of closest approach (a coinciding pair: the self rule). The self
   correction is within 1.1e-9 of a refined rule and of an independent
-  reduction from 0.01 skin depths to 3 km at 50 Hz and 1 kHz (buried at
-  0.7 m in 100, 1000/30 and 30/1000 Ω·m, overhead at 10 m over 10 Ω·m) and
-  continuous in the length (steps below 3e-13); close pairs are within
-  2.7e-9. Both rules cost at most linearly in the length: one lumped
+  reference from 1 m and 0.01 skin depths to 3 km at 50 Hz and 1 kHz
+  (buried at 0.7 m in 100, 1000/30 and 30/1000 Ω·m, overhead at 10 m over
+  10 Ω·m) and continuous in the length (steps below 3e-13); close pairs are
+  within about 4e-8 (3.5e-8 for two 1 m wires 1 mm apart in 30 over
+  1000 Ω·m at 1 kHz). Both rest on the 256-node logarithmic region of the
+  λ grid (audit W3B-01: with the 64 nodes of earlier builds short segments
+  were 1e-5 … 7.4e-5 off at 0.01 skin depths and up to 3e-4 at 1 m, about
+  1e-8 of a solved impedance). Both rules cost at most linearly in the length: one lumped
   conductor of 2 km from a rod to a junction, 50 Hz and 1 kHz, is solved
   in 1.1 s within 0.21 GB, 100 km in 10.6 s within 0.24 GB (audit W2B-05:
   28 s and 1.6 GB at 2 km, more than 7.8 GB at 100 km).

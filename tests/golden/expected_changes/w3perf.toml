@@ -43,3 +43,23 @@ quantities = ["phi/*", "I/*", "Zc/*", "Zin"]
 findings = ["10.24"]
 reason = "user decision Q34 in the Sommerfeld fallback of carson_series: the oblique overhead lead meets the parallel lead at a junction (a close pair, graded rule)."
 max_rel_change = 2e-8
+
+# Audit W3B-01 (fix stream fw3perf, base release/calver 098bbbc): the
+# logarithmic region of the lambda grid has 256 nodes instead of 64; the
+# skin-scale part of S(rho) of the self terms and close pairs of short
+# segments was under-resolved (1e-5 ... 3e-4 of a 1 m self correction).
+# Measured with GF_GOLDEN_STRICT=1 against a snapshot of 098bbbc generated on
+# the same machine (macOS arm64): these five cases move by 4.8e-18 ...
+# 2.2e-11, every other case is bit-identical.
+[[change]]
+cases = [
+    "cond_galvanic_neumann_sommerfeld",
+    "cond_isolated_pen_sommerfeld_two_layer",
+    "cond_lumped_long_pen_sommerfeld",
+    "cond_overhead_lead_over_pen_carson_series",
+    "defaults_mixed_cluster_inductive",
+]
+quantities = ["phi/*", "I/*", "Zc/*", "Zin", "ps/*", "potential/*"]
+findings = ["10.24"]
+reason = "audit W3B-01: 256 logarithmic lambda nodes (64 under-resolved the skin-scale part of S(rho) for short segments); measured 4.8e-18 ... 2.2e-11."
+max_rel_change = 1e-10
