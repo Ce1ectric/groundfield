@@ -107,7 +107,8 @@ def test_grid_touch_voltage_stands_one_metre_outside_the_edge() -> None:
     """Default direction +x: feet at (21, 10), 1 m outside the east edge.
 
     v0.15.0 put the feet 1 m from the grid centre (11, 10), above the
-    grid: 9.92 V instead of 69.6 V (R5-03).
+    grid: 9.92 V instead of 69.6 V with one current over the grid (R5-03;
+    61.31 V since user decision Q30, see the next test).
     """
     w = _grid_world()
     res = _solve(w)
@@ -115,6 +116,28 @@ def test_grid_touch_voltage_stands_one_metre_outside_the_edge() -> None:
     expected = _ue(res, "g1") - _phi(res, 21.0, 10.0)
     assert u_t == pytest.approx(expected, rel=1e-12)
     assert abs(u_t) > 60.0
+
+
+# audit W1A-03 (the release-note number), user decision Q30
+@pytest.mark.finding("10.21")
+def test_grid_touch_voltage_numbers_of_the_release_note() -> None:
+    """The 20 m x 20 m grid of the 10.21 row (100 A, 100 Ohm m, ds 1 m):
+    61.31 V at +x with the default line kernel, 59.95 V with the point
+    kernel, 61.58 V per segment with ``mom``. One current over the whole
+    grid, before user decision Q30, read 69.6 V (point kernel); the
+    envelope 98.7 V (111.4 V before Q30)."""
+    w = _grid_world()
+    line = abs(touch_voltage(_solve(w), w, electrode="g1"))
+    point_res = gf.create_engine(
+        segment_length=1.0, frequencies=[50.0], kernel="point"
+    ).solve(w)
+    point = abs(touch_voltage(point_res, w, electrode="g1"))
+    mom = abs(touch_voltage(_solve(w, "mom"), w, electrode="g1"))
+    assert line == pytest.approx(61.31, abs=0.01)
+    assert point == pytest.approx(59.95, abs=0.01)
+    assert mom == pytest.approx(61.58, abs=0.01)
+    _, env = touch_voltage_envelope(point_res, w, electrode="g1", n_angles=24)
+    assert float(np.abs(env).max()) == pytest.approx(98.72, abs=0.01)
 
 
 @pytest.mark.finding("10.21")
