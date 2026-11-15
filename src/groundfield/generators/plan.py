@@ -43,7 +43,7 @@ optional Neumann inductance couples them (ADR-0004).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, Optional, Union
+from typing import TYPE_CHECKING, Annotated, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -57,6 +57,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 __all__ = [
     "BranchRole",
+    "CabinetRule",
     "ConductorParameters",
     "NetworkPlan",
     "PlannedBranch",
@@ -74,6 +75,10 @@ SiteRole = Literal["substation", "cabinet", "building", "auxiliary", "probe"]
 
 BranchRole = Literal["pen", "service_drop", "measurement_lead"]
 """Role of a :class:`PlannedBranch` in the network."""
+
+CabinetRule = Literal["centroid_ray", "far_end_ray"]
+"""Rule that placed the cable cabinet of a building group
+(:attr:`PlannedSite.cabinet_rule`, audit W1R2-02)."""
 
 
 class PlannedElectrode(BaseModel):
@@ -143,6 +148,24 @@ class PlannedSite(BaseModel):
     building_type
         Name of the building type the site was drawn from (buildings of
         :class:`~groundfield.generators.tn_network.TnNetworkGenerator`).
+    cabinet_rule
+        Rule that placed a cable cabinet of a building group
+        (:class:`~groundfield.generators.tn_network.TnNetworkGenerator`,
+        star topology, ``CabinetConfig.placement=None``):
+        ``"centroid_ray"`` — on the ray from the substation through the
+        group's centroid — or ``"far_end_ray"`` — on the ray through the
+        group's far-end building, because on the centroid ray it would have
+        stood farther than ``CabinetConfig.max_far_end_gap_m`` from its
+        group (audit W1R2-02, user decision D7). ``None`` for every other
+        site, for cabinets of a given placement and of the radial topology.
+        Informational: materialising the plan ignores it.
+    centroid_ray_gap_m
+        Recorded with ``cabinet_rule``: plan distance in m, at least 0,
+        between the cabinet's electrodes at its position on the centroid
+        ray and the nearest electrode of its group — the value compared
+        with ``max_far_end_gap_m`` (the centroid ray is kept up to it). A
+        group near the threshold changes rule, and its cabinet jumps by up
+        to the width of the group, under a small change of the layout.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -154,6 +177,25 @@ class PlannedSite(BaseModel):
     bond_conductor_type: str = "bare_copper"
     footprint: Optional[BuildingFootprint] = None
     building_type: Optional[str] = None
+    cabinet_rule: Optional[CabinetRule] = None
+    centroid_ray_gap_m: Optional[
+        Annotated[float, Field(ge=0.0, allow_inf_nan=False)]
+    ] = None
+
+    @model_validator(mode="after")
+    def _check_cabinet_rule(self) -> "PlannedSite":
+        recorded = (self.cabinet_rule is not None, self.centroid_ray_gap_m is not None)
+        if recorded[0] != recorded[1]:
+            raise ValueError(
+                f"PlannedSite {self.name!r}: cabinet_rule and centroid_ray_gap_m "
+                "are recorded together (audit W1R2-02)."
+            )
+        if recorded[0] and self.role != "cabinet":
+            raise ValueError(
+                f"PlannedSite {self.name!r}: cabinet_rule and centroid_ray_gap_m "
+                f"are recorded for cabinets only; the site is a {self.role!r}."
+            )
+        return self
 
     def electrode_name(self, electrode: PlannedElectrode) -> str:
         """Return the world name of one of the site's electrodes."""
