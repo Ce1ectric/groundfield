@@ -105,6 +105,7 @@ from groundfield.soil.models import (
     TwoLayerSoil,
 )
 from groundfield.soil.effective import effective_resistivity
+from groundfield.soil.penetration import PenetrationDepth, penetration_depth
 from groundfield.solver.engine import Backend, Engine
 from groundfield.solver.mutual import solve_mutual_field, solve_mutual_matrix
 from groundfield.solver.result import FieldResult
@@ -509,6 +510,8 @@ __all__ = [
     "SoilLayer",
     "SoilModel",
     "effective_resistivity",
+    "penetration_depth",
+    "PenetrationDepth",
     "Electrode",
     "RodElectrode",
     "RingElectrode",

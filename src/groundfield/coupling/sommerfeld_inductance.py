@@ -211,6 +211,7 @@ __all__ = [
     "LayeredEarth",
     "reflection_coefficient_homogeneous",
     "reflection_coefficient_layered",
+    "per_metre_mutual_impedance",
 ]
 
 
@@ -2652,3 +2653,108 @@ def build_sommerfeld_correction_matrix(
         image=image,
         method=method,
     )[0]
+
+
+# ---------------------------------------------------------------------
+# Per-metre impedance of two infinite parallel wires (reference)
+# ---------------------------------------------------------------------
+
+
+def per_metre_mutual_impedance(
+    z_i: float,
+    z_j: float,
+    distance: float,
+    *,
+    omega: float,
+    earth: LayeredEarth,
+) -> complex:
+    """Mutual impedance per metre of two infinite parallel horizontal wires.
+
+    Exact quasi-static earth-return impedance (Ω/m) of two long parallel
+    wires at depths ``z_i``, ``z_j`` (m, ``z > 0`` in the soil, ``z < 0``
+    overhead; both on one side of the surface, buried ones in one layer) at
+    the horizontal distance ``distance`` (m) over the layered earth: the
+    line integral of the Green's function of the module docstring,
+    $\\int_{-\\infty}^{\\infty} J_0(\\lambda\\sqrt{x^2 + s^2})\\,ds =
+    2\\cos(\\lambda x)/\\lambda$,
+
+    $$
+    Z'(x) \\;=\\; \\frac{j\\omega\\mu_0}{4\\pi}\\Bigl[2K_0(\\gamma_k R)
+    + \\int_0^\\infty w(\\lambda)\\,\\frac{2\\cos\\lambda x}{\\lambda}\\,d\\lambda\\Bigr]
+    $$
+
+    for wires in layer $k$ ($R = \\sqrt{x^2 + (z_i - z_j)^2}$, $w$ the
+    reflected amplitude of the same-layer kernel, exact for any number of
+    layers), and $\\frac{j\\omega\\mu_0}{4\\pi}\\int_0^\\infty
+    [e^{-\\lambda|z_i - z_j|} - \\Gamma(\\lambda)e^{-\\lambda(h_i + h_j)}]
+    \\,2\\cos(\\lambda x)/\\lambda\\,d\\lambda$ for overhead wires (Carson's
+    integral with the surface reflection coefficient of the stack). The
+    self impedance per metre of a wire is the value at ``distance`` equal to
+    its radius (or GMR). The $\\lambda$ quadrature is the one of the segment
+    pairs (finding 10.36) with four times the nodes. For a homogeneous earth
+    this is Carson's (overhead) and Pollaczek's (buried) impedance; it agrees
+    with both, and with the two-layer Pollaczek integral of
+    :mod:`groundfield.references.pollaczek`, to about 1e-8.
+
+    Parameters
+    ----------
+    z_i, z_j
+        Depths of the two wires in m (``> 0`` buried, ``< 0`` overhead).
+    distance
+        Horizontal distance in m (``> 0``; for the self impedance the wire
+        radius or GMR).
+    omega
+        Angular frequency in rad/s (``> 0``).
+    earth
+        Layered-earth configuration.
+
+    Returns
+    -------
+    complex
+        Mutual impedance per metre in Ω/m.
+
+    Raises
+    ------
+    ValueError
+        For wires on opposite sides of the surface or in different layers,
+        a non-positive distance or frequency.
+    """
+    from scipy.special import kv
+
+    if not (omega > 0.0) or not (distance > 0.0):
+        raise ValueError("per_metre_mutual_impedance needs omega > 0 and distance > 0")
+    plan = _SpectralPlan.for_pair(earth, float(z_i), float(z_j))
+    if plan.kind not in ("same", "air"):
+        raise ValueError(
+            "per_metre_mutual_impedance: both wires must lie overhead or in one "
+            f"soil layer (got z_i = {z_i}, z_j = {z_j})"
+        )
+    x = float(distance)
+    dz = abs(float(z_i) - float(z_j))
+    # The segment-pair policy with four times the nodes (256 in the log region,
+    # at least 256 panels): a reference, 8e-6 off with the pair grid at
+    # x = 0.1 m, within 1e-8 of Carson and of the two-layer Pollaczek
+    # integral (groundfield.references.pollaczek) with this one.
+    p_ref = math.sqrt(omega * MU_0 / earth.rhos[plan.ref_layer - 1])
+    lb, lm, rm, gt = _grid_params(
+        z_sum=plan.decay, rho_max=x, p_ref=p_ref, scales=plan.scales(omega, earth)
+    )
+    lambdas, weights, resolved = _build_grid(
+        lb, lm, max(rm, 256.0 * math.pi / (lm - lb)), gt, 4 * _N_LOG_NODES
+    )
+    if not resolved:
+        _warn_unresolved((lb, lm, rm, gt))
+    w = plan.weight(lambdas, omega, earth)
+    if plan.kind == "air":
+        # e^{-l dz} - Gamma e^{-l Z} = (e^{-l dz} - e^{-l Z}) + (1 - Gamma) e^{-l Z};
+        # the first part is Frullani's integral, ln((Z^2 + x^2) / (dz^2 + x^2)):
+        # the free-space part does not decay with lambda (Carson's image term)
+        z_sum = plan.h_a + plan.h_b
+        w = w + np.exp(-lambdas * z_sum)
+    total = complex(np.sum(weights * w * 2.0 * np.cos(lambdas * x) / lambdas))
+    if plan.kind == "air":
+        total += math.log((z_sum * z_sum + x * x) / (dz * dz + x * x))
+    if plan.kind == "same":
+        gamma = complex(np.sqrt(1j * omega * MU_0 / earth.rhos[plan.ref_layer - 1]))
+        total += 2.0 * complex(kv(0, gamma * math.hypot(x, dz)))
+    return 1j * omega * MU_0 / (4.0 * math.pi) * total
