@@ -489,8 +489,10 @@ class FemOptions(BackendOptions):
         description=(
             "3-D model: radius in m of the disc over which each wire's leakage "
             "is smoothed (the analytic radius correction covers the rest). None: "
-            "0.06 m, at least 2.2 bare wire radii, limited by the depth of the "
-            "wires and their gap to the layer interfaces."
+            "0.06 m, at least 2.2 bare wire radii. A value or the default is "
+            "limited by the depth of the wires, their gap to the layer "
+            "interfaces and the distance of wires that run beside each other "
+            "(kept at least 1.5 source radii apart)."
         ),
     )
     growth: float = Field(

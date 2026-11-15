@@ -38,19 +38,32 @@ $$
 $$
 
 summed over what the mesh does not already resolve. The observer's own
-wire counts whole: its polyline through every corner (a ring's polygon, a
-strip, a closed loop) and every piece on the same axis line (the next piece
-of a galvanic conductor, the surface image of a rod whose head reaches the
-surface) — along its own axis the mesh sees the smoothed source, not the
-thin wire, and only the whole line integral reproduces the 2-D radial
-resistance. A piece of the own polyline that runs parallel beside the
-point (an arm folded back, the opposite side of a narrow loop) counts like
-another wire. Of every other piece, and of every other surface image, only
-the part within $1.5\\,R$ of the point counts (:data:`NEAR_FACTOR`): farther
-away the disc average of a smoothed line is its line field (the 2-D
-mean-value property of the radial bump), so the mesh gives the exact field
-and the reduced kernels would only add $\\frac{\\rho}{4\\pi}
-\\ln\\frac{D^2 + r_\\eta^2}{D^2 + a^2}$ per metre with the observer's current.
+wire counts whole: its polyline through every corner where it has turned by
+less than 120° (a ring's polygon, a strip, the corners of a loop) and every
+piece on the same axis line (the next piece of a galvanic conductor, the
+surface image of a rod whose head reaches the surface) — along its own axis
+the mesh sees the smoothed source, not the thin wire, and only the whole
+line integral reproduces the 2-D radial resistance. A piece of the own
+polyline that runs back towards the point (turned by 120° or more: an arm
+folded back, the opposite side of a narrow loop or a small ring, either arm
+of a narrow V) or runs parallel beside it counts like a wire of the same
+electrode (audit W4R2B-02: up to 2026.11 only an exactly parallel arm did,
+so tilting a folded arm by 1e-6 rad added the whole line term). Of every
+other piece of the same electrode, and of every surface image that does not
+continue the observer's axis, only the part within $1.5\\,R$ of the point
+counts (:data:`NEAR_FACTOR`): farther away the disc average of a smoothed
+line is its line field (the 2-D mean-value property of the radial bump), so
+the mesh gives the exact field and the reduced kernels would only add
+$\\frac{\\rho}{4\\pi}\\ln\\frac{D^2 + r_\\eta^2}{D^2 + a^2}$ per metre with the
+observer's current. A piece of **another port** counts only where it lies on
+the observer's axis line (whole) or belongs to a wire that meets the
+observer's wire (:func:`wire_systems`: a rod on a ring, a T-joint, a
+crossing, the bonded pieces of a galvanic conductor at a bend — wires that
+touch are one conductor and carry about the same current there); elsewhere
+it carries its own current, which the observer's correction cannot know
+(audit W4R2B-03: two coaxial rings 7.5 cm apart read +4.35e-3 in a port
+entry with the window term). The 3-D model keeps such wires at least
+$1.5\\,R$ apart (:func:`beside_wires`), so none of them reaches the window.
 For two parallel lines the exact correction is below $10^{-3}$ of the self
 term from $D = 1.5\\,R$ on (evidence ``f01`` of stream fw4fem3d); the
 surface image of a horizontal wire lies $2z \\ge 2.5\\,R$ away and never
@@ -70,7 +83,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
 
@@ -93,8 +106,27 @@ RING_CHORD_ANGLE = 2.0 * math.pi / 360.0
 #: this many source radii $R$ of the observer (audit W4B-01). Beyond it the
 #: mesh gives the exact field: for two parallel lines the exact correction is
 #: below 1e-3 of the self term from $1.5\\,R$ on, while a cut at $2\\,R$ would
-#: still keep 2 % of it (evidence ``f01`` of stream fw4fem3d).
+#: still keep 2 % of it (evidence ``f01`` of stream fw4fem3d). Wires that run
+#: beside each other are kept this many source radii apart (audit W4R2B-03,
+#: :func:`beside_wires`), so the window never reaches the side of another
+#: wire.
 NEAR_FACTOR = 1.5
+
+#: The observer's own polyline counts whole only where it has turned by less
+#: than 120° (``d_obs · e > FOLD_COS``); a piece turned farther runs back
+#: towards the point and counts like a wire of the same electrode (audit
+#: W4R2B-02). A rule that clipped the own chain by its distance from the
+#: observer's axis line, continuous in the angle, also clipped the curved
+#: continuation of a ring: −1.19e-3 against the solid torus for a ring of
+#: r = 0.3 m (−4.9e-4 with this rule), −2.0e-3 for r = 1 m (evidence ``g02`` of
+#: stream fw4r2b).
+FOLD_COS = -0.5
+
+#: Two wires run *beside each other* where the nearest point of one to a
+#: point of the other lies on its side (not at an end) and the two run within
+#: this angle (sine) of parallel: 30°. Wires that meet or cross at a larger
+#: angle are close only over a few source radii (:func:`beside_wires`).
+BESIDE_SINE = 0.5
 
 
 @dataclass(frozen=True)
@@ -116,7 +148,8 @@ class WirePiece:
     chain
         Index of the wire the piece belongs to (one polyline of one
         electrode, a ring's polygon); ``None``: a wire of its own. The radius
-        correction counts the observer's own wire whole.
+        correction counts the observer's own wire whole where it has turned
+        by less than 120° (:data:`FOLD_COS`).
     """
 
     port: int
@@ -274,10 +307,241 @@ def _line_integral(
     e = (b - a) / length
     rel = x - a
     t = rel @ e
-    p2 = np.maximum(np.einsum("ij,ij->i", rel, rel) - t * t, 0.0)
-    s = np.sqrt(p2 + c * c)
+    s = np.sqrt(_axis_distance2(rel, e) + c * c)
     top = length if hi is None else hi
     return np.arcsinh((top - t) / s) - np.arcsinh((lo - t) / s)
+
+
+def _axis_distance2(rel: np.ndarray, e: np.ndarray) -> np.ndarray:
+    """Squared distance in m² of points ``rel`` (n, 3) from the axis line ``e``.
+
+    From the cross product, $|\\mathbf r \\times \\mathbf e|^2$: the
+    difference $|\\mathbf r|^2 - (\\mathbf r\\cdot\\mathbf e)^2$ cancels to
+    about $|\\mathbf r|^2\\varepsilon$ on the axis, which exceeded the
+    collinear tolerance $(10^{-6}\\cdot 1.5\\,R)^2$ from about 7 m along a piece
+    that is not axis-aligned and clipped the observer's own piece (audit
+    W4R2B-01: −1.63 % of the correction at such points).
+    """
+    c = np.cross(rel, e)
+    return np.einsum("ij,ij->i", c, c)
+
+
+def _segment_distances(
+    p0: np.ndarray, p1: np.ndarray, q0: np.ndarray, q1: np.ndarray
+) -> np.ndarray:
+    """Smallest distance in m between segments ``p0 p1`` and ``q0 q1`` (rows).
+
+    Closed form of the clamped closest points (Ericson 2005, §5.1.9) for
+    arrays of shape ``(n, 3)``; every segment has a positive length.
+    """
+    d1, d2, r = p1 - p0, q1 - q0, p0 - q0
+    a = np.einsum("ij,ij->i", d1, d1)
+    e = np.einsum("ij,ij->i", d2, d2)
+    f = np.einsum("ij,ij->i", d2, r)
+    c = np.einsum("ij,ij->i", d1, r)
+    b = np.einsum("ij,ij->i", d1, d2)
+    denom = a * e - b * b
+    with np.errstate(divide="ignore", invalid="ignore"):
+        s = np.where(
+            denom > 1e-12 * a * e, np.clip((b * f - c * e) / denom, 0.0, 1.0), 0.0
+        )
+        t = (b * s + f) / e
+        low, high = t < 0.0, t > 1.0
+        s = np.where(low, np.clip(-c / a, 0.0, 1.0), s)
+        s = np.where(high, np.clip((b - c) / a, 0.0, 1.0), s)
+    t = np.clip(t, 0.0, 1.0)
+    gap = p0 + s[:, None] * d1 - (q0 + t[:, None] * d2)
+    return np.sqrt(np.einsum("ij,ij->i", gap, gap))
+
+
+def _chains(model: "WireModel") -> np.ndarray:
+    """Chain index of every piece (a piece without a chain its own)."""
+    return np.array(
+        [-(k + 1) if p.chain is None else p.chain for k, p in enumerate(model.pieces)]
+    )
+
+
+def wire_systems(model: "WireModel") -> np.ndarray:
+    """Label of the connected wire system of every piece.
+
+    Two chains (wires) belong to one system where their axes come within the
+    smaller of their wire radii of each other — they meet: a rod on a ring,
+    a T-joint, a crossing in one plane, a galvanic conductor and the
+    electrode it is attached to, the pieces of a galvanic conductor — and
+    the relation is closed transitively. Wires that touch are one conductor;
+    their currents agree where they meet, so the radius correction may count
+    a piece of another port of the same system with the observer's current
+    (:func:`radius_correction`).
+    """
+    pieces = model.pieces
+    m = len(pieces)
+    chains = _chains(model)
+    keys = {c: i for i, c in enumerate(dict.fromkeys(chains.tolist()))}
+    parent = list(range(len(keys)))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    if m > 1:
+        start = np.array([p.start for p in pieces])
+        end = np.array([p.end for p in pieces])
+        radius = np.array([p.radius for p in pieces])
+        lo = np.minimum(start, end) - radius[:, None]
+        hi = np.maximum(start, end) + radius[:, None]
+        for i in range(m - 1):
+            j = np.arange(i + 1, m)
+            j = j[(chains[j] != chains[i])]
+            if j.size == 0:
+                continue
+            j = j[np.all((lo[j] <= hi[i]) & (hi[j] >= lo[i]), axis=1)]
+            if j.size == 0:
+                continue
+            d = _segment_distances(
+                np.broadcast_to(start[i], (j.size, 3)),
+                np.broadcast_to(end[i], (j.size, 3)),
+                start[j],
+                end[j],
+            )
+            for k in j[d <= np.minimum(radius[i], radius[j]) + 1e-12]:
+                a, b = find(keys[int(chains[i])]), find(keys[int(chains[k])])
+                if a != b:
+                    parent[b] = a
+    return np.array([find(keys[int(c)]) for c in chains], dtype=int)
+
+
+class Beside(NamedTuple):
+    """The closest pair of wires that run beside each other (:func:`beside_wires`)."""
+
+    #: Distance in m of the two wire axes.
+    distance: float
+    #: Port index of the wire whose point lies beside the other wire.
+    port: int
+    #: Port index of the other wire (the same for a folded arm).
+    other: int
+    #: ``"beside"`` (side by side within 30° of parallel), ``"folded"`` (an
+    #: arm of the same polyline) or ``"around"`` (the whole wire lies within
+    #: the reach of another wire it does not meet).
+    kind: str
+
+
+def beside_wires(model: WireModel, reach: float) -> Beside | None:
+    """The closest wires that run beside each other within ``reach`` m.
+
+    The 3-D model keeps such wires at least :data:`NEAR_FACTOR` source radii
+    apart (:func:`groundfield.solver.fem._solid.source_radius`; audits
+    W4R2B-03, W4R2A-01): closer, the discs of their smoothed sources reach
+    the other wire, the mesh no longer gives the other wire's exact field
+    and the radius correction has no term for it. Two wires run beside each
+    other where
+
+    * a point of one lies within ``reach`` of the *side* of a piece of the
+      other — the nearest point of that piece is not one of its ends — and
+      the two pieces run within 30° of parallel (:data:`BESIDE_SINE`): wires
+      side by side, concentric rings, an arm of the same polyline folded back
+      beside the point (kind ``"folded"``), the two arms of a V narrower than
+      30°; or
+    * the whole of one electrode's wire lies within ``reach`` of another wire
+      that it does not meet (:func:`wire_systems`; kind ``"around"``): a
+      small ring around a rod's head.
+
+    Left alone: pieces on one axis line (the collinear pieces of a galvanic
+    conductor, stacked rods), wires that meet or cross at more than 30° (a
+    rod on a ring, a T-joint, a crossing, a corner, the attachment of a
+    galvanic conductor) — near them a point is close to the other wire's end
+    or crosses it within a few source radii — and the consecutive chords of a
+    ring.
+
+    Returns
+    -------
+    Beside or None
+        The configuration with the smallest axis distance below ``reach``
+        (the distance for ``"around"`` is the farthest point of the wire from
+        the other wire, so the whole wire no longer lies within 1.5 radii of
+        the source radius it leads to), ``None`` if there is none.
+    """
+    pieces = model.pieces
+    m = len(pieces)
+    if m < 2 or not reach > 0.0:
+        return None
+    start = np.array([p.start for p in pieces])
+    end = np.array([p.end for p in pieces])
+    length = np.array([p.length for p in pieces])
+    direction = (end - start) / length[:, None]
+    ports = np.array([p.port for p in pieces], dtype=int)
+    chains = _chains(model)
+    systems = wire_systems(model)
+    # sample points inside every piece, spacing reach / 12
+    spacing = reach / 12.0
+    pts, owner = [], []
+    for k in range(m):
+        n = max(4, math.ceil(length[k] / spacing))
+        s = (np.arange(n) + 0.5) / n
+        pts.append(start[k] + s[:, None] * (end[k] - start[k]))
+        owner.append(np.full(n, k, dtype=int))
+    x_all = np.concatenate(pts)
+    own_all = np.concatenate(owner)
+    lo = np.minimum(start, end) - reach
+    hi = np.maximum(start, end) + reach
+    best: Beside | None = None
+    chunk = max(1, 400_000 // m)
+    # the farthest point of every chain from each other chain (row: chain)
+    labels = np.unique(chains)
+    col = np.searchsorted(labels, chains)
+    farthest = np.zeros((labels.size, labels.size))
+    for i0 in range(0, x_all.shape[0], chunk):
+        x = x_all[i0 : i0 + chunk]
+        own = own_all[i0 : i0 + chunk]
+        box_lo, box_hi = x.min(axis=0), x.max(axis=0)
+        cand = np.nonzero(np.all((lo <= box_hi) & (hi >= box_lo), axis=1))[0]
+        if cand.size == 0:
+            continue
+        rel = x[:, None, :] - start[cand][None, :, :]
+        tau = np.einsum("ijk,jk->ij", rel, direction[cand])
+        foot = np.clip(tau, 0.0, length[cand][None, :])
+        gap = rel - foot[:, :, None] * direction[cand][None, :, :]
+        dist = np.linalg.norm(gap, axis=2)
+        sine = np.linalg.norm(
+            np.cross(direction[own][:, None, :], direction[cand][None, :, :]), axis=2
+        )
+        to_line = np.linalg.norm(
+            rel - tau[:, :, None] * direction[cand][None, :, :], axis=2
+        )
+        collinear = (sine < 1e-6) & (to_line < 1e-6 * reach)
+        other = (cand[None, :] != own[:, None]) & ~collinear
+        tol = 1e-9 * length[cand][None, :]
+        side = (tau > tol) & (tau < length[cand][None, :] - tol)
+        hit = other & side & (sine < BESIDE_SINE) & (dist < reach)
+        if np.any(hit):
+            d = np.where(hit, dist, np.inf)
+            i, j = np.unravel_index(int(np.argmin(d)), d.shape)
+            if best is None or d[i, j] < best.distance:
+                p_, q_ = int(own[i]), int(cand[j])
+                kind = "folded" if chains[p_] == chains[q_] else "beside"
+                best = Beside(float(d[i, j]), int(ports[p_]), int(ports[q_]), kind)
+        # the distance of every point from each chain (inf: beyond reach)
+        order = np.argsort(col[cand], kind="stable")
+        uniq, first_col = np.unique(col[cand][order], return_index=True)
+        to_chain = np.full((x.shape[0], labels.size), np.inf)
+        to_chain[:, uniq] = np.minimum.reduceat(
+            np.where(other, dist, np.inf)[:, order], first_col, axis=1
+        )
+        c_own = col[own]
+        for c1 in np.unique(c_own):
+            far = to_chain[c_own == c1].max(axis=0)
+            farthest[c1] = np.maximum(farthest[c1], far)
+    first = {int(c): k for k, c in reversed(list(enumerate(col)))}
+    np.fill_diagonal(farthest, np.inf)
+    for c1, c2 in zip(*np.nonzero(farthest < reach), strict=True):
+        k1, k2 = first[int(c1)], first[int(c2)]
+        far = float(farthest[c1, c2])
+        if systems[k1] == systems[k2]:
+            continue
+        if best is None or far < best.distance:
+            best = Beside(far, int(ports[k1]), int(ports[k2]), "around")
+    return best
 
 
 def radius_correction(
@@ -294,44 +558,53 @@ def radius_correction(
     rho_local
         Resistivity in Ω·m around every axial point.
     near
-        Distance in m (:data:`NEAR_FACTOR` times the source radius): of a
-        piece that is not the observer's own wire, and of a surface image
-        that does not continue the observer's axis, only the part within
-        ``near`` of the observer counts. The observer's own wire (its chain
-        and every piece on its axis line) counts whole, except a piece of
-        the chain parallel to the observer's piece and off its axis (an arm
-        folded back beside it, a loop's opposite side), which counts like
-        another wire.
+        Distance in m (:data:`NEAR_FACTOR` times the source radius). Every
+        piece on the observer's axis line counts whole (the next piece of a
+        galvanic conductor, a rod's surface image). The observer's own
+        polyline counts whole where it has turned by less than 120°
+        (:data:`FOLD_COS`) and is not parallel beside the point; of the rest
+        of its electrode, of a piece of another port whose wire meets the
+        observer's wire (:func:`wire_systems`) and of the surface images only
+        the part within ``near`` of the point counts. Every other piece of
+        another port counts nothing (audit W4R2B-03).
     """
     x = model.points
     n = x.shape[0]
     pieces = model.pieces
     a_obs = np.array([p.radius for p in pieces])[model.piece]
-    chains = np.array(
-        [-(k + 1) if p.chain is None else p.chain for k, p in enumerate(pieces)]
-    )
+    chains = _chains(model)
+    ports = np.array([p.port for p in pieces], dtype=int)
+    systems = wire_systems(model)
     chain_obs = chains[model.piece]
+    port_obs = ports[model.piece]
+    system_obs = systems[model.piece]
     d_obs = np.array([p.direction for p in pieces])[model.piece]
     on_axis = 1e-6 * near  # m; collinear pieces share the axis to round-off
     total = np.zeros(n)
     mirror = np.array([1.0, 1.0, -1.0])
     for k, p in enumerate(pieces):
+        # the window counts for the observer's electrode and for wires that
+        # meet the observer's wire (one conductor), not for other ports
+        window = (port_obs == ports[k]) | (system_obs == systems[k])
         for image in (False, True):
             a, b = (p.start * mirror, p.end * mirror) if image else (p.start, p.end)
             length = float(np.linalg.norm(b - a))
             e = (b - a) / length
             rel = x - a
             t = rel @ e
-            p2 = np.maximum(np.einsum("ij,ij->i", rel, rel) - t * t, 0.0)
+            p2 = _axis_distance2(rel, e)
             parallel = np.linalg.norm(np.cross(d_obs, e), axis=1) < 1e-6
             collinear = parallel & (p2 < on_axis**2)
             if image:
                 whole = collinear
-            else:  # own wire, but not an arm of it folded back beside the point
-                whole = collinear | ((chain_obs == chains[k]) & ~parallel)
+            else:  # own wire, not where it runs back or beside the point
+                whole = collinear | (
+                    (chain_obs == chains[k]) & ~parallel & ((d_obs @ e) > FOLD_COS)
+                )
             half = np.sqrt(np.maximum(near * near - p2, 0.0))
             lo = np.where(whole, 0.0, np.clip(t - half, 0.0, length))
             hi = np.where(whole, length, np.clip(t + half, 0.0, length))
+            hi = np.where(whole | window, hi, lo)
             idx = np.nonzero(hi > lo)[0]
             if idx.size == 0:
                 continue
