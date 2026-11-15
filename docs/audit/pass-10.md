@@ -4930,4 +4930,50 @@ wave-4 fixes below.
 
 ### Audits W4R2A and W4R2B: round 2 on the wave-4 fixes
 
+The second round tried to break the wave-4 fixes (snapshot `4eb1c2c`)
+with the boundary elements of round 1, the axisymmetric model, `mom`
+refined and closed forms of the smoothed line source. Findings:
+
+- W4R2A-01, W4R2B-03 (medium): the 3-D model next to another wire. The
+  fallback of W4A-03 sent a ring without room for its mesh block to the
+  3-D model, which read two diagonal rings 1.3 … 3.8 mm apart +11.4 …
+  +14.3 % high against an estimate of 0.42 %, without a message; coaxial
+  rings 7.5 cm apart, where the texts promised 2e-3, read +4.35e-3, 6 cm
+  apart +1.0e-2, and below one source radius the port entries were off by up
+  to 4.3 %; the radius correction counted other ports' wires with the
+  observer's current.
+- W4R2A-02 (medium): the refined ring block held up to a contrast of 33; a
+  ring touching a layer 1000 times more conductive read −1.61e-2 against an
+  estimate of 1.07e-2, and at `refinement=1` the estimate fell below the
+  error at contrasts 100 and 1000.
+- W4R2A-03 (medium): the 3-D model neither warned nor refused a rod end at
+  an interface (+43 % for a tip on a 1000 / 30 Ω·m interface).
+- W4R2B-01, W4R2B-02 (low–medium): on straight pieces longer than about 7 m
+  off the coordinate axes the observer's own piece was clipped by round-off
+  (a 20 m oblique strip −3.8e-4); an arm of the same polyline folded back at
+  any angle but exactly parallel counted whole (a hairpin tilted by 1e-4 rad
+  +1.41e-3, a 10° V +8.5e-4 against the same V as two strips).
+- W4R2A-04, W4R2A-05 (low): the reach of the near-interface warning lay
+  0.2 … 0.4 wire radii short for a thick wire on a small ring, and cut wires
+  below a contrast of 2 read up to ±1.5 % without a warning; `diagnose()`
+  with a `fem` engine reported a ring that the axisymmetric model solves.
+- W4R2B-04 … W4R2B-07, W4R2A-06, W4R2A-07 (low, info): resolved concrete
+  with a thin cover ended in a bare `ValueError` after meshing; stale texts
+  (level ratios, station memory, the junction table, the refusal of
+  W4B-03); tests that failed on the base for the wrong reason.
+- **B8 (open point of stream `fw4int`):** the 3-D model is right; `mom`'s
+  floating port at the benchmark's 0.5 m is not converged. Refined to
+  1/32 m it falls by 0.20 … 0.75 % and ends 0.15 … 0.21 % above `fem`, and
+  on a coaxial rod and ring the axisymmetric model confirms the 3-D
+  transfer resistance to 1.3e-3.
+
+Confirmed: golden 563 of 563 quantities identical in both audits; one
+near-interface warning per solve in every backend that should warn and none
+from the axisymmetric model; no false positive over 868 tests and the
+tutorials; the depth residual, the coaxial rings at 10 cm and the brace
+effect reproduce to the digit; the refusals of W4B-03 and W4B-08, the
+determinism of W4B-07 and the memory keys hold.
+
+### Streams `fw4r2a` and `fw4r2b`: fixes of audits W4R2A and W4R2B
+
 Filled in at the release.
