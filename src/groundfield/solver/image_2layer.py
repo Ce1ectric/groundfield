@@ -1267,11 +1267,15 @@ class _TwoLayerGreen:
                 z_max,
                 h_1,
             )
-        elif h_1 - z_max < 2.0 * ds:
+        elif self.kernel != "line" and h_1 - z_max < 2.0 * ds:
             # Audit 2026-07-08 WP-D2: within ~one segment of the
             # interface the point-source treatment of the K-weighted
             # nearest image (distance 2(h_1 − z)) degrades. Surface the
-            # margin so the user can refine ds or accept the bias.
+            # margin so the user can refine ds or accept the bias. The
+            # line kernel integrates that image (a strip 0.1 m above the
+            # interface is ds-independent to 4e-6, a ring one wire radius
+            # above within 4.1e-5 of its exact value) and does not warn
+            # (audit W3A-06).
             warnings.warn(
                 f"image_2layer: deepest segment ends {h_1 - z_max:.2f} m "
                 f"above the layer interface (h_1 = {h_1:.2f} m), which is "
