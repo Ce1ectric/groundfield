@@ -34,6 +34,16 @@ from dataclasses import asdict
 
 import pytest
 
+# Import the package once, before any worker reports back. With
+# pytest-xdist the controller rebuilds every warning a worker sends by
+# importing the warning's module, from one receiver thread per worker. Two
+# such first imports at the same time (e.g. `groundfield.conductors.conductor`
+# and `groundfield.solver._guards`) can meet the package's import cycle
+# (`groundfield` -> `solver.engine` -> `solver.result` -> `sources`)
+# half-initialised in the other thread and fail with "cannot import name ...
+# from partially initialized module", which aborts the session.
+import groundfield  # noqa: E402, F401
+
 _FINDING_ID = re.compile(r"^(\d+\.\d+|F\d+|S\d+|A\d+-\d+)$")
 
 
