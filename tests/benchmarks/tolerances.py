@@ -261,7 +261,7 @@ BENCHMARKS: dict[str, Benchmark] = {
                 3e-2,
                 _REL,
                 "+1.43 % / +2.83 %",
-                "uniform current per electrode (10.22); target 2 %",
+                "uniform current per straight wire (10.22); target 2 %",
             ),
             "fem": Bound(
                 None,
