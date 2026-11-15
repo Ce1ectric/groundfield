@@ -2910,6 +2910,52 @@ files = [
 tests = ["pytest"]
 
 [[package]]
+name = "pyamg"
+version = "5.4.1"
+description = "PyAMG: Algebraic Multigrid Solvers in Python"
+optional = true
+python-versions = ">=3.10"
+groups = ["main"]
+markers = "extra == \"fem3d\""
+files = [
+    {file = "pyamg-5.4.1-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:9fc99452e773dee563f06934d54c35c0a03b399e374dc5b44924b4c9851cfc24"},
+    {file = "pyamg-5.4.1-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:0b039f77acc59579506339da150085bc2d5ff6535c95493a2cbd5ecdf16755ad"},
+    {file = "pyamg-5.4.1-cp310-cp310-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:519b5b52f273726fece9bafd5b56e3d6bb2fdd256f4d2b7d26384c2d7cda335f"},
+    {file = "pyamg-5.4.1-cp310-cp310-musllinux_1_2_x86_64.whl", hash = "sha256:965eaf08355c02a131f610ef0816d120dc291549bcdaaf8256e43952b69e9e64"},
+    {file = "pyamg-5.4.1-cp310-cp310-win_amd64.whl", hash = "sha256:a0461bfde6e081cfe5427d71b5c3ee7f7e4f9a4b4b8862d92c68908ec02d2448"},
+    {file = "pyamg-5.4.1-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:b77fe70ce0d77e0d09c6120e2852fe9f30860597c6870f81bab154fc07b9ec8f"},
+    {file = "pyamg-5.4.1-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:8bed8e51c21b07464a18dc661c9f7632cdb984c8af47a3194009284a04e37e49"},
+    {file = "pyamg-5.4.1-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:418d16823f69d7049f22ea35bba08ed00761a945b58b6089be985427204c9f64"},
+    {file = "pyamg-5.4.1-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:b6f8a1d5b738c4911a2b7b43c4ec129f38ef8e0cdb4b2bdb988d3f7c41cf0aed"},
+    {file = "pyamg-5.4.1-cp311-cp311-win_amd64.whl", hash = "sha256:b1992c2ffb29a1e5df69b8198d297762d153f6475d886e044047a069110c86da"},
+    {file = "pyamg-5.4.1-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:6874a9374881d5908fc7f66efee5af2a428b4a826613824a75e775d909fa6b00"},
+    {file = "pyamg-5.4.1-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:acf6268a7d8d97cd76306769aacf04769aa69c5a2486329030c03b872c1fdf45"},
+    {file = "pyamg-5.4.1-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:91992dd46bae10b01b923c69f0a00bb8700d7c6f8da3098487fa3b7aa3b431fe"},
+    {file = "pyamg-5.4.1-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:71d0fcf1bfc93aaf6d857ebc0c8163479f39d9cb00ac42d9b145707528e0d71e"},
+    {file = "pyamg-5.4.1-cp312-cp312-win_amd64.whl", hash = "sha256:9ba9a0642dd1def9124a93c253b022d3b1b9f09488381df9159bccc6e92464c9"},
+    {file = "pyamg-5.4.1-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:d33ef24262002583825e4d64b18c5f532780efa012057c58441353558c51b377"},
+    {file = "pyamg-5.4.1-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:dc116b69dded020081a830b481b9429daae4754a8e3a70fb02133f81de3b5dc7"},
+    {file = "pyamg-5.4.1-cp313-cp313-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:e3189f1c0272b656be9467e9deadbc0b7d7fe7b70a4673a3518d0c6d3a78d79b"},
+    {file = "pyamg-5.4.1-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:7d0201edd541d928f71936474ec717ebdc32517b87807b40aea27b5b80c29ed9"},
+    {file = "pyamg-5.4.1-cp313-cp313-win_amd64.whl", hash = "sha256:f5a1b5c3c31480735b5060bc40f73703456700467ad169f3bf97821a84eac3e7"},
+    {file = "pyamg-5.4.1-cp314-cp314-macosx_10_15_x86_64.whl", hash = "sha256:74a55e4b5053e9890ee9afe61fcc5e3d81757add39ac9f3d8ea211c86b461bab"},
+    {file = "pyamg-5.4.1-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:5c971d54735af4be4c0653a7be37e5c7bb59f3eef47addfaf346a3cce1e54cd8"},
+    {file = "pyamg-5.4.1-cp314-cp314-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:2b56a96bc7f492ec49377ef537bd74f6ef7e53d8c39222dd8464f000f89d8441"},
+    {file = "pyamg-5.4.1-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:47a5befac3623fb129af8ac0100a0ff012bc4b7455c611dbcbb67c49958c3e74"},
+    {file = "pyamg-5.4.1-cp314-cp314-win_amd64.whl", hash = "sha256:66a083c4f42d2735c22267f9cb38f1a8f46add355b0a77d29bc10c341ea6e9f7"},
+    {file = "pyamg-5.4.1.tar.gz", hash = "sha256:b5829ce39687655ce68db4415c93ee171056bb4e41e7b798ef4e6e9f9f93beae"},
+]
+
+[package.dependencies]
+numpy = ">=1.23.5"
+scipy = ">=1.15.0"
+
+[package.extras]
+build = ["meson", "meson-python", "ninja", "pybind11"]
+style = ["ruff"]
+test = ["pytest"]
+
+[[package]]
 name = "pycparser"
 version = "3.0"
 description = "C parser in Python"
@@ -3682,6 +3728,26 @@ files = [
 ]
 
 [[package]]
+name = "scikit-fem"
+version = "12.0.2"
+description = "Simple finite element assemblers"
+optional = true
+python-versions = ">=3.10"
+groups = ["main"]
+markers = "extra == \"fem3d\""
+files = [
+    {file = "scikit_fem-12.0.2-py3-none-any.whl", hash = "sha256:34cd891f80072c0c1eb759a2371e82f0eeec91ff7c08acab96d27b6edbbe1b05"},
+    {file = "scikit_fem-12.0.2.tar.gz", hash = "sha256:0a38764cdb93411c5a994451c22c1da07808ebabf920f462c6253f78f5703f8a"},
+]
+
+[package.dependencies]
+numpy = "*"
+scipy = "*"
+
+[package.extras]
+all = ["matplotlib", "meshio"]
+
+[[package]]
 name = "scipy"
 version = "1.17.1"
 description = "Fundamental algorithms for scientific computing in Python"
@@ -4235,10 +4301,11 @@ test = ["pytest", "ruff"]
 
 [extras]
 fast = ["numba"]
+fem3d = ["pyamg", "scikit-fem"]
 geo = ["pyproj", "requests", "shapely"]
 groundinsight = ["groundinsight"]
 
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4.0"
-content-hash = "3339c469b83f7e7a12b7a17eb7ba5dea0b08f769eb86a81f5cbc40bdfb0148b9"
+content-hash = "3dec7fa046af301996b7d00822134fbaba7c3df044e2fd6f1f25de29d3209774"
