@@ -249,8 +249,9 @@ def solve_fem(
     source_radius
         3-D model: radius in m of the disc over which each wire's leakage
         is smoothed; ``None`` (default) takes 0.06 m (at least 2.2 bare
-        wire radii, at most what the depth of the wires and their gap to
-        the interfaces allow).
+        wire radii, at most what the depth of the wires, their gap to the
+        interfaces and the distance of wires that run beside each other —
+        kept 1.5 source radii apart — allow).
     growth
         3-D model: growth of the element size per metre away from the
         wires (default 0.5; smaller is finer and slower).
@@ -277,7 +278,9 @@ def solve_fem(
         ``fem_ports``), ``fem_port_resistance_levels`` (per mesh level),
         ``fem_error_estimate`` (largest relative difference of a diagonal
         entry between the extrapolated and the finer level; ``NaN`` with
-        ``extrapolate=False``), ``fem_model`` (``"axisymmetric"`` or
+        ``extrapolate=False``), ``fem_error_estimate_transfer`` (3-D model:
+        the same for the transfer entries; ``NaN`` for one port or one
+        level), ``fem_model`` (``"axisymmetric"`` or
         ``"3d"``: the model that ran), ``fem_mesh`` (size and time per
         level) and ``fem_r_far`` (box size in m).
 
@@ -292,10 +295,17 @@ def solve_fem(
         no room for its mesh block (within about a wire radius, diagonally,
         of a rod's end edge); ``model="auto"`` solves these worlds with the
         three-dimensional model.
-        3-D model: a wire too close to the soil surface or an interface for
-        its smoothed source, resolved concrete around a wire that is not
-        straight along x, y or z. The message names the backends that solve
-        the world. A subclass of ``ValueError`` and ``NotImplementedError``.
+        3-D model, before meshing: a wire too close to the soil surface or
+        an interface for its smoothed source; wires that run beside each
+        other (side by side within 30° of parallel, a folded arm, a small
+        ring around a rod head) closer than 1.5 times the smallest source
+        radius their wire radius allows (3.3 wire radii, axis to axis);
+        resolved concrete around a wire that is not straight along x, y or
+        z, or whose cover is so thin that the smoothed source does not
+        reach beyond the metal. After meshing: conjugate gradients that do
+        not converge (layer contrasts above about 300). The message names
+        the backends that solve the world. A subclass of ``ValueError`` and
+        ``NotImplementedError``.
     ImportError
         If the world needs the three-dimensional model and the ``fem3d``
         extra (scikit-fem, pyamg) is not installed.
@@ -307,7 +317,8 @@ def solve_fem(
         If the finer mesh would exceed ``max_nodes`` nodes (the 3-D model:
         ``max_nodes_3d``, a prediction before meshing and the exact count
         before the finer level), or the 3-D model would solve more than
-        ``max_ports_3d`` ports.
+        ``max_ports_3d`` ports; where wires that run beside each other
+        limited the source radius, the message says so.
     TypeError
         If ``world.soil`` is no soil model.
 
