@@ -90,6 +90,7 @@ Validity envelope
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Optional, Union
 
 from pydantic import Field, model_validator
@@ -100,7 +101,7 @@ from groundfield.generators.electrode_specs import RodElectrodeSpec
 from groundfield.generators.grounding import GroundingSystemSpec
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    from groundfield.solver.result import FieldResult
+    from groundfield.solver.result import FieldResult, SourceRecord
 
 __all__ = [
     "MEASUREMENT_H_TERMINAL",
@@ -187,6 +188,38 @@ def lead_axis_z(depth_m: float, coupling_to_soil: str = "isolated") -> float:
 # ---------------------------------------------------------------------
 
 
+def _measurement_record(records: Sequence["SourceRecord"]) -> "SourceRecord":
+    """The source of the measurement when ``source=`` is omitted.
+
+    The single current source of the result, else its single voltage
+    source (audit W2R2-05); the rule of the releases before 2026.11, which
+    read the single current source whatever voltage sources the result
+    carried, extended to voltage-driven measurements (audit W2A-10).
+
+    Raises
+    ------
+    ValueError
+        If the result has several current sources, or no current source
+        and not exactly one voltage source.
+    """
+    by_kind = {kind: [r for r in records if r.kind == kind] for kind in _SOURCE_KINDS}
+    for kind in _SOURCE_KINDS:  # current first
+        if len(by_kind[kind]) == 1:
+            return by_kind[kind][0]
+        if by_kind[kind]:
+            break
+    counts = "; ".join(
+        f"{len(found)} {kind} source{'s' if len(found) != 1 else ''}"
+        + (f" ({', '.join(r.name for r in found)})" if found else "")
+        for kind, found in by_kind.items()
+    )
+    raise ValueError(
+        f"The result carries {counts}; without source= the reading takes the "
+        "single current source, or the single voltage source of a result "
+        "without current sources. Pass source=<name>."
+    )
+
+
 def measured_impedance(
     result: "FieldResult",
     probe: Optional[str] = None,
@@ -229,8 +262,12 @@ def measured_impedance(
         :class:`~groundfield.generators.tn_network.TnNetworkGenerator`
         network.
     source
-        Name of the measurement's source; may be omitted when the result
-        carries exactly one current or voltage source.
+        Name of the measurement's source. Omitted, the reading takes the
+        result's single current source, or, when it has no current
+        source, its single voltage source (audit W2R2-05: a result with
+        one current source and voltage sources besides reads the current
+        source, as up to 2026.11); several current sources, or several
+        voltage sources and no current source, need the name.
 
     Returns
     -------
@@ -242,7 +279,8 @@ def measured_impedance(
     ------
     ValueError
         If the result carries no source snapshot (hand-built results), no
-        current or voltage source, or several and ``source`` is omitted;
+        current or voltage source, or, with ``source`` omitted, several
+        current sources or no current and several voltage sources;
         if the record of the source carries no current per frequency (a
         voltage record without its solved current); if no probe is given
         and none can be found.
@@ -265,14 +303,7 @@ def measured_impedance(
             "result carries none (hand-built FieldResult?)."
         )
     if source is None:
-        candidates = [s for s in result.sources if s.kind in _SOURCE_KINDS]
-        if len(candidates) != 1:
-            names = ", ".join(s.name for s in candidates) or "none"
-            raise ValueError(
-                f"The result carries {len(candidates)} sources ({names}); pass "
-                "source=<name>."
-            )
-        record = candidates[0]
+        record = _measurement_record(result.sources)
     else:
         by_name = {s.name: s for s in result.sources}
         if source not in by_name:

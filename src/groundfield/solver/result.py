@@ -83,7 +83,7 @@ from groundfield.soil.models import (
     MultiLayerSoil,
     TwoLayerSoil,
 )
-from groundfield.sources import _internal_impedance
+from groundfield.sources import _internal_impedance, _with_ideal_internal_impedance
 
 if TYPE_CHECKING:  # pragma: no cover - type-hint imports only
     import pandas as pd
@@ -160,6 +160,9 @@ class SourceRecord(BaseModel):
     ``internal_inductance_h`` are its internal impedance
     $Z_q = R + j\\omega L$ (0 for an ideal source and for current
     sources), so the terminal voltage is $U - Z_q I$.
+
+    A record pickled before 2026.11 lacks the two fields of the internal
+    impedance and unpickles with 0 / 0, as its JSON loads (audit W2R2-01).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -192,7 +195,7 @@ class SourceRecord(BaseModel):
         description=(
             "Internal series resistance R of a voltage source in Ω; 0 for an "
             "ideal source, a current source and records written before "
-            "2026.11."
+            "2026.11 (JSON and pickles)."
         ),
     )
     internal_inductance_h: float = Field(
@@ -200,9 +203,12 @@ class SourceRecord(BaseModel):
         description=(
             "Internal series inductance L of a voltage source in H; 0 for an "
             "ideal source, a current source and records written before "
-            "2026.11."
+            "2026.11 (JSON and pickles)."
         ),
     )
+
+    def __setstate__(self, state: Any) -> None:
+        super().__setstate__(_with_ideal_internal_impedance(type(self), state))
 
     def internal_impedance(self, frequency: float) -> complex:
         """Internal impedance $Z_q = R + j\\omega L$ in Ω at ``frequency`` (Hz).

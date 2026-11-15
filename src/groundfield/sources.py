@@ -106,9 +106,18 @@ take a non-finite value.
 from __future__ import annotations
 
 import math
-from typing import Annotated, Literal, Union
+import sys
+from typing import Annotated, Any, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Discriminator, Field, TypeAdapter
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Discriminator,
+    Field,
+    TypeAdapter,
+    ValidationInfo,
+    field_validator,
+)
 
 __all__ = [
     "Source",
@@ -196,11 +205,24 @@ class VoltageSource(_SourceBase):
     phase_deg
         Phase angle in degrees; finite. Default 0.
     internal_resistance_ohm
-        Internal series resistance $R$ in Ω; finite, ≥ 0. Default 0.
+        Internal series resistance $R$ in Ω; finite, ≥ 0, and either 0
+        or at least the smallest normal float (``sys.float_info.min`` =
+        ``numpy.finfo(float).tiny``, 2.2e-308; a subnormal $R$ turned the
+        solve into ``nan``, audit W2R2-10). Default 0. For $R \\gg Z_E$
+        (the impedance the source sees) a current source $U/R$ is the
+        better model: the potentials of the voltage solve can lose about
+        $\\log_{10}(R/Z_E)$ digits (2.7e-6 relative at $R = 10^{12}$ Ω
+        on a 36 Ω rod, ``image``).
     internal_inductance_h
-        Internal series inductance $L$ in H; finite, ≥ 0. Default 0.
-        It enters as $j\\omega L$ at each solved frequency and vanishes
-        at $f = 0$.
+        Internal series inductance $L$ in H; finite, ≥ 0, 0 or normal
+        like $R$. Default 0. It enters as $j\\omega L$ at each solved
+        frequency and vanishes at $f = 0$.
+
+    Notes
+    -----
+    A source pickled before the two fields existed (2026.11, user
+    decision D1) unpickles with $R = L = 0$, the ideal source it was, as
+    its JSON loads (audit W2R2-01).
     """
 
     kind: Literal["voltage"] = "voltage"
@@ -227,6 +249,17 @@ class VoltageSource(_SourceBase):
         ),
     )
 
+    @field_validator("internal_resistance_ohm", "internal_inductance_h")
+    @classmethod
+    def _not_subnormal(cls, value: float, info: ValidationInfo) -> float:
+        problem = _internal_impedance_problem(value)
+        if problem is not None:
+            raise ValueError(f"{info.field_name} ({value!r}) {problem}")
+        return value
+
+    def __setstate__(self, state: Any) -> None:
+        super().__setstate__(_with_ideal_internal_impedance(type(self), state))
+
     def internal_impedance(self, frequency: float) -> complex:
         """Internal impedance $Z_q = R + j\\omega L$ at ``frequency``.
 
@@ -246,6 +279,74 @@ class VoltageSource(_SourceBase):
             self.internal_inductance_h,
             2.0 * math.pi * float(frequency),
         )
+
+
+#: Names of the two fields of the internal impedance (user decision D1).
+_INTERNAL_IMPEDANCE_FIELDS = ("internal_resistance_ohm", "internal_inductance_h")
+
+#: Smallest normal double (``numpy.finfo(float).tiny``, 2.2250738585072014e-308).
+_SMALLEST_NORMAL = sys.float_info.min
+
+
+def _internal_impedance_problem(value: float) -> str | None:
+    """Why ``value`` is no valid $R$ / $L$ of a voltage source, or ``None``.
+
+    Finite, ≥ 0 and either 0 or normal: a subnormal value (0 < value <
+    2.2e-308) is lost to underflow in the elimination and turned an
+    ideal source next to one behind such an $R$ into ``nan`` (audit
+    W2R2-10). Shared by the field validator and :meth:`World.check
+    <groundfield.world.World.check>`, which sees values set by
+    ``model_copy(update=...)``.
+    """
+    if not (math.isfinite(value) and value >= 0.0):
+        return "must be finite and >= 0"
+    if 0.0 < value < _SMALLEST_NORMAL:
+        return (
+            f"is non-zero but below the smallest normal float "
+            f"({_SMALLEST_NORMAL!r}); the solve would lose it to underflow. "
+            "Use 0 for an ideal source"
+        )
+    return None
+
+
+def _with_ideal_internal_impedance(model: type[BaseModel], state: Any) -> Any:
+    """Pickle state of ``model`` with $R = L = 0$ where it lacks them (private).
+
+    Pydantic restores a pickled model from its ``__dict__`` without
+    running any validator, so a :class:`VoltageSource` or a
+    :class:`~groundfield.solver.result.SourceRecord` pickled before
+    2026.11 (user decision D1) lacked ``internal_resistance_ohm`` /
+    ``internal_inductance_h`` and every reader raised ``AttributeError``
+    (audit W2R2-01). This fills the missing ones with 0.0, the ideal
+    source, as JSON of the same object loads, and keeps the field order
+    and the set of explicitly set fields; a current state is returned
+    as it is (as :func:`groundfield.generators._compat.upgrade_pickled_state`
+    does for the generator models, review finding 10.69).
+
+    Parameters
+    ----------
+    model
+        The class being unpickled.
+    state
+        The state handed to ``__setstate__``.
+
+    Returns
+    -------
+    object
+        The completed state, or ``state`` itself.
+    """
+    if not isinstance(state, dict) or not isinstance(state.get("__dict__"), dict):
+        return state
+    values: dict[str, Any] = state["__dict__"]
+    if all(name in values for name in _INTERNAL_IMPEDANCE_FIELDS):
+        return state
+    completed = {
+        name: values.get(name, 0.0)
+        for name in model.model_fields
+        if name in values or name in _INTERNAL_IMPEDANCE_FIELDS
+    }
+    completed.update((k, v) for k, v in values.items() if k not in completed)
+    return {**state, "__dict__": completed}
 
 
 def _internal_impedance(resistance: float, inductance: float, omega: float) -> complex:
