@@ -99,6 +99,10 @@ limits a result, the reference documentation states the limit.
   invariant to round-off. It covers the direct pairs, the series images and the
   cross-layer pairs and moves golden cases by up to 1.6e-5 (audit W2B-02; user
   decision D2: in 2026.11).
+- **The coordinate check in `fem`.** The rebuilt `fem` should warn about worlds that
+  mix projected and local coordinates at the solve like the other backends
+  (`MixedCoordinatesWarning`, user decision D5); `diagnose()` reports such worlds for
+  every backend already.
 - **Overlapping concrete shells at junctions.** Where the wires of an
   encased foundation meet (the corners of a rectangle, the crossings and
   T-joints of a mesh), their shells overlap within about $r_b$ of the

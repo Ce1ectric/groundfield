@@ -35,9 +35,17 @@ shows what agrees with independent references and how well.
   earth wires; mutual impedances (`BranchType`) for groundinsight — one
   `BusType` describes one terminal.
 - **Projected coordinates** are solved in an exactly shifted local frame beyond 10 km
-  from the origin. A world that mixes projected and local coordinates (electrodes at UTM
-  coordinates and a node near (0, 0)) gains nothing from the frame, as its bounding box
-  spans the whole range. The straight runs of a polyline (one owner per run)
+  from the origin. A world that mixes projected and local coordinates — points within
+  10 km of the origin and beyond 1000 km from it, typically a return electrode, a
+  cabinet or a cable end entered in a local system in a UTM world — gains nothing from
+  the frame and is solved as given: its two groups lie some 33 000 km apart and a
+  conductor between them is that long (a return rod at local (80, 15) m for an outline
+  at UTM coordinates: Z_in +0.43 %; a PEN cable to a cabinet at local coordinates: a
+  33 118 km conductor, 7494 + j25396 Ω instead of 5.39 + j0.19 Ω with `carson_series`,
+  and `sommerfeld` does not finish; audit W2B-04). Its round-off is that of the UTM
+  world (1.5e-11 instead of 1.0e-11, point kernel). Since 2026.11 the solve warns with
+  `MixedCoordinatesWarning` and `diagnose()` reports it under `coordinates` (user
+  decision D5); `fem` does not run the check at the solve. The straight runs of a polyline (one owner per run)
   are found with a round-off allowance of 64 units of the coordinates,
   0.46 µm at a UTM easting: an arc whose vertices lie closer than that to the
   chord of their neighbours (R = 50 m in 6 mm edges) gets one owner per two
@@ -109,11 +117,11 @@ shows what agrees with independent references and how well.
   straight wire of equal segments the pairs six segments apart sit exactly on that
   boundary, so round-off decides their form wherever the world stands. Results of the
   same world at different positions (shifted by 0.1 m … 8.8 km, or to UTM coordinates)
-  therefore spread by up to 5e-7 in the impedance and 1e-6 in touch voltages for the
-  direct pairs (a 12 m strip in homogeneous soil: 4.4e-7). In two-layer soil an image
+  therefore spread by up to 5.4e-7 in the impedance and 1.0e-6 in touch voltages for
+  the direct pairs (a 12 m strip in homogeneous soil: 4.4e-7). In two-layer soil an image
   distance of six segment lengths (2nh₁ for wires at one depth, or 2(nh₁ − z)) puts every
   segment's own image pair on the switch, whose far form there is the point form: the
-  spread reaches 1e-5 … 3e-5 in the impedance and 5e-5 in touch voltages — for example
+  spread reaches 8e-6 … 2.6e-5 in the impedance and 5.5e-5 in touch voltages — for example
   the generated house mesh at its default 0.8 m depth with h₁ = 2.3 m and 0.5 m
   segments, or h₁ = 3 m with 1 m segments (audit W2B-01). The point kernel (`kernel="point"`, `mom`,
   `mom_sommerfeld`) is invariant to 1e-14 at local offsets and 3e-11 at UTM coordinates.
