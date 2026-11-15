@@ -211,8 +211,12 @@ BENCHMARKS: dict[str, Benchmark] = {
                 None,
                 "abs(Z_AB/Z_BA - 1)",
                 "3-D model, run once outside the suite (stream fw4int): 0 in all "
-                "three soils, its port matrix symmetric to 2.2e-16; Z_BA 0.67 / "
-                "0.96 % below the floating-port mom (h₁ = 5 / 2 m)",
+                "three soils, its port matrix symmetric to 2.2e-16; Z_BA within "
+                "0.15 … 0.21 % of mom refined to ds = 1/32 m; mom at the "
+                "benchmark's 0.5 m reads 0.40 / 0.67 / 0.96 % higher, "
+                "not converged (on a coaxial rod and ring the axisymmetric model "
+                "confirms the 3-D transfer resistance to 1.3e-3 and shows mom at "
+                "0.5 m 0.3 … 1.3 % high; audit W4R2B-05)",
                 "excluded from the benchmark run for its cost: rod and ring on "
                 "different axes are not axisymmetric, so fem solves them with its "
                 "3-D model (the fem3d extra; user decision Q37), 0.5 … 1.2 minutes "

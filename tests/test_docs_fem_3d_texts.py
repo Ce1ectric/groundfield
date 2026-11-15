@@ -84,3 +84,67 @@ def test_w4b_10_no_stale_texts_of_the_3d_model() -> None:
     assert "which the axisymmetric model refuses" not in page
     # the 'raise refinement' remedy holds for the axisymmetric model only
     assert "multiplies its nodes by eight" in page
+
+
+# ---------------------------------------------------------------------
+# Audit W4R2B (stream fw4r2b)
+# ---------------------------------------------------------------------
+
+TOLERANCES = ROOT / "tests" / "benchmarks" / "tolerances.py"
+
+
+def _consequences(adr: str) -> str:
+    return adr.split("## Consequences", 1)[1].split("## Alternatives", 1)[0]
+
+
+def test_w4r2b_03_the_texts_give_the_distance_from_which_2e_3_holds() -> None:
+    # audit W4R2B-03: "away from other wires by about R/0.8" was not true
+    # (+4.35e-3 at 7.5 cm); the model keeps such wires 1.5 R apart
+    page, adr = _text(FEM_PAGE), _text(ADR)
+    solid, wires = _text(FEM_PKG / "_solid.py"), _text(FEM_PKG / "_wires3d.py")
+    for text in (page, adr):
+        assert "R/0.8" not in text
+        assert "1.5\\,R" in text and "beside each other" in text
+        assert "BackendCapabilityError" in text
+    assert "beside each other" in solid and "beside each other" in wires
+
+
+def test_w4r2b_05_the_b8_note_does_not_read_moms_coarse_transfer_impedance_as_fems_error() -> (
+    None
+):
+    # audit W4R2B-05 (test of auditor W4R2B): mom's floating-port Z_BA at
+    # ds = 0.5 m is not converged; fem's transfer resistance is right
+    page, tol = _text(FEM_PAGE), _text(TOLERANCES)
+    for text in (page, tol):
+        assert "0.96 % below the floating-port" not in text
+        assert "1/32 m" in text and "not converged" in text
+
+
+def test_w4r2b_05_the_transfer_estimate_is_documented() -> None:
+    # audit W4R2B-05: the estimate covered the diagonal entries only
+    for text in (_text(FEM_PAGE), _text(ADR), _text(FEM_PKG / "_solid.py")):
+        assert "fem_error_estimate_transfer" in text
+
+
+def test_w4r2b_06_the_level_ratio_of_rods_is_stated_once() -> None:
+    # audit W4R2B-06 (test of auditor W4R2B): f04 gives 3.3 ... 4.4 for rods
+    # and 3.0 ... 3.4 for rings
+    page, adr = _text(FEM_PAGE), _text(ADR)
+    assert "4.2 … 5.2 for rods" not in page
+    for text in (page, adr):
+        assert "3.0 … 5.2" not in text and "3.7 … 5.2" not in text
+        assert "3.3 … 4.4" in text and "3.0 … 3.4" in text
+
+
+def test_w4r2b_06_the_consequences_qualify_the_accuracy_of_the_3d_model() -> None:
+    # audit W4R2B-06: "about 2e-3" without the conditions of section 5
+    consequences = _consequences(_text(ADR))
+    assert "(about 2e-3, with the optional" not in consequences
+    assert "1.5\\,R" in consequences and "interfaces" in consequences
+
+
+def test_w4r2b_06_the_cg_refusal_does_not_blame_a_contrast_of_1() -> None:
+    # audit W4R2B-06: the refusal named "a layer contrast of 1" for
+    # homogeneous soil and model='auto' for worlds that are not axisymmetric
+    solid = _text(FEM_PKG / "_solid.py")
+    assert "_convergence_cause" in solid and "in homogeneous soil" in solid

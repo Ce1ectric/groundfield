@@ -193,13 +193,20 @@ applies (bit for bit) and takes the 3-D model otherwise; `"3d"` forces it,
   thin-wire kernel of radius $a$ and that of the smoothed source (energy
   radius $0.5442\,R$), integrated in closed form over what the mesh does
   not resolve: the observer's own wire whole (its polyline through every
-  corner, and every piece on its axis line — the next piece of a galvanic
-  conductor, the surface image of a rod reaching the surface), and of every
-  other piece and every other surface image only the part within
-  $1.5\,R$ of the point. Beyond that the disc average of a smoothed line is
-  its line field (2-D mean-value property of the radial bump), so the mesh
-  is exact there: for two parallel wires the exact correction is below
-  $10^{-3}$ of the self term from $1.5\,R$ on (evidence `f01` of stream
+  corner where it has turned by less than 120°, and every piece on its axis
+  line — the next piece of a galvanic conductor, the surface image of a rod
+  reaching the surface); of the rest of its electrode (a part of the
+  polyline turned back by 120° or more or running parallel beside the
+  point), of a wire of another port that meets the observer's wire (a rod
+  on a ring, a T-joint, a crossing: one conductor) and of every other
+  surface image only the part within $1.5\,R$ of the point; any other wire
+  of another port nothing, since it carries its own current (audit
+  W4R2B-03; an exact-parallel test of folded arms switched at a tilt of
+  1e-6 rad, audit W4R2B-02, and the axis distance from the cross product
+  keeps long oblique pieces whole, W4R2B-01). Beyond that the disc
+  average of a smoothed line is its line field (2-D mean-value property of
+  the radial bump), so the mesh is exact there: for two parallel wires
+  the exact correction is below $10^{-3}$ of the self term from $1.5\,R$ on (evidence `f01` of stream
   fw4fem3d). The first version counted the surface images and every wire
   within $20\,R$, with the observer's current: shallow wires read up to
   +1.9e-3 high and two rings 10 cm apart +4.6e-3, above their error
@@ -207,7 +214,16 @@ applies (bit for bit) and takes the 3-D model otherwise; `"3d"` forces it,
   $\frac{\rho}{2\pi}\ln(r_\eta/a)$. The result depends little on $R$
   (evidence `e07` of stream w4fem3d, re-measured as `f05` of stream
   fw4fem3d: a 3 m rod and a ring at $R$ = 4, 6 and 10 cm against part A).
-  Default $R$ = 6 cm.
+  Default $R$ = 6 cm. Wires that run beside each other (side by side
+  within 30° of parallel, a folded arm, a wire within reach of another over
+  its whole length) are kept at least $1.5\,R$ apart: $R$ becomes their axis
+  distance over 1.5 for the whole world, and below 2.2 bare wire radii the
+  solve is refused before meshing (`BackendCapabilityError`, naming the
+  distance and the integral engines); junctions, corners, crossings at more
+  than 30° and collinear pieces are left alone (audits W4R2B-03, W4R2A-01;
+  up to then two coaxial rings 7.5 cm apart read +4.35e-3 in a port entry
+  and two rings diagonal to each other, surface gaps 1.3 … 3.8 mm,
+  +11 … +14 %).
 - **Isotropic mesh, deterministic bisection.** A coarse grid of
   $8 \times 8 \times 4$ cubes (six Kuhn tetrahedra each) on the box is
   refined by conforming longest-edge bisection (own implementation with
@@ -249,22 +265,28 @@ applies (bit for bit) and takes the 3-D model otherwise; `"3d"` forces it,
   the layer contrast (16 … 115 up to the contrast 33 of AP1, 384 … 530 at
   100 and 1 225 … 1 264 at 333 for a rod through the interface); at 1 000
   they do not converge in 3 000 iterations, and the solve raises
-  `BackendCapabilityError` naming the contrast, the axisymmetric model and
-  the integral engines; the tested range is up to about 300 (audit
-  W4B-03). The multigrid of
+  `BackendCapabilityError` naming the contrast, the axisymmetric model
+  where it takes the world, and the integral engines; the tested range is
+  up to about 300 (audit W4B-03; without a layer contrast the refusal
+  names its circumstances instead, audit W4R2B-06). The multigrid of
   $K + \operatorname{diag}(A^\mathsf T D A)$ gives the same counts (evidence
   `f02` of stream fw4fem3d).
 - **Levels and extrapolation.** The finer level is the red refinement of
   the coarser one (nested); $G$ is extrapolated with the second order as
   in part A. The levels are not yet asymptotic for every geometry (error
-  ratios $r$ = 3.0 … 5.2), so the extrapolated value carries up to 2e-3.
-  It errs by $e_1(4 - r)/3$, the reported estimate is $e_1(r - 1)/3$ (3 …
-  5e-3): a bound while $r \ge 2.5$, 2.1 … 2.7 times the error for rings
-  ($r \approx 3$). This holds away from layer interfaces and other wires by
-  about $R/0.8$. Next to a strongly contrasting interface the thin-wire
-  error applies, which the levels do not see (a ring 1.5 cm above a
-  1000 / 30 Ω·m interface lies between the exact thin ring and the solid
-  torus, its levels on either side of the torus; audit W4B-02). Resolved
+  ratios $r$ = 3.3 … 4.4 for rods and 3.0 … 3.4 for rings), so the
+  extrapolated value carries up to 2e-3. It errs by $e_1(4 - r)/3$, the
+  reported estimate is $e_1(r - 1)/3$ (3 … 5e-3): a bound while
+  $r \ge 2.5$, 2.1 … 4.4 times the error for rings. The same level
+  difference of the transfer entries is reported as
+  `metadata["fem_error_estimate_transfer"]` (audit W4R2B-05: the
+  estimate covered the diagonal only). This holds away from layer
+  interfaces and other wires — the model keeps wires that run beside each
+  other at least $1.5\,R$ apart, and two coaxial rings 4.5 … 10 cm apart lie
+  within 1.8e-3 of the solid tori in every port entry. Next to a strongly
+  contrasting interface the thin-wire error applies, which the levels do
+  not see (a ring 1.5 cm above a 1000 / 30 Ω·m interface lies between the
+  exact thin ring and the solid torus, its levels on either side of the torus; audit W4B-02). Resolved
   concrete converges at first order ($r \approx 2$): there the estimate is
   no bound.
 - **Thin wire next to an interface.** The smoothed line source shares the
@@ -302,7 +324,11 @@ applies (bit for bit) and takes the 3-D model otherwise; `"3d"` forces it,
   audit W4B-05) — and the house mesh of the generators changes by about 1 %
   or less (0.35 … 0.85 % with every sign aligned after the fix of W4B-01,
   evidence `f12` of stream fw4fem3d). The per-wire shells keep their place
-  as the default (no correction rule).
+  as the default (no correction rule). A cover so thin that the smoothed
+  source the prism allows does not reach beyond the metal (energy radius
+  at most 1.2 metal radii: a 5 mm bar with 5 mm cover) is refused before
+  meshing, naming `concrete_resistivity=None` (audit W4R2B-04; up to then a
+  bare `ValueError` after meshing).
 - **Resource guard.** Before anything is meshed: the display segments
   against `Engine.max_segments`, the number of ports against
   `FemOptions.max_ports_3d` (default 100; every
@@ -333,8 +359,10 @@ applies (bit for bit) and takes the 3-D model otherwise; `"3d"` forces it,
   interface) at a cost of a second per solve
   ([fem page](../explanation/engines/fem.md#validation)).
 - `fem` solves every world again: the axisymmetric model where it applies
-  (about 1e-4), the 3-D model otherwise (about 2e-3, with the optional
-  `fem3d` extra); without the extra the 3-D worlds raise `ImportError`.
+  (about 1e-4), the 3-D model otherwise (with the optional `fem3d` extra;
+  about 2e-3 away from layer interfaces, wires that run beside each other
+  kept at least $1.5\,R$ apart, which refines the mesh or refuses the
+  closest pairs); without the extra the 3-D worlds raise `ImportError`.
 - `fem` gains concrete shells, junctions, two-terminal and voltage sources
   and every conductor model (registry capabilities).
 - `FemOptions` changes: `refinement`, `extrapolate`, `r_far_factor`
@@ -349,8 +377,9 @@ applies (bit for bit) and takes the 3-D model otherwise; `"3d"` forces it,
   (uniform current around the wire, no end faces); it is independent of
   them in everything else (the layering, the surface, the far field, the
   current distribution along the wires). Its accuracy (about 2e-3 away
-  from interfaces and other wires, levels not yet asymptotic for every
-  geometry; next to a strongly contrasting interface the thin-wire error
+  from interfaces and other wires, the wires beside each other at least
+  $1.5\,R$ apart, levels not yet asymptotic for every geometry; next to a
+  strongly contrasting interface the thin-wire error
   of the integral engines) is a reference for the integral engines'
   biases of 0.4 … 3 %, not for effects below 1e-3; differences of two
   concrete models on the same mesh (Q40) are finer than that.

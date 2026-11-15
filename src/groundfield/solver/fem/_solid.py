@@ -22,15 +22,22 @@ Two nested meshes (the second the uniform refinement of the first) give
 the port conductance matrix twice; it is extrapolated to zero mesh size
 with the second order of linear elements, and the relative difference
 between the extrapolated and the finer level is the error estimate
-(``metadata["fem_error_estimate"]``), as in the axisymmetric model. With
-the ratio $r$ of the two levels' errors the extrapolated value errs by
-$e_1(4 - r)/3$ and the estimate is $e_1(r - 1)/3$: a bound while
-$r \\ge 2.5$ (rods and rings run at 3 … 5), no bound for resolved concrete,
-which converges at first order (audit W4B-02).
+(``metadata["fem_error_estimate"]``, the largest over the diagonal
+entries), as in the axisymmetric model; ``metadata["fem_error_estimate_transfer"]``
+is the same for the transfer entries (:func:`transfer_estimate`, audit
+W4R2B-05). With the ratio $r$ of the two levels' errors the extrapolated
+value errs by $e_1(4 - r)/3$ and the estimate is $e_1(r - 1)/3$: a bound
+while $r \\ge 2.5$ (rods run at 3.3 … 4.4, rings at 3.0 … 3.4; evidence
+``f04`` of stream fw4fem3d), no bound for resolved concrete, which
+converges at first order (audit W4B-02).
 
 Before anything is meshed the solve checks the display segments against
-``Engine.max_segments`` and the number of ports against
-``FemOptions.max_ports_3d`` (default :data:`MAX_PORTS_3D`; audit W4B-08).
+``Engine.max_segments``, the number of ports against
+``FemOptions.max_ports_3d`` (default :data:`MAX_PORTS_3D`; audit W4B-08),
+the source radius (:func:`source_radius`: every disc in the soil and in one
+layer, wires that run beside each other at least 1.5 source radii apart;
+audits W4R2B-03, W4R2A-01) and the metal radius of resolved concrete
+(:func:`_check_resolved_metal`, audit W4R2B-04).
 
 The model needs the optional ``fem3d`` extra (``scikit-fem`` and
 ``pyamg``); without it the solve raises :class:`ImportError` naming the
@@ -54,6 +61,7 @@ from groundfield.solver.fem._wires3d import (
     NEAR_FACTOR,
     WireModel,
     axial_quadrature,
+    beside_wires,
     frames,
     radius_correction,
     world_pieces,
@@ -108,6 +116,11 @@ SQUARE_CONFORMAL_RADIUS = 0.5901702
 #: 11 minutes at ``max_nodes_3d``.
 MAX_PORTS_3D = 100
 
+#: Default of ``FemOptions.max_nodes_3d`` and of :func:`solid_earth`: the node
+#: count of the finer mesh above which the 3-D model refuses a world
+#: (``ResourceLimitError``; about 6 GB, audit W4B-09).
+MAX_NODES_3D = 2_000_000
+
 #: Port-solve time in s per port and per node of the finer mesh, both levels
 #: together (0.93 s per port and level at 583 073 nodes, auditor W4B): the
 #: estimate the port refusal names.
@@ -152,6 +165,7 @@ def source_radius(
     interfaces: list[float],
     requested: float | None,
     prisms_side: float | None,
+    notes: list[str] | None = None,
 ) -> float:
     """Radius $R$ of the smoothed line sources, or a refusal.
 
@@ -160,7 +174,18 @@ def source_radius(
     disc of a piece must stay in the soil and in its layer: $R\\,f$ with
     $f = \\sqrt{1 - d_z^2}$ (the vertical reach of a disc perpendicular to
     the piece) is at most 0.8 times the depth of the piece and its gap to
-    every interface it does not cross.
+    every interface it does not cross. Wires that run beside each other
+    (:func:`~groundfield.solver.fem._wires3d.beside_wires`: side by side
+    within 30° of parallel, an arm of the same polyline folded back, a wire
+    within the reach of another over its whole length) stay at least
+    :data:`~groundfield.solver.fem._wires3d.NEAR_FACTOR` $= 1.5$ source radii
+    apart: $R$ is at most their axis distance over 1.5 (audits W4R2B-03,
+    W4R2A-01). Junctions, corners, crossings at more than 30°, a rod on a
+    ring and collinear pieces are left alone. One $R$ serves the whole
+    world: the disc quadrature, the energy radius of the radius correction
+    and the mesh size around the wires all use it, so the limit of the
+    closest pair refines the mesh everywhere (``notes`` receives the
+    reason).
     """
     bare = [p.radius for p in model.pieces if p.shell == 0.0]
     a_bare = max(bare) if bare else 0.0
@@ -180,6 +205,10 @@ def source_radius(
     for p in model.pieces:
         f = math.sqrt(max(0.0, 1.0 - float(p.direction[2]) ** 2))
         if f < 1e-12:
+            # A vertical piece (a rod): its disc is horizontal and reaches no
+            # interface or surface; the rod ends near an interface are the
+            # dispatch's InterfaceContactWarning (audit W4R2A-03), not a
+            # refusal here.
             continue
         z_lo = min(float(p.start[2]), float(p.end[2]))
         z_hi = max(float(p.start[2]), float(p.end[2]))
@@ -193,6 +222,29 @@ def source_radius(
     if prisms_side is not None:
         limit = min(limit, 0.45 * prisms_side)
     r = min(r, limit)
+    close = beside_wires(model, NEAR_FACTOR * r)
+    if close is not None and close.distance / NEAR_FACTOR < r:
+        r = close.distance / NEAR_FACTOR
+        where = _beside_text(model, close)
+        if notes is not None:
+            notes.append(
+                f"the source radius was limited to {r:.3g} m because {where}, "
+                f"and wires that run beside each other stay {NEAR_FACTOR:g} "
+                "source radii apart"
+            )
+        if not BUMP_ENERGY_RADIUS * r > 1.2 * a_bare:
+            _refuse(
+                world,
+                engine,
+                "its three-dimensional model keeps wires that run beside each "
+                f"other at least {NEAR_FACTOR:g} source radii apart (closer, the "
+                "disc of each wire's smoothed source reaches the other wire, and "
+                f"the radius correction has no term for it), and {where}: the "
+                f"source radius would be {r:.3g} m, below the {smallest:.3g} m "
+                f"that its bare wires of radius {a_bare:.3g} m need. Space the "
+                "wires farther apart, or solve the world with an integral "
+                "backend.",
+            )
     if not BUMP_ENERGY_RADIUS * r > 1.2 * a_bare:
         _refuse(
             world,
@@ -204,6 +256,28 @@ def source_radius(
             "world (rods on one axis, rings around it).",
         )
     return r
+
+
+def _owner(name: str) -> str:
+    """User-facing name of a port: an electrode, or the conductor of a piece."""
+    import re
+
+    piece = re.fullmatch(r"__cond_(?P<name>.+)__seg_(?P<k>\d+)", name, re.DOTALL)
+    if piece is None:
+        return f"electrode '{name}'"
+    return f"conductor '{piece.group('name')}' (its piece {piece.group('k')})"
+
+
+def _beside_text(model: WireModel, close) -> str:
+    """Where the wires of :func:`beside_wires` run beside each other."""
+    a = _owner(model.names[close.port])
+    b = _owner(model.names[close.other])
+    d = f"{1000.0 * close.distance:.3g} mm"
+    if close.kind == "folded":
+        return f"an arm of {a} runs back beside itself {d} apart, axis to axis"
+    if close.kind == "around":
+        return f"the whole wire of {a} lies within {d} of {b}, axis to axis"
+    return f"{a} runs beside {b} {d} apart, axis to axis"
 
 
 def _prisms(world, engine, model: WireModel, rho_c: float):
@@ -308,6 +382,108 @@ def _display_shares(model: WireModel, segs, owner: np.ndarray):
     return np.concatenate(out_p), np.concatenate(out_s), np.concatenate(out_w)
 
 
+def transfer_estimate(r_ext: np.ndarray, r_fine: np.ndarray) -> float:
+    """Error estimate of the transfer resistances (audit W4R2B-05).
+
+    The largest relative difference of an off-diagonal entry of the port
+    resistance matrix between the extrapolated and the finer level,
+    $\\max_{i \\ne j} |R^\\mathrm{ext}_{ij} - R^{(1)}_{ij}| / |R^\\mathrm{ext}_{ij}|$,
+    as ``fem_error_estimate`` is for the diagonal; ``NaN`` for one port (no
+    transfer entry). An entry that is exactly zero is left out.
+    """
+    n = r_ext.shape[0]
+    if n < 2:
+        return math.nan
+    off = ~np.eye(n, dtype=bool)
+    ref = np.abs(r_ext[off])
+    keep = ref > 0.0
+    if not np.any(keep):
+        return math.nan
+    return float(np.max(np.abs(r_ext[off] - r_fine[off])[keep] / ref[keep]))
+
+
+def _check_resolved_metal(
+    world: "World", engine: "Engine", model: WireModel, rho_c: float, r_src: float
+) -> None:
+    """Refuse resolved concrete whose metal the smoothed source does not reach beyond.
+
+    With ``concrete_resistivity`` the radius correction runs from the metal
+    radius $r_a = r_b\\,e^{-2\\pi C/\\rho_c}$, and the prism caps $R$ at
+    $0.45\\,s = 0.762\\,r_b$, so $r_\\eta = 0.544\\,R \\le 0.415\\,r_b$: a
+    metal radius above about $0.35\\,r_b$ (a thin cover) turned the radial
+    resistance non-positive and ended in a bare ``ValueError`` after meshing
+    (audit W4R2B-04: a 5 mm bar with 5 mm cover). The bare-wire rule
+    $r_\\eta > 1.2\\,a$ now applies to the metal radius before meshing.
+    """
+    worst = None
+    for p in model.pieces:
+        if p.shell <= 0.0:
+            continue
+        ra = p.radius * math.exp(-2.0 * math.pi * p.shell / rho_c)
+        if not BUMP_ENERGY_RADIUS * r_src > 1.2 * ra and (
+            worst is None or ra > worst[1]
+        ):
+            worst = (p, ra)
+    if worst is None:
+        return
+    p, ra = worst
+    _refuse(
+        world,
+        engine,
+        "resolving the concrete as a volume (FemOptions.concrete_resistivity) "
+        f"leaves electrode '{model.names[p.port]}' a metal radius of {ra:.3g} m "
+        f"inside its shell of radius {p.radius:.3g} m (cover {p.radius - ra:.3g} m), "
+        f"and the smoothed source of radius {r_src:.3g} m that the concrete "
+        "prism allows does not reach beyond it (its energy radius must exceed "
+        "1.2 metal radii). Leave concrete_resistivity at None (each wire its "
+        "own shell).",
+    )
+
+
+def _convergence_cause(
+    world: "World", contrast: float, prisms, rho_c, rhos: np.ndarray, extra_segments
+) -> str:
+    """The circumstances of a conjugate-gradient solve that did not converge.
+
+    Names the layer contrast where there is one (the iterations grow with it;
+    tested up to about 300), resolved concrete otherwise (it converged in 105
+    iterations at a concrete-to-soil contrast of 1000, audit W4R2B-06); and
+    the axisymmetric model as a remedy only for a world it accepts.
+    """
+    from groundfield.solver.fem._axisymmetric import NotAxisymmetric, classify
+
+    if contrast > 1.0:
+        text = (
+            f"at a layer contrast of {contrast:.4g} (max rho / min rho; the model "
+            "is tested up to a contrast of about 300)."
+        )
+    elif prisms:
+        text = (
+            "in homogeneous soil with resolved concrete of "
+            f"{float(rho_c):g} Ohm m (a concrete-to-soil contrast of "
+            f"{float(rho_c) / float(rhos[0]):.4g}; 1000 converged in 105 "
+            "iterations)."
+        )
+    else:
+        text = (
+            "in homogeneous soil, where 19 … 27 iterations are the rule (they "
+            "grow with a layer contrast); the mesh may be degenerate."
+        )
+    axisymmetric = not extra_segments
+    if axisymmetric:
+        try:
+            classify(world)
+        except NotAxisymmetric:
+            axisymmetric = False
+    if axisymmetric:
+        text += (
+            " Its axisymmetric model solves this world (rods on one vertical "
+            "axis and rings around it) at any contrast "
+            "(FemOptions.model='auto' or model='axisymmetric')."
+        )
+    return text
+
+
 def solid_earth(
     world: "World",
     engine: "Engine",
@@ -316,7 +492,7 @@ def solid_earth(
     extrapolate: bool = True,
     r_far_factor: float = 1000.0,
     far_field: str = "robin",
-    max_nodes: int = 4_000_000,
+    max_nodes: int = MAX_NODES_3D,
     source_radius_m: float | None = None,
     growth: float = DEFAULT_GROWTH,
     concrete_resistivity: float | None = None,
@@ -343,7 +519,8 @@ def solid_earth(
     far_field
         ``"robin"`` (monopole Dirichlet-to-Neumann map) or ``"dirichlet"``.
     max_nodes
-        Resource limit: the node count of the finer mesh.
+        Resource limit: the node count of the finer mesh (default
+        :data:`MAX_NODES_3D`, the default of ``FemOptions.max_nodes_3d``).
     source_radius_m
         Radius $R$ in m of the smoothed line sources; ``None`` takes the
         default (:func:`source_radius`).
@@ -372,10 +549,14 @@ def solid_earth(
     ImportError
         Without the ``fem3d`` extra.
     BackendCapabilityError
-        For a wire too close to the surface or an interface, for resolved
-        concrete around wires that are not axis-aligned, and when the
-        conjugate gradients do not converge (high layer contrast; tested up
-        to about 300).
+        Before meshing: for a wire too close to the surface or an interface,
+        for wires that run beside each other closer than 1.5 times the
+        smallest source radius their wire radius allows
+        (:func:`source_radius`), for resolved concrete around wires that are
+        not axis-aligned or whose metal radius the smoothed source would not
+        reach beyond (a thin cover). After meshing: when the conjugate
+        gradients do not converge (high layer contrast; tested up to about
+        300).
     groundfield.diagnostics.ResourceLimitError
         Before meshing: if the display segments exceed
         ``Engine.max_segments``, the ports ``max_ports`` or the predicted
@@ -407,7 +588,12 @@ def solid_earth(
     mesh_prisms = prisms
     if concrete_resistivity is None:
         prisms = ()  # concrete_mesh: refine at the prism faces only
-    r_src = source_radius(world, engine, model, depths, source_radius_m, side)
+    notes: list[str] = []
+    r_src = source_radius(
+        world, engine, model, depths, source_radius_m, side, notes=notes
+    )
+    if prisms:
+        _check_resolved_metal(world, engine, model, float(concrete_resistivity), r_src)
     h_w = 0.5 * r_src
     n_levels = 2 if extrapolate else 1
     h_fine = h_w / 2 ** (refinement + n_levels - 1)
@@ -437,13 +623,19 @@ def solid_earth(
             "(image, image_2layer, mom), or raise FemOptions.max_ports_3d to "
             "solve it on purpose."
         )
+    coarsen = (
+        "Coarsen it (FemOptions.source_radius, growth, extrapolate=False), or "
+        "raise max_nodes_3d to solve it on purpose."
+        if not notes
+        else f"Here {notes[0]}: raise max_nodes_3d to solve it on purpose, "
+        "coarsen growth or set extrapolate=False, space the wires farther "
+        "apart, or use an integral backend (image, image_2layer, mom)."
+    )
     if predicted_fine > max_nodes:
         raise ResourceLimitError(
             f"Backend 'fem': the three-dimensional mesh would have about "
             f"{predicted_fine} nodes at its finer level, above the limit "
-            f"max_nodes_3d = {max_nodes} (FemOptions). Coarsen it "
-            "(FemOptions.source_radius, growth, extrapolate=False), or raise "
-            "max_nodes_3d to solve it on purpose."
+            f"max_nodes_3d = {max_nodes} (FemOptions). {coarsen}"
         )
 
     # Coarse mesh: isotropic background refined towards the wire axes (and
@@ -482,8 +674,7 @@ def solid_earth(
         raise ResourceLimitError(
             f"Backend 'fem': the three-dimensional mesh has {n_fine} nodes at its "
             f"finer level, above the limit max_nodes_3d = {max_nodes} (FemOptions). "
-            "Coarsen it (FemOptions.source_radius, growth, extrapolate=False), or "
-            "raise max_nodes_3d to solve it on purpose."
+            f"{coarsen}"
         )
     t_mesh = time.perf_counter() - t0
 
@@ -513,7 +704,7 @@ def solid_earth(
         coefficient = shell_q + radius_correction(
             model, r_eta, rho_q, NEAR_FACTOR * r_src
         )
-    if not np.all(coefficient > 0.0):  # pragma: no cover - guarded by source_radius
+    if not np.all(coefficient > 0.0):  # pragma: no cover - guarded before meshing
         raise ValueError("fem: a non-positive radial resistance of a wire.")
     tangent = np.array([p.direction for p in model.pieces])[model.piece]
     e1, e2 = frames(tangent)
@@ -586,11 +777,10 @@ def solid_earth(
                 engine,
                 "the conjugate gradients of its three-dimensional model did not "
                 f"converge for port '{model.names[exc.port]}' in "
-                f"{asm3.CG_MAX_ITERATIONS} iterations at a layer contrast of "
-                f"{contrast:.4g} (max rho / min rho; the model is tested up to a "
-                "contrast of about 300). Its axisymmetric model solves rods on "
-                "one vertical axis and rings around it at any contrast "
-                "(FemOptions.model='auto' or model='axisymmetric').",
+                f"{asm3.CG_MAX_ITERATIONS} iterations "
+                + _convergence_cause(
+                    world, contrast, prisms, concrete_resistivity, rhos, extra_segments
+                ),
             )
         solutions.append(sol)
         info.append(
@@ -620,6 +810,9 @@ def solid_earth(
     r_ext = np.linalg.inv(conductance)
     diag = np.abs(np.diag(r_ext))
     estimate = float(np.max(np.abs(np.diag(r_ext) - np.diag(r_levels[-1])) / diag))
+    estimate_transfer = (
+        transfer_estimate(r_ext, r_levels[-1]) if extrapolate else math.nan
+    )
     # Memory (audit W4B-09): what the solve added to the peak resident memory
     # of the process, and that peak itself.
     peak_after = _peak_memory_gb()
@@ -631,6 +824,7 @@ def solid_earth(
         "fem_refinement": int(refinement),
         "fem_extrapolated": bool(extrapolate),
         "fem_error_estimate": estimate,
+        "fem_error_estimate_transfer": estimate_transfer,
         "fem_mesh": info,
         "fem_mesh_time_s": t_mesh,
         "fem_r_far": r_far,
