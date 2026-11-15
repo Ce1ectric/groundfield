@@ -208,6 +208,7 @@ nav:
           - "ADR-0013 Calendar versioning": adr/0013-calendar-versioning.md
           - "ADR-0014 Backend registry and pipeline": adr/0014-backend-registry-and-pipeline.md
           - "ADR-0015 Line-source kernel default": adr/0015-line-source-kernel-default.md
+          - "ADR-0016 Conforming fem": adr/0016-conforming-fem.md
   - Reference:
       - reference/index.md
       - API:

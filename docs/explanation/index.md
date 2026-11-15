@@ -25,6 +25,8 @@ a decision. Release 2026.11 amended ADR-0002, 0004, 0005, 0006, 0007,
 0008, 0009 and 0012 and added
 [ADR-0013](../adr/0013-calendar-versioning.md) (calendar versioning),
 [ADR-0014](../adr/0014-backend-registry-and-pipeline.md) (backend registry
-and shared solve pipeline) and
+and shared solve pipeline),
 [ADR-0015](../adr/0015-line-source-kernel-default.md) (exact line-source
-kernel as default).
+kernel as default) and
+[ADR-0016](../adr/0016-conforming-fem.md) (conforming finite elements in
+`fem`).
