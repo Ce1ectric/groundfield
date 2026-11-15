@@ -114,7 +114,7 @@ Rules of :class:`~groundfield.generators.tn_network.TnNetworkGenerator`
    of the longest drop
    (:attr:`~groundfield.generators.plan.PlannedBranch.axis_offset_normal_xy`),
    each just far enough to lie at least $d_t$ from every shorter one, and
-   the row is centred (its first and last offsets of equal size). A drop
+   the row is centred (its smallest and largest offsets of equal size). A drop
    that would then lie closer than touching to a drop of another row over a
    stretch that :func:`~groundfield.diagnostics.diagnose` reports as an
    overlap — a drop of the same node, a drop of another node next to which
@@ -1084,14 +1084,17 @@ def _lay_out_row(
 ) -> dict[int, tuple[float, tuple[float, float] | None]]:
     r"""Offsets and normals of the drops of one row, sorted by length.
 
-    The layout of D9 when it keeps every pair at least $d_t$ apart (to
+    The layout of D9 when the drops are parallel to round-off (each drifts
+    from the direction of the longest by at most :data:`_ROW_TOLERANCE`
+    $d_t$ over its length) and it keeps every pair at least $d_t$ apart (to
     :data:`_ROW_TOLERANCE` of it): drop $k$ of $n$ at $(k - (n - 1)/2)\,d_t$
     along its own left normal, so drops on one axis to round-off keep the
     worlds they had. Otherwise (drops that are not exactly parallel, audit
-    W3R2B-01) all offsets lie along one common normal, the left normal of
+    W3R2B-01: moved along their own normals they would not end up $d_t$
+    apart) all offsets lie along one common normal, the left normal of
     the longest drop: drop $k$ is shifted just far enough to lie at least
     $d_t$ from every shorter one (:func:`_needed_shift`), and the row is
-    centred, the first and the last offset of equal size and opposite
+    centred, its smallest and largest offsets of equal size and opposite
     sign.
     """
     n = len(drops)
@@ -1104,7 +1107,12 @@ def _lay_out_row(
     }
     plain = [(k - 0.5 * (n - 1)) * touch for k in range(n)]
     slack = _ROW_TOLERANCE * touch
-    if all(plain[j] - plain[i] >= need[i, j] - slack for (i, j) in need):
+    parallel = all(
+        abs(ux * dy - uy * dx) * _length(drop) <= slack
+        for drop in drops
+        for dx, dy in (_direction(drop),)
+    )
+    if parallel and all(plain[j] - plain[i] >= need[i, j] - slack for (i, j) in need):
         return {k: (offset, None) for k, offset in zip(keys, plain, strict=True)}
     shifts = [0.0] * n
     for j in range(1, n):

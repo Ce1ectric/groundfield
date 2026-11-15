@@ -430,3 +430,77 @@ def test_w3r2b_01_a_row_is_never_centred_on_a_drop_that_is_not_in_it() -> None:
     for p, q in itertools.combinations(moved, 2):
         d, _, _ = segment_distance(*moved[p], *moved[q])
         assert float(d[0]) >= TOUCH * (1.0 - 1e-9)
+
+
+# audit W3R2B-01 (own attack): the common normal in the plan
+def test_w3r2b_01_the_common_normal_round_trips_and_is_checked() -> None:
+    """A jittered plan with common normals round-trips through JSON and
+    rebuilds the identical world; a normal that is not a unit vector or not
+    finite is refused, and an offset of 0 ignores the normal."""
+    plan = _jittered(10, RadialTrunkTopology(), 1e-3)
+    assert any(b.axis_offset_normal_xy is not None for b in plan.all_branches)
+    again = NetworkPlan.model_validate_json(plan.model_dump_json())
+    assert (
+        materialise_plan(again).model_dump_json()
+        == materialise_plan(plan).model_dump_json()
+    )
+    drop = next(b for b in plan.all_branches if b.role == "service_drop")
+    for bad in ((1.0, 1.0), (math.nan, 1.0), (math.inf, 0.0)):
+        with pytest.raises(ValueError, match="axis_offset_normal_xy"):
+            drop.model_validate({**drop.model_dump(), "axis_offset_normal_xy": bad})
+    plain = materialise_plan(
+        plan.model_copy(
+            update={
+                "branches": [
+                    b.model_copy(
+                        update={"axis_offset_m": 0.0, "axis_offset_normal_xy": None}
+                    )
+                    for b in plan.branches
+                ]
+            }
+        )
+    )
+    still = materialise_plan(
+        plan.model_copy(
+            update={
+                "branches": [
+                    b.model_copy(update={"axis_offset_m": 0.0}) for b in plan.branches
+                ]
+            }
+        )
+    )
+    assert still.model_dump_json() == plain.model_dump_json()
+
+
+# audit W3R2B-01 (own attack): drops of one tap point that diverge
+def test_w3r2b_01_diverging_drops_of_one_point_lie_along_one_normal() -> None:
+    """Two drops from one tap point, the longer one diverging by 3e-4 rad
+    towards the side its offset moves it (its end 9 mm off the shorter one's
+    line at 30 m): moved along their own normals by -+d_t/2 (the layout of
+    D9) their starts would lie d_t cos(phi / 2), 1.1e-8 d_t closer than
+    touching. The row lies along one common normal, every pair at least d_t
+    apart."""
+    from groundfield.generators._pen_routing import PenRouter, _End, _moved, _Section
+
+    plan = _plan(5, RadialTrunkTopology())
+    conductor = next(b for b in plan.all_branches if b.role == "service_drop").conductor
+    router = PenRouter("t", {"t": (0.0, 0.0)}, depth_m=0.6, conductor=conductor)
+    ends = {"a": (30.0, 0.0), "b": (40.0, 0.012)}
+    router._drops = [
+        _Section(name, _End("t", (0.0, 0.0)), _End(name, xy), "service_drop", name)
+        for name, xy in ends.items()
+    ]
+    offsets, normals = router._row_layout()
+    assert offsets[0] < 0.0 < offsets[1] and all(n is not None for n in normals)
+    moved = [
+        _moved(drop, (o, n))
+        for drop, o, n in zip(router._drops, offsets, normals, strict=True)
+    ]
+    (a0, a1), (b0, b1) = moved
+    d, _, _ = segment_distance(
+        np.array([*a0, 0.0]),
+        np.array([*a1, 0.0]),
+        np.array([*b0, 0.0]),
+        np.array([*b1, 0.0]),
+    )
+    assert float(d[0]) >= TOUCH * (1.0 - 1e-9)
