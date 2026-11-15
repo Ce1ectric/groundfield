@@ -1056,6 +1056,12 @@ class FieldResult(BaseModel):
         potentials, profiles, touch / step voltages and VTK exports.
         The error is now raised explicitly so the regime is visible
         rather than silent.
+
+        Point sources at projected (UTM) coordinates, beyond 10 km from
+        the origin, are evaluated in a local frame: points and sources are
+        shifted by the rounded centre of the sources' bounding box (exact
+        for nearby doubles) before the kernel runs (since 2026.11; see
+        *Units and conventions* in the reference).
         """
         if not self.point_sources:
             raise RuntimeError(
