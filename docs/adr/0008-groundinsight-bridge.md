@@ -287,5 +287,12 @@ Findings 10.01, 10.19, 10.27, 10.40, 10.73 and 10.84.
    preset holds for its electrode class only (the AP1 station with
    `"lv_group_4_p40"`: 39.9 % rms). The live `BusType` carries no metadata,
    so the check stays on the groundfield side. Round trip through
-   groundinsight 0.3.0 (PyPI) at $10^{-9}$.
+   groundinsight 0.3.0 (PyPI) at $10^{-9}$. Since audit W3B-06 the live
+   `BusType` of `to_bustype`, `save_bustype_to_db` and `bustype_from_spec`
+   names the preset in the last line of its description, `groundfield
+   rho_preset: <name>` (before, it was validated and dropped, so a `BusType`
+   read back from the database could not be checked); groundinsight's
+   `BusType` and its database keep the description (`bus_types.description`
+   of groundinsight 0.3.0), and `bustype_rho_preset` reads the line back
+   (database round trip tested). A blank preset is refused on load.
 

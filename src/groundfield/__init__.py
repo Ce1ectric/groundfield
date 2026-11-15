@@ -197,6 +197,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, ...]] = {
         "NonPassiveFitWarning",
         "RhoPresetMismatchWarning",
         "bustype_from_spec",
+        "bustype_rho_preset",
         "evaluate_spec",
         "fit_quality_summary",
         "load_bustype_json",
@@ -381,6 +382,7 @@ if _typing.TYPE_CHECKING:
         NonPassiveFitWarning,
         RhoPresetMismatchWarning,
         bustype_from_spec,
+        bustype_rho_preset,
         evaluate_spec,
         fit_quality_summary,
         load_bustype_json,
@@ -613,6 +615,7 @@ __all__ = [
     "NonPassiveFitError",
     "RhoPresetMismatchWarning",
     "bustype_from_spec",
+    "bustype_rho_preset",
     "fit_quality_summary",
     # Coupling / layered earth
     "LayeredEarth",
