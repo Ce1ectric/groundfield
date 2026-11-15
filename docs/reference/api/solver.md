@@ -32,7 +32,7 @@ they evaluate $G$ and which current ansatz they use:
 | `image_2layer` | Tagg/Sunde image series, closed form; layered Sommerfeld correction for wires through the interface | as `image` |
 | `mom` | the same closed-form kernels | point matching: one unknown current per segment, midpoint point sources |
 | `mom_sommerfeld` | numerical Sommerfeld quadrature of the layered Green's function, any number of layers | as `mom` |
-| `fem` (experimental) | axisymmetric finite elements of the equivalent hemisphere | volume solution |
+| `fem` (experimental) | none: conforming finite elements of the soil, axisymmetric for coaxial rods and rings, three-dimensional otherwise (`fem3d` extra) | volume solution (axisymmetric: the electrodes as solid bodies; 3-D: smoothed line sources) |
 
 The uniform-current ansatz gives accurate impedances at low cost; near
 grids, stars, strip ends and bonded multi-electrode clusters its

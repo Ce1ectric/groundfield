@@ -95,9 +95,10 @@ inductive coupling and layered soil (to round-off,
   fixes one potential difference twice. A source with
   ``internal_resistance_ohm > 0`` opens such a loop; an inductance alone
   does not, because $Z_q$ vanishes at $f = 0$.
-* Backends without the registry capability ``voltage_sources`` (the
-  experimental ``fem``) raise
-  :class:`~groundfield.solver.registry.BackendCapabilityError`.
+* Backends without the registry capability ``voltage_sources`` raise
+  :class:`~groundfield.solver.registry.BackendCapabilityError` (every
+  built-in backend has it since 2026.11; ``fem`` lacked it up to its
+  conforming model, user decision Q37).
 
 Up to 0.15.0 every backend dropped voltage sources with a warning, so a
 world driven by one solved to zero potentials (review finding 10.51).

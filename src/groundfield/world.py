@@ -756,8 +756,9 @@ class World(BaseModel):
             conductor references, no source of non-zero magnitude, a
             short-circuited source, a loop of voltage sources).
         BackendCapabilityError
-            If the backend cannot represent the world (for example a
-            voltage source on ``fem``).
+            If the backend cannot represent the world (for example three
+            soil layers on ``image_2layer``, or a strip on ``fem`` with
+            ``FemOptions.model="axisymmetric"``).
 
         Notes
         -----

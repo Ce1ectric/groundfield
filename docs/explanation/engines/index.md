@@ -17,7 +17,7 @@ the deprecated names come from. The theory of each engine has its own page:
 | [`image_2layer`](image_2layer.md) | `image_2layer` | two layers | Tagg / Sunde image series; Sommerfeld kernel across the interface | uniform per electrode and layer |
 | [`mom`](mom.md) | `mom` | one or two layers | the kernels of the image family | one current per segment (point matching) |
 | [`mom_sommerfeld`](mom_sommerfeld.md) | `mom_sommerfeld` | any number of layers | Sommerfeld integral by quadrature | one current per segment (point matching) |
-| [`fem`](fem.md) | `fem` (experimental) | any number of layers | volume PDE of an equivalent hemisphere | none (one hemisphere per cluster) |
+| [`fem`](fem.md) | `fem` (experimental) | any number of layers | none: volume PDE by finite elements, axisymmetric or three-dimensional | follows from the field (solid electrodes in the axisymmetric model, smoothed line sources in 3-D) |
 
 The shared ingredients have their own pages too:
 [kernels](../kernels.md) (point source, exact line source, Galerkin self
@@ -99,8 +99,10 @@ interfaces). They then differ in the unknowns:
   it 1–2 % below the exact thin-wire solution and drifting under
   refinement (see [`mom`](mom.md)).
 
-`fem` is not a third current model of the same problem: it replaces each
-cluster by an equivalent hemisphere (experimental, see [`fem`](fem.md)).
+`fem` is not a third current model of the same problem: it solves the
+field in the soil by finite elements, the electrodes as the solid bodies
+they are where the world is axisymmetric and as smoothed line sources in
+three dimensions otherwise (experimental, see [`fem`](fem.md)).
 
 ### Network equations
 
@@ -215,7 +217,7 @@ homogeneous soil they are (benchmark B9).
 | Three or more distinct layers | `mom_sommerfeld` | the only engine with that Green's function |
 | Is the uniform current ansatz good enough here? (grids, stars, bonded clusters, rods through the interface, touch and step voltages) | `mom` next to `image` | same kernels, one current per segment |
 | Is the image series right for this soil? | `mom_sommerfeld` next to `mom` | same discretisation, independent kernel |
-| Quick plausibility of one compact electrode in one layer | `fem` (experimental) | volume PDE; equals Dwight's formulas in homogeneous soil |
+| An independent reference that shares no kernel with the integral engines | `fem` (experimental) | volume PDE; about 1e-4 for coaxial rods and rings, about 2e-3 in 3-D away from interfaces and other wires |
 
 `validation.compare_engines(world, engines)` runs a world through several
 engines and compares complex cluster and input impedances at every

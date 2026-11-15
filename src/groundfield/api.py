@@ -608,7 +608,8 @@ def create_source(
         ``"current"`` (default) or ``"voltage"`` (:data:`SourceKind`).
         A voltage source fixes ``attached_to`` at ``magnitude`` volts
         above ``return_to`` (or remote earth); its current is solved for
-        (:class:`~groundfield.sources.VoltageSource`; not by ``fem``).
+        (:class:`~groundfield.sources.VoltageSource`; every built-in
+        backend solves it).
     magnitude
         Amplitude in A (current source) or V (voltage source), RMS;
         finite. A current source of magnitude 0 is rejected when the

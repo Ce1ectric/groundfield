@@ -232,12 +232,12 @@ def _build_finite_branches(
       to merge clusters.
     - **Distributed** conductors (``is_distributed == True``) —
       normally handled by :func:`_build_distributed_topology`, which
-      produces a per-segment branch chain. Backends that cannot
-      consume the distributed topology (currently the FEM
-      equivalent-hemisphere backend) can pass
-      ``distributed_as_lumped=True`` to fall back to a single
-      lumped branch with the conductor's full series resistance —
-      the discretisation is then *ignored*.
+      produces a per-segment branch chain. A backend that cannot
+      consume the distributed topology can pass
+      ``distributed_as_lumped=True`` to fall back to a single lumped
+      branch with the conductor's full series resistance — the
+      discretisation is then *ignored* (no built-in backend since
+      2026.11; up to then the equivalent-hemisphere ``fem``).
     - Conductors whose two end electrodes already share a cluster
       (an ideal short loops over them) — the finite branch would be
       shorted out and carry no net current.

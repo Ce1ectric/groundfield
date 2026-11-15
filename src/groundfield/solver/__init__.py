@@ -10,8 +10,9 @@ closed-form image-charge sum for homogeneous soil, which forwards
 layered soils to ``image_2layer``, the Tagg/Sunde image series), the
 point-matching method of moments (``mom`` with the same kernels,
 ``mom_sommerfeld`` with Sommerfeld quadrature of the layered Green's
-function for any number of layers) and the experimental axisymmetric
-finite-element backend ``fem``. ``cim``, ``bem`` and ``image_nlayer``
+function for any number of layers) and the experimental finite-element
+backend ``fem`` (axisymmetric for coaxial rods and rings, three-dimensional
+otherwise). ``cim``, ``bem`` and ``image_nlayer``
 are deprecated names of ``image`` and ``mom``.
 
 Contents
