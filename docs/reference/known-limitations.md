@@ -115,32 +115,30 @@ shows what agrees with independent references and how well.
   whose three-point rule would reach above the surface, raises
   `BackendCapabilityError` (a ring 1 µm above the interface read −1931 Ω
   instead of 4.18 Ω before). Use the line kernel or shorter segments.
-- **Line kernel in two-layer soil.** Tagg/Sunde images farther than six
-  segment lengths and the smooth part of the cross-layer correction stay
-  in point form: a straight 10 m strip deviates by up to 0.05 % from its
-  exact uniform-current resistance, not monotonically in the segment
-  length (`Engine.kernel`). With an electrode through the interface, a
-  galvanic distributed conductor needs sub-pieces of the order of $h_1$
-  (changelog 2026.11.0, 10.24).
-- **Cost of the line kernel.** About 2.7 times the solve time of the
-  point kernel for 16 house grids ($N$ = 1920 segments) with numba
-  installed, 5.7 times without (`Engine.kernel`); the extra work grows
-  like $N^2$.
-- **Line-kernel switch at six segment lengths.** The line kernel integrates segment
-  pairs closer than six segment lengths exactly and farther ones in its far form; on a
-  straight wire of equal segments the pairs six segments apart sit exactly on that
-  boundary, so round-off decides their form wherever the world stands. Results of the
-  same world at different positions (shifted by 0.1 m … 8.8 km, or to UTM coordinates)
-  therefore spread by up to 8e-7 in the impedance and 1.3e-6 in touch voltages for
-  the direct pairs when every switch pair is forced to its near and to its far form (a
-  12 m strip in 100 Ω·m, and at 41° in 100 / 30 Ω·m with h₁ = 2.2 m); sampled offsets
-  give up to 5.9e-7 and 1.2e-6 (audits W2B-01, W2R2-03). In two-layer soil an image
-  distance of six segment lengths (2nh₁ for wires at one depth, or 2(nh₁ − z)) puts every
-  segment's own image pair on the switch, whose far form there is the point form: the
-  spread reaches 8e-6 … 2.6e-5 in the impedance and 5.5e-5 in touch voltages — for example
-  the generated house mesh at its default 0.8 m depth with h₁ = 2.3 m and 0.5 m
-  segments, or h₁ = 3 m with 1 m segments (audit W2B-01). The point kernel (`kernel="point"`, `mom`,
-  `mom_sommerfeld`) is invariant to 1e-14 at local offsets and 3e-11 at UTM coordinates.
+- **Line kernel in two-layer soil.** The far form of image pairs carries
+  the quadrupole term only up to a vertical distance of 120 segment
+  lengths (tapered from 60) and where it exceeds 1e-9 of a unit point term;
+  a straight 10 m strip in 1000 / 50 Ω·m with $h_1$ = 1 m is within 7.7e-7
+  of its exact uniform-current resistance for segment lengths of 0.125 …
+  2 m, monotonically (`Engine.kernel`). The field of sources in the lower
+  layer (`FieldResult.potential`, `solve_mutual_field`) is evaluated in
+  point form by the spectral kernel. With an electrode through the
+  interface, a galvanic distributed conductor needs sub-pieces of the order
+  of $h_1$ (changelog 2026.11.0, 10.24).
+- **Cost of the line kernel.** For 16 house grids ($N$ = 1920 segments)
+  3.9 times the solve time of the point kernel in homogeneous soil and 2.2
+  times in two-layer soil ($h_1$ = 5 m) with numba installed, 5.0 and 1.7
+  times without (`Engine.kernel`); the extra work grows like $N^2$. On the
+  cross-layer path the far terms of the layered images cost up to 1.9
+  times the solve without them (an AP1 station with 2711 segments, 3.6
+  times without numba), and 16 house grids wholly below a 0.5 m top layer
+  take 3.3 times as long as before 2026.11 (5.3 without numba).
+- **Line-kernel switch.** Pairs closer than six segment lengths are
+  integrated exactly, pairs beyond 7.5 use the far form, and between the
+  two the values are blended (user decision D2). Results of the same world
+  at different positions agree to 1e-13 over local shifts of 0.1 m …
+  8.8 km and to 3e-11 (impedance) at UTM coordinates — the rounding of the
+  input vertices, as with the point kernel.
 
 ## Soil layers
 
@@ -179,10 +177,18 @@ shows what agrees with independent references and how well.
   preset holds for its class only (the AP1 station with
   `"lv_group_4_p40"`: rms 39.9 %); even `"station"` leaves up to 15.7 % at
   $h_1$ = 5 m, where the station rods end 0.4 m above the interface. A
-  BusType records `rho_definition`, not the preset (the preset follows in
-  the next release, user decision Q39): use the same preset
-  for the BusType and its bus, and check `max_relative` of a fit over
+  BusType records the preset you name (`rho_preset`, user decision Q39);
+  `evaluate_spec` and `bustype_from_spec` warn when the bus uses another
+  one, nothing checks `rho_at_fit` against it, and a document without a
+  recorded preset is not checked; check `max_relative` of a fit over
   $\rho_\text{eff}$ (see [Soil](api/soil.md#effective-resistivity)).
+- **Penetration depth of layered soil.** `penetration_depth` matches the
+  layered earth return to second order in the horizontal wavenumber;
+  between the limits where it is exact (homogeneous soil, very thin or thick
+  top layers, large separations) the earth-return correction of two wires is
+  off by up to 28 % / 33 % (overhead / buried, AP1 soils, separations near
+  $|p|$), on top of the complex-depth formula's own error (up to 13 % in
+  homogeneous soil).
 
 ## Backends
 
@@ -256,7 +262,22 @@ shows what agrees with independent references and how well.
   surface its additive image has no physical basis (a lead 1 m above a PEN
   0.7 m deep: 2.28 / 2.77 times the mutual reactance of `sommerfeld` at
   50 Hz / 1 kHz), and such a solve warns. Use the default `sommerfeld` for
-  numbers.
+  numbers. `carson_series` overstates the earth return of LV networks of
+  short service drops (shorter than the skin depth): the generated star and
+  grid networks read X 9 … 15 % and R 5 … 11 % high at 1 kHz against
+  `sommerfeld`, an error that changes with the geometry, so a geometry change
+  can move the two models in opposite directions (the 100-house star across
+  the cabinet fix: +1.2 % against −3.5 %).
+- **Sommerfeld segment rules.** Under `sommerfeld` the self term of every
+  segment is integrated exactly in one dimension and close pairs along their
+  line of closest approach (user decision Q34): within 1.1e-9 of a refined
+  rule from 0.01 skin depths to 3 km, continuous in the length. Pairs of
+  long segments that are not close keep a composite 16×16 rule (pieces of a
+  quarter skin depth, at most 512 per segment, then a
+  `SommerfeldResolutionWarning`). The spectral quadrature resolves the most
+  distant points of a conductor at 0.7 m up to about 38 km and warns beyond.
+  Two long close conductors (two lumped cables 1 m apart) cost a few seconds
+  (1.2 / 4.8 s at 1 / 5 km).
 - **Cost of the Sommerfeld assembly** grows with the number of segment
   pairs and frequencies. The default `sommerfeld_assembly="tabulated"`
   shares one table of the spectral integral per pair of depth groups and
@@ -277,13 +298,11 @@ shows what agrees with independent references and how well.
   overlap, and a core tilted against the shield axis, or crossing it, is read
   the same way at any angle and in pieces of any length (they add up to the
   lumped pair within 3e-12; audits W1R2-01, W1R3-01). Under `carson_series`
-  the Carson correction of a tilted pair is tiled at the mid-point distance
-  of each pair, so a lumped pair and its pieces differ, and the difference
-  grows quickly with the tilt: 1.3e-4 of the loop at 1e-3 rad (core leaving
-  the axis at the shield's start), for a core crossing the axis 4.2e-4 /
-  1.4e-3 of X at 2e-3 / 4e-3 rad in 10 / 5 m pieces and 1.9e-2 / 5.2e-2 at
-  2e-2 / 4e-2 rad (audit W1R3-07); `perfect_mirror` and `sommerfeld` have
-  no such tiling. The skin effect of a shield (a tube) is
+  a tilted pair that comes close within its overlap is tiled per stretch, so
+  a lumped pair and its pieces add up within 8e-6 of the loop reactance
+  (audit W1R3-07; 5.2e-2 apart before at 4e-2 rad); a pair whose distance
+  stays above 30 times its change keeps the mid-point value (within 5e-5 of
+  that entry). The skin effect of a shield (a tube) is
   not modelled (`resistance_model="skin"` raises for a shield); a three-core
   cable in one shield is three cores at the shield radius each.
 ## Post-processing and export

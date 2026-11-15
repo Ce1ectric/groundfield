@@ -32,39 +32,11 @@ Each item that changes numbers comes with its own validation.
   with a central rod are modelled as they are; `fem` refuses every other
   electrode (strips, rectangles, meshes, several rods such as the AP1
   station) until a full 3-D volume method exists (deferred, see below).
-- **The effective-resistivity preset in the BusType document.** A BusType
-  fitted over `effective_resistivity(soil, preset=...)` records
-  `metadata["rho_definition"]` but not the preset, so a bus evaluated with
-  another preset (the AP1 station with `"lv_group_4_p40"`: rms 39.9 %)
-  goes unnoticed. The export will record the preset as well (for example
-  `metadata["rho_preset"]`), so a bus paired with the wrong preset is
-  detectable (user decision Q39).
-
-- **Tighter rule for long segments under `sommerfeld`.** A segment longer
-  than a quarter skin depth gets a composite outer rule; the shorter ones
-  keep the historic single rule, which reaches 4.8e-4 at a quarter skin
-  depth, so the correction steps by 3.5e-4 where the composite rule takes
-  over and stays within 5.9e-4 of a refined rule (50 Hz and 1 kHz, up to
-  3 km). The rule of the shorter segments will be tightened as well.
-
 ## Left open by 2026.11.0
 
 The work of release 2026.11.0 left these items open on purpose. Where an item
 limits a result, the reference documentation states the limit.
 
-- **Far images of the two-layer image series.** With the exact line kernel the
-  distant Tagg/Sunde images are still point sources without a quadrupole term,
-  so a straight wire in two-layer soil is not reproduced exactly: a 10 m strip
-  at 0.5 m depth in 1000 over 50 Ω·m with h₁ = 1 m deviates from its exact
-  uniform-current resistance by at most +0.051 % for segment lengths from
-  0.125 m to 2 m, not monotonically in the segment length (point kernel −0.6 %
-  to −1.9 %). A quadrupole term for every image would remove the residual at
-  roughly twice the cost of the series assembly (10.28).
-- **Line kernel on the cross-layer path.** For electrodes that cross the layer
-  interface (ADR-0007) the homogeneous part of the reaction matrix uses the line
-  kernel, the layered correction stays in point form (10.28).
-- **Compiled Carson integrals.** A `LowLevelCallable` for Carson's P and Q was
-  not built; memoisation gives the bulk of the gain bit-identically (10.63).
 - **`fem` beyond the equivalent hemisphere.** `fem` is experimental: it reduces
   every cluster to an equivalent hemisphere, lumps distributed and inductive
   conductors, returns the current of a two-terminal source through remote
@@ -94,11 +66,6 @@ limits a result, the reference documentation states the limit.
   of the house spacing, X at 1 kHz about −20 %). A rule that moves the cabinet continuously
   with the group's geometry would remove the step; the plan's `cabinet_rule` /
   `centroid_ray_gap_m` show meanwhile where a study crosses it.
-- **Continuous line-kernel switch.** A deterministic near/far switch (a margin on the
-  distance) or a far form exact to round-off would make the line kernel translation
-  invariant to round-off. It covers the direct pairs, the series images and the
-  cross-layer pairs and moves golden cases by up to 1.6e-5 (audit W2B-02; user
-  decision D2: in 2026.11).
 - **The coordinate check in `fem`.** The rebuilt `fem` should warn about worlds that
   mix projected and local coordinates at the solve like the other backends
   (`MixedCoordinatesWarning`, user decision D5); `diagnose()` reports such worlds for
@@ -110,27 +77,32 @@ limits a result, the reference documentation states the limit.
   ([known limitations](reference/known-limitations.md#backends)). The
   effect is local; it will be quantified once a 3-D volume reference is
   available (user decision Q40).
-- **Overlapping inductive conductors in `diagnose()`.** Conductors that lie
-  side by side or overlap (two cables in one trench, a service drop along its
-  PEN main) are evaluated as touching wires since 2026.11; `diagnose()` reports
-  close and interpenetrating leakage wires but not overlapping insulated
-  inductive conductors, so an unintended overlap goes unnoticed.
-- **Memory of the cross-layer path.** Worlds with rods that reach the lower
-  layer need more memory than the within-layer path; this path was not
-  optimised further in 2026.11.0 (10.56).
+- **Line form of the field of lower-layer sources.** `FieldResult.potential`
+  and `solve_mutual_field` evaluate sources in the lower layer with the
+  spectral point kernel; the reaction matrix uses the line form since
+  2026.11 (wave 3).
+- **A faster far-image kernel.** The compiled far-image term is not
+  vectorised by numba on arm64 (nor is the series kernel); a hand-vectorised
+  or fused point + quadrupole kernel would cut the +60 … +90 % of two-layer
+  line solves.
+- **Cost of `carson_series` on large networks.** The Sommerfeld fallback of
+  the oblique pairs takes 72 % of a 100-house sweep and the Python loop of
+  the Carson pair plan 15 % of a 40-house sweep. Compiled Carson integrals
+  were measured and not built (5 … 13 % of an inductive sweep after
+  memoisation, below the 20 % threshold; 10.63).
 
 ## Status of the roadmap items carried in the changelog
 
 | Item (verbatim list below) | Status after 2026.11.0 |
 |---|---|
-| Vectorise the ADR-0007 cross-layer Sommerfeld path | open |
+| Vectorise the ADR-0007 cross-layer Sommerfeld path | done in 2026.11.0: the spectral amplitudes in closed form (1.6 … 2.0 × at the AP1 station, round-off); the path was grouped by depth since 2026-07-08, the remaining cost is the `J0` contraction |
 | Exact buried two-layer inductive kernel for `n ≥ 3` layers | done in 2026.11.0: the Sommerfeld kernel uses generalised reflection coefficients for any number of layers and any layer (10.35) |
 | FEM support for distributed conductors | open (`fem` is experimental, 10.23) |
 | Full-3-D FEM backend | deferred; a conforming axisymmetric model replaces the equivalent-hemisphere reduction of `fem` in the next release (user decision Q37) |
-| Scaling the integral solvers to ~10 000 segments | partly: the image-family kernels need memory linear in the segment count (10.56); the dense LU solve remains |
+| Scaling the integral solvers to ~10 000 segments | partly: the image-family kernels need memory linear in the segment count, the cross-layer path included (10.56); the dense LU solve remains |
 | `ParameterSweep` API | partly: `sweep(..., n_jobs=...)` runs the sweep in a process pool (10.64) |
 | TN-Ortsnetz topology generator | implemented in 0.7.0; service drops keep the shortest connection (user decision Q42), cabinets per building group (user decisions Q22, Q35) |
-| Penetration depth for multilayer soil | open |
+| Penetration depth for multilayer soil | done in 2026.11.0: `penetration_depth` (complex depth and equivalent resistivity of any layered soil) |
 | Export of `BusType` and `BranchType` into groundinsight databases | `BusType`: `save_bustype_to_db`; `BranchType` open |
 | Import of measurement geometries from groundmeas | open |
 | Reference-case library for AP1 | open |
