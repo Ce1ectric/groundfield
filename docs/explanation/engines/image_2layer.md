@@ -203,7 +203,7 @@ with.
     length (`tests/test_cross_layer_line_kernel.py`). Above $h_1$ the
     point form takes the image of a segment in the interface as a point
     source: a ring 1 µm / 1 cm above $h_1 = 5$ m read −1931 / −57.9 Ω
-    (line kernel 4.18 / 15.4 Ω). On either side of the interface a wire
+    (line kernel 4.18 / 15.18 Ω; 15.42 Ω before audit W3A-02). On either side of the interface a wire
     closer than 0.387 segment lengths therefore raises
     `BackendCapabilityError` and one within 0.6 segment lengths warns with
     `PointKernelInterfaceWarning`. The default line kernel needs no such
