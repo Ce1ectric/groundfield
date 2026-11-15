@@ -212,7 +212,8 @@ def measured_impedance(
     The source is the current source of the measurement or, since
     2026.11, a voltage source (audit W2A-10): :math:`I` is then its solved
     current, and the reading is the same as with a current source at the
-    same terminals (the problem is linear).
+    same terminals (the problem is linear; an internal impedance of the
+    source changes :math:`I`, not the reading).
 
     Parameters
     ----------

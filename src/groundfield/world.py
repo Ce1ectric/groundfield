@@ -387,6 +387,19 @@ class World(BaseModel):
                     f"Source {src.name!r}: magnitude ({magnitude!r} {unit}) and "
                     f"phase_deg ({phase!r}) must be finite."
                 )
+            if src.kind == "voltage":
+                # model_copy(update=...) skips the field validators
+                # (user decision D1: R, L >= 0 and finite).
+                for field, unit_q in (
+                    ("internal_resistance_ohm", "Ω"),
+                    ("internal_inductance_h", "H"),
+                ):
+                    value = float(getattr(src, field))
+                    if not (math.isfinite(value) and value >= 0.0):
+                        raise ValueError(
+                            f"Voltage source {src.name!r}: {field} ({value!r} "
+                            f"{unit_q}) must be finite and >= 0."
+                        )
             if magnitude == 0.0:
                 if src.kind == "voltage":
                     # An ideal short (0 V): its current is solved for.
@@ -449,14 +462,23 @@ class World(BaseModel):
         """Reject short-circuited sources and loops of voltage sources.
 
         A two-terminal source whose terminals share a cluster is
-        short-circuited. Voltage sources are edges between cluster roots
-        and remote earth: an edge that closes a cycle (two sources on one
-        cluster to remote earth, a ring of two-terminal sources) fixes
-        one potential difference twice, and the nodal system is singular
-        (inconsistent for unequal voltages).
+        short-circuited (a voltage source also behind an internal
+        impedance: its current would circulate through the bond and the
+        source, none through the soil). Voltage sources without internal
+        resistance are edges between cluster roots and remote earth: an
+        edge that closes a cycle (two sources on one cluster to remote
+        earth, a ring of two-terminal sources) fixes one potential
+        difference twice, and the nodal system is singular (inconsistent
+        for unequal voltages). A source with ``internal_resistance_ohm >
+        0`` is no such edge; an internal inductance alone is, since its
+        impedance vanishes at $f = 0$.
         """
         two_terminal = [s for s in self.sources if s.return_to is not None]
-        voltage = [s for s in self.sources if s.kind == "voltage"]
+        voltage = [
+            s
+            for s in self.sources
+            if s.kind == "voltage" and float(s.internal_resistance_ohm) == 0.0
+        ]
         if not two_terminal and len(voltage) < 2:
             return
         # Local import: the solver package imports this module.
@@ -532,8 +554,10 @@ class World(BaseModel):
                     "potential difference twice, so the nodal system has no "
                     "unique solution. Conductors with a series resistance at "
                     f"or below {_IDEAL_BOND_OHM:g} Ω count as ideal bonds. "
-                    "Remove one source of the loop, or put a finite conductor "
-                    "(a junction and a lumped series resistance above "
+                    "Remove one source of the loop, give one of them an "
+                    "internal_resistance_ohm > 0 (an internal inductance "
+                    "alone vanishes at f = 0), or put a finite conductor (a "
+                    "junction and a lumped series resistance above "
                     f"{_IDEAL_BOND_OHM:g} Ω) in series with one of them."
                 )
             adjacency.setdefault(a, []).append((r, src.name))

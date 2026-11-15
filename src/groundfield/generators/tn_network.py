@@ -703,8 +703,9 @@ class TnNetworkConfig(GeneratorConfig):
             '``"current"`` impresses ``source_magnitude_a`` in A, the '
             "usual choice for a fall-of-potential measurement and for "
             'fault simulations; ``"voltage"`` impresses the same number '
-            "in V (an ideal voltage source) and the solve returns its "
-            "current. Both kinds give the same readings: "
+            "in V (an ideal voltage source; set its internal_resistance_ohm "
+            "/ internal_inductance_h on the built world) and the solve "
+            "returns its current. Both kinds give the same readings: "
             "``measured_impedance`` and ``input_impedance`` divide by the "
             "impressed or solved source current."
         ),

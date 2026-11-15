@@ -6,7 +6,8 @@ rho-f exporters take ``quantity=`` with three meanings,
 ``"input"`` (default)
     Driving-point impedance of a current source,
     :math:`Z_\\text{in} = (\\varphi_a - \\varphi_r) / I_s`, or of a
-    voltage source, :math:`U / I_s` with the solved source current
+    voltage source, :math:`U / I_s - Z_q` with the solved source current
+    and the internal impedance :math:`Z_q` of the source
     (:meth:`FieldResult.input_impedance`) — what a measurement
     instrument or a fault sees at the feeding point, and the
     :math:`T(f) = \\mathrm{EPR}/I_F` of a fault study.

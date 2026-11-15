@@ -83,6 +83,7 @@ from groundfield.soil.models import (
     MultiLayerSoil,
     TwoLayerSoil,
 )
+from groundfield.sources import _internal_impedance
 
 if TYPE_CHECKING:  # pragma: no cover - type-hint imports only
     import pandas as pd
@@ -155,7 +156,10 @@ class SourceRecord(BaseModel):
     impressed voltage $U$ and ``current`` the source current $I$ the
     solve returned — the current the source drives into ``attached_to``
     (and takes back from ``return_to``), the same sign convention as a
-    current source.
+    current source; ``internal_resistance_ohm`` and
+    ``internal_inductance_h`` are its internal impedance
+    $Z_q = R + j\\omega L$ (0 for an ideal source and for current
+    sources), so the terminal voltage is $U - Z_q I$.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -179,10 +183,37 @@ class SourceRecord(BaseModel):
         default_factory=list,
         description=(
             "Impressed source voltage per frequency in V (complex phasor), "
-            "attached_to against return_to (or remote earth). Empty for "
-            "current sources."
+            "attached_to against return_to (or remote earth), before the "
+            "drop across the internal impedance. Empty for current sources."
         ),
     )
+    internal_resistance_ohm: float = Field(
+        default=0.0,
+        description=(
+            "Internal series resistance R of a voltage source in Ω; 0 for an "
+            "ideal source, a current source and records written before "
+            "2026.11."
+        ),
+    )
+    internal_inductance_h: float = Field(
+        default=0.0,
+        description=(
+            "Internal series inductance L of a voltage source in H; 0 for an "
+            "ideal source, a current source and records written before "
+            "2026.11."
+        ),
+    )
+
+    def internal_impedance(self, frequency: float) -> complex:
+        """Internal impedance $Z_q = R + j\\omega L$ in Ω at ``frequency`` (Hz).
+
+        ``0j`` for a current source and an ideal voltage source.
+        """
+        return _internal_impedance(
+            self.internal_resistance_ohm,
+            self.internal_inductance_h,
+            2.0 * np.pi * float(frequency),
+        )
 
 
 def _source_records(
@@ -212,12 +243,17 @@ def _source_records(
         phasor = complex(src.magnitude * np.exp(1j * np.deg2rad(src.phase_deg)))
         current: list[complex] = []
         voltage: list[complex] = []
+        impedance: dict[str, float] = {}
         if src.kind == "current":
             current = [phasor] * n_freq
         elif src.kind == "voltage":
             voltage = [phasor] * n_freq
             if voltage_source_currents:
                 current = [complex(m[src.name]) for m in voltage_source_currents]
+            impedance = {
+                "internal_resistance_ohm": float(src.internal_resistance_ohm),
+                "internal_inductance_h": float(src.internal_inductance_h),
+            }
         records.append(
             SourceRecord(
                 name=src.name,
@@ -226,6 +262,7 @@ def _source_records(
                 return_to=src.return_to,
                 current=current,
                 voltage=voltage,
+                **impedance,
             )
         )
     return records
@@ -879,11 +916,17 @@ class FieldResult(BaseModel):
 
         * **Current source:** $I_s$ is the impressed current.
         * **Voltage source** (since 2026.11): the solve fixes
-          $\\varphi_a - \\varphi_r = U$, so $Z_\\text{in} = U / I_s$ with
-          the impressed voltage $U$ and the solved source current $I_s$
-          (:attr:`SourceRecord.voltage`, :attr:`SourceRecord.current`).
-          It equals the impedance a 1 A current source at the same
-          terminals reports, to round-off.
+          $\\varphi_a - \\varphi_r = U - Z_q I_s$, so
+          $Z_\\text{in} = U / I_s - Z_q$ with the impressed voltage $U$,
+          the solved source current $I_s$ and the internal impedance
+          $Z_q = R + j\\omega L$ of the source
+          (:attr:`SourceRecord.voltage`, :attr:`SourceRecord.current`,
+          :meth:`SourceRecord.internal_impedance`). It is the impedance
+          the source sees at its terminals, **without** its own $Z_q$
+          (the current is $U / (Z_q + Z_\\text{in})$). For a world with
+          this one source it equals the impedance a 1 A current source
+          at the same terminals reports, to round-off; with several
+          sources it is an apparent impedance (see *Notes*).
 
         This is the impedance a measurement instrument or a fault sees
         at the feeding point. It differs from :meth:`cluster_impedance`
@@ -920,7 +963,9 @@ class FieldResult(BaseModel):
         -----
         With several simultaneous sources the potential difference
         includes the contribution of the other sources, so the ratio is
-        an *apparent* impedance of the named source.
+        an *apparent* impedance of the named source. Two 230 V sources
+        on two 3 m rods 5 m apart (100 Ω·m, ``image``) report 38.90 Ω
+        each, against 35.99 Ω of the 1 A solve of one rod (+8.1 %).
         """
         if not self.sources:
             raise ValueError(
@@ -959,10 +1004,17 @@ class FieldResult(BaseModel):
                     f"or not one per frequency ({len(record.current)} currents, "
                     f"{len(record.voltage)} voltages, {n_freq} frequencies)."
                 )
-            return [
+            z_in = [
                 u / i if i != 0 else complex("nan")
                 for u, i in zip(record.voltage, record.current, strict=True)
             ]
+            if record.internal_resistance_ohm or record.internal_inductance_h:
+                # The impedance seen by the source, without its own Z_q.
+                z_in = [
+                    z - record.internal_impedance(f)
+                    for z, f in zip(z_in, self.frequencies, strict=True)
+                ]
+            return z_in
         u_a = self._terminal_potential(record.name, "feeds", record.attached_to)
         if record.return_to is None:
             u_r = [0j] * len(u_a)
@@ -1344,9 +1396,12 @@ class FieldResult(BaseModel):
             ``attached_to``, ``return_to``, ``current_a`` (source
             current in A, complex: impressed, or solved for a voltage
             source), ``voltage_v`` (impressed voltage in V of a voltage
-            source, complex; ``nan`` for a current source) and
-            ``input_impedance_ohm`` (:meth:`input_impedance` in Ω,
-            complex), the impedance seen at the feeding point.
+            source, complex; ``nan`` for a current source),
+            ``internal_resistance_ohm`` and ``internal_inductance_h``
+            (internal impedance of a voltage source in Ω and H, float;
+            ``nan`` for a current source) and ``input_impedance_ohm``
+            (:meth:`input_impedance` in Ω, complex), the impedance seen
+            at the feeding point (without the internal impedance).
 
         Returns
         -------
@@ -1448,6 +1503,8 @@ class FieldResult(BaseModel):
             "return_to": [],
             "current_a": [],
             "voltage_v": [],
+            "internal_resistance_ohm": [],
+            "internal_inductance_h": [],
             "input_impedance_ohm": [],
         }
         for k, f in enumerate(self.frequencies):
@@ -1464,6 +1521,13 @@ class FieldResult(BaseModel):
                 rows["voltage_v"].append(
                     complex(record.voltage[k]) if k < len(record.voltage) else nan
                 )
+                voltage = record.kind == "voltage"
+                rows["internal_resistance_ohm"].append(
+                    float(record.internal_resistance_ohm) if voltage else math.nan
+                )
+                rows["internal_inductance_h"].append(
+                    float(record.internal_inductance_h) if voltage else math.nan
+                )
                 rows["input_impedance_ohm"].append(complex(z[k]) if k < len(z) else nan)
         return pd.DataFrame(
             {
@@ -1474,6 +1538,12 @@ class FieldResult(BaseModel):
                 "return_to": pd.Series(rows["return_to"], dtype=object),
                 "current_a": pd.Series(rows["current_a"], dtype=complex),
                 "voltage_v": pd.Series(rows["voltage_v"], dtype=complex),
+                "internal_resistance_ohm": pd.Series(
+                    rows["internal_resistance_ohm"], dtype=float
+                ),
+                "internal_inductance_h": pd.Series(
+                    rows["internal_inductance_h"], dtype=float
+                ),
                 "input_impedance_ohm": pd.Series(
                     rows["input_impedance_ohm"], dtype=complex
                 ),

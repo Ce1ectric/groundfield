@@ -575,6 +575,8 @@ def create_source(
     magnitude: float = ...,
     phase_deg: float = ...,
     return_to: str | Electrode | Junction | None = ...,
+    internal_resistance_ohm: float | None = ...,
+    internal_inductance_h: float | None = ...,
 ) -> VoltageSource: ...
 
 
@@ -587,6 +589,8 @@ def create_source(
     magnitude: float = 1.0,
     phase_deg: float = 0.0,
     return_to: str | Electrode | Junction | None = None,
+    internal_resistance_ohm: float | None = None,
+    internal_inductance_h: float | None = None,
 ) -> Source:
     """Create a source and register it with ``world``.
 
@@ -618,6 +622,11 @@ def create_source(
         measurement, return conductor end); a voltage source holds
         ``attached_to`` at $U$ above it. ``None`` (default) returns
         the current through remote earth.
+    internal_resistance_ohm, internal_inductance_h
+        Internal series impedance $Z_q = R + j\\omega L$ of a voltage
+        source, in Ω and H (finite, ≥ 0; ``None``: 0, the ideal source).
+        The source then holds ``attached_to`` at $U - Z_q I$ above
+        ``return_to``. A current source has no internal impedance.
 
     Returns
     -------
@@ -630,7 +639,9 @@ def create_source(
         Unknown ``kind`` (with the closest valid kind); ``attached_to``
         names a conductor (a conductor is not a node — put a junction
         at its end); ``attached_to`` and ``return_to`` are the same
-        node; non-finite ``magnitude`` / ``phase_deg``.
+        node; non-finite ``magnitude`` / ``phase_deg``; a negative or
+        non-finite internal impedance, or one given for a current
+        source.
     KeyError
         ``attached_to`` / ``return_to`` names no electrode or junction
         of ``world`` (with the closest names).
@@ -654,12 +665,27 @@ def create_source(
             f".name, got {type(obj).__name__}."
         )
 
+    impedance = {
+        key: value
+        for key, value in (
+            ("internal_resistance_ohm", internal_resistance_ohm),
+            ("internal_inductance_h", internal_inductance_h),
+        )
+        if value is not None
+    }
+    if impedance and kind != "voltage":
+        raise ValueError(
+            f"{', '.join(impedance)}: a current source has no internal "
+            "impedance (it impresses its current whatever it drives); pass "
+            "kind='voltage' for a source behind an internal impedance."
+        )
     src = cls(
         name=name,
         attached_to=_name_of(attached_to),
         return_to=_name_of(return_to) if return_to is not None else None,
         magnitude=magnitude,
         phase_deg=phase_deg,
+        **impedance,
     )
     world.add_source(src)
     return src
