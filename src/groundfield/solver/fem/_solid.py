@@ -101,10 +101,11 @@ SQUARE_CONFORMAL_RADIUS = 0.5901702
 #: The 3-D model refuses worlds with more ports than this before meshing
 #: (audit W4B-08). Every electrode and every leaking piece of a galvanic
 #: distributed conductor is a port, and every port costs one
-#: conjugate-gradient solve per mesh level: 0.93 s per port and level at
-#: 583 000 nodes of the finer mesh (auditor W4B, a galvanic chain of 18 and
-#: 34 ports), growing with the mesh. 100 ports are about 3 minutes of port
-#: solves at that size and about 11 minutes at ``max_nodes_3d``.
+#: conjugate-gradient solve per mesh level: 0.93 … 0.96 s per port and level
+#: at 583 000 nodes of the finer mesh (a galvanic chain of 18 and 34 ports;
+#: auditor W4B and evidence ``f14`` of stream fw4fem3d), growing with the
+#: mesh. 100 ports are about 3 minutes of port solves at that size and about
+#: 11 minutes at ``max_nodes_3d``.
 MAX_PORTS_3D = 100
 
 #: Port-solve time in s per port and per node of the finer mesh, both levels

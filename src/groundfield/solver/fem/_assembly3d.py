@@ -32,8 +32,8 @@ potentials), symmetric positive definite.
   fixed seed of numpy's global random state, which is restored afterwards);
   $G$ is a quadratic functional of the solution, so its error is the square
   of the solver's energy error. The iterations grow with the layer
-  contrast (16 … 115 up to 33, about 1 260 at 333 at the finer level); at
-  1000 they do not converge (audit W4B-03).
+  contrast (16 … 115 up to 33, 1 225 … 1 264 at 333 at the finer level);
+  at 1000 they do not converge (audit W4B-03).
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ __all__: list[str] = []
 CG_TOLERANCE = 1e-8
 
 #: Iteration limit of the conjugate-gradient port solves. A rod through an
-#: interface of contrast 333 needs about 1 260 at the finer level; at 1000
+#: interface of contrast 333 needs 1 225 … 1 264 at the finer level; at 1000
 #: the solves do not converge (audit W4B-03).
 CG_MAX_ITERATIONS = 3000
 

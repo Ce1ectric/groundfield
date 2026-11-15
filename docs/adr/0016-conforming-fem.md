@@ -89,11 +89,14 @@ half-plane $(s, z)$ with the weight $2\pi s$:
   extrapolated and the finer level is reported as
   `metadata["fem_error_estimate"]`.
 
-Every other world is refused with `BackendCapabilityError`, naming the
-backends that solve it: electrodes other than rods and rings, a rod or
-ring off the common axis, galvanic distributed conductors (their leakage
-runs along their route), touching electrodes and a ring wire that reaches
-within 5 % of its radius to the soil surface (the solid torus must fit).
+Every other world — electrodes other than rods and rings, a rod or ring
+off the common axis, galvanic distributed conductors (their leakage runs
+along their route), touching electrodes and a ring wire that reaches
+within 5 % of its radius to the soil surface (the solid torus must fit) —
+goes to the three-dimensional model of section 5 under the default
+`FemOptions.model = "auto"`. With `model = "axisymmetric"` it is refused
+with `BackendCapabilityError`, naming the backends that solve it. (Part A
+alone, before part B, refused every such world.)
 
 ### 3. Network and results on the shared pipeline
 
@@ -155,12 +158,23 @@ applies (bit for bit) and takes the 3-D model otherwise; `"3d"` forces it,
   $U - \Pi = (C + \Delta C)\,j$, with the shell coefficient $C$ of ADR-0012
   and the correction $\Delta C$ = the difference between the reduced
   thin-wire kernel of radius $a$ and that of the smoothed source (energy
-  radius $0.5442\,R$), integrated in closed form over the own piece, its
-  neighbours at corners and junctions and their surface images. Far inside
-  a straight wire it is Sunde's $\frac{\rho}{2\pi}\ln(r_\eta/a)$. The
-  result depends little on $R$ (evidence `e07` of stream w4fem3d: a 3 m
-  rod and a ring at $R$ = 4, 6 and 10 cm against part A). Default
-  $R$ = 6 cm.
+  radius $0.5442\,R$), integrated in closed form over what the mesh does
+  not resolve: the observer's own wire whole (its polyline through every
+  corner, and every piece on its axis line — the next piece of a galvanic
+  conductor, the surface image of a rod reaching the surface), and of every
+  other piece and every other surface image only the part within
+  $1.5\,R$ of the point. Beyond that the disc average of a smoothed line is
+  its line field (2-D mean-value property of the radial bump), so the mesh
+  is exact there: for two parallel wires the exact correction is below
+  $10^{-3}$ of the self term from $1.5\,R$ on (evidence `f01` of stream
+  fw4fem3d). The first version counted the surface images and every wire
+  within $20\,R$, with the observer's current: shallow wires read up to
+  +1.9e-3 high and two rings 10 cm apart +4.6e-3, above their error
+  estimate (audit W4B-01). Far inside a straight wire $\Delta C$ is Sunde's
+  $\frac{\rho}{2\pi}\ln(r_\eta/a)$. The result depends little on $R$
+  (evidence `e07` of stream w4fem3d, re-measured as `f05` of stream
+  fw4fem3d: a 3 m rod and a ring at $R$ = 4, 6 and 10 cm against part A).
+  Default $R$ = 6 cm.
 - **Isotropic mesh, deterministic bisection.** A coarse grid of
   $8 \times 8 \times 4$ cubes (six Kuhn tetrahedra each) on the box is
   refined by conforming longest-edge bisection (own implementation with
@@ -194,13 +208,32 @@ applies (bit for bit) and takes the 3-D model otherwise; `"3d"` forces it,
   ($G$ is quadratic in the solution, so its error is the square of the
   solver's). A direct sparse factorisation (SuperLU, `scipy.sparse.linalg.splu`)
   needed 93 s at 155 000 nodes (COLAMD ordering) and had not finished after
-  15 minutes at 68 000 nodes with the MMD ordering.
+  15 minutes at 68 000 nodes with the MMD ordering. pyamg draws the start
+  vectors of its spectral-radius estimates from numpy's global random
+  state; the hierarchy is set up under a fixed seed and the user's state is
+  restored, so results are bit-identical whatever the user's seed and the
+  user's stream is not advanced (audit W4B-07). The iterations grow with
+  the layer contrast (16 … 115 up to the contrast 33 of AP1, 384 … 530 at
+  100 and 1 225 … 1 264 at 333 for a rod through the interface); at 1 000
+  they do not converge in 3 000 iterations, and the solve raises
+  `BackendCapabilityError` naming the contrast, the axisymmetric model and
+  the integral engines; the tested range is up to about 300 (audit
+  W4B-03). The multigrid of
+  $K + \operatorname{diag}(A^\mathsf T D A)$ gives the same counts (evidence
+  `f02` of stream fw4fem3d).
 - **Levels and extrapolation.** The finer level is the red refinement of
   the coarser one (nested); $G$ is extrapolated with the second order as
   in part A. The levels are not yet asymptotic for every geometry (error
-  ratios 3.0 … 5.2), so the extrapolated value carries up to 2e-3; the
-  reported error estimate (3 … 5e-3) bounds the deviation in every case
-  tested.
+  ratios $r$ = 3.0 … 5.2), so the extrapolated value carries up to 2e-3.
+  It errs by $e_1(4 - r)/3$, the reported estimate is $e_1(r - 1)/3$ (3 …
+  5e-3): a bound while $r \ge 2.5$, 2.1 … 2.7 times the error for rings
+  ($r \approx 3$). This holds away from layer interfaces and other wires by
+  about $R/0.8$. Next to a strongly contrasting interface the thin-wire
+  error applies, which the levels do not see (a ring 1.5 cm above a
+  1000 / 30 Ω·m interface lies between the exact thin ring and the solid
+  torus, its levels on either side of the torus; audit W4B-02). Resolved
+  concrete converges at first order ($r \approx 2$): there the estimate is
+  no bound.
 - **Ports and network.** Every electrode is one port, every leaking piece
   of a galvanic distributed conductor one more; `_network.solve_network`
   takes the pipeline's topology of those pieces, the rest is section 3.
@@ -211,15 +244,34 @@ applies (bit for bit) and takes the 3-D model otherwise; `"3d"` forces it,
   $r_b/0.59017$) around every straight axis-aligned encased wire, the
   metal radius following from $C = \frac{\rho_c}{2\pi}\ln(r_b/r_a)$, the
   prism faces as immersed interfaces, so overlapping shells at corners,
-  T-joints and crossings share their concrete. The prism faces and edges
-  make it first order (the conductance per metre reads 2.8 … 4.6 % high at
-  the default levels), so it measures differences on one mesh: every
-  junction acts like at most about one shell radius of wire against the
-  per-wire shells (evidence `e09`, `e11` of stream w4fem3d), which keep
-  their place as the default (no correction rule).
-- **Resource guard.** `FemOptions.max_nodes_3d` (2 million nodes of the
-  finer mesh, about 3 GB per million) is checked against a prediction
-  before meshing and against the exact count before the finer level.
+  T-joints and crossings share their concrete. The square keeps the
+  resistance to the soil, but in the shell-dominated limit its concrete is
+  3.8 % less resistive than the circular shell: the concrete is set by the
+  square's inner conformal radius, $0.914\,r_b$ (audit W4B-04; one side
+  cannot match both radii, so the prism is not resized). Together with the
+  first order of the prism faces and edges the resolved concrete reads the
+  conductance per metre 2.8 … 4.6 % high at the default levels, so it
+  measures differences on one mesh. Against the per-wire shells a junction
+  acts like a few cm of wire, at most about $2\,r_b$, sign not settled — the
+  junction numbers are not converged (one refinement of the prism faces
+  moved the corner by about 5 cm; evidence `e09`, `e11` of stream w4fem3d,
+  audit W4B-05) — and the house mesh of the generators changes by about 1 %
+  or less (0.35 … 0.85 % with every sign aligned after the fix of W4B-01,
+  evidence `f12` of stream fw4fem3d). The per-wire shells keep their place
+  as the default (no correction rule).
+- **Resource guard.** Before anything is meshed: the display segments
+  against `Engine.max_segments`, the number of ports against 100 (every
+  port is one conjugate-gradient solve per level, 0.93 … 0.96 s per port
+  and level at 583 000 nodes, auditor W4B and evidence `f14` of stream
+  fw4fem3d; audit W4B-08) and `FemOptions.max_nodes_3d` (2 million nodes
+  of the finer mesh; the solve adds about 2.9 GB per million, evidence
+  `f15`) against a prediction; the exact count again before the finer
+  level. `metadata["fem_peak_memory_gb"]` is what the
+  solve added to the peak resident memory of the process,
+  `fem_process_peak_memory_gb` that peak (audit W4B-09).
+- **Face pairing.** The immersed elements' face terms pair the faces by
+  their sorted node triples (`numpy.lexsort`); a packed integer key
+  aliased above $2^{21}$ nodes (audit W4B-06).
 - **Dependencies (decision D6).** `scikit-fem` (BSD-3: the Kuhn background
   `MeshTet.init_tensor`, the red refinement) and `pyamg` (MIT), as the
   optional `fem3d` extra; `import groundfield` imports neither. Without
@@ -249,10 +301,12 @@ applies (bit for bit) and takes the 3-D model otherwise; `"3d"` forces it,
 - The 3-D model shares the thin-wire assumption of the integral engines
   (uniform current around the wire, no end faces); it is independent of
   them in everything else (the layering, the surface, the far field, the
-  current distribution along the wires). Its accuracy (about 2e-3, levels
-  not yet asymptotic for every geometry) is a reference for the integral
-  engines' biases of 0.4 … 3 %, not for effects below 1e-3; differences of
-  two concrete models on the same mesh (Q40) are finer than that.
+  current distribution along the wires). Its accuracy (about 2e-3 away
+  from interfaces and other wires, levels not yet asymptotic for every
+  geometry; next to a strongly contrasting interface the thin-wire error
+  of the integral engines) is a reference for the integral engines'
+  biases of 0.4 … 3 %, not for effects below 1e-3; differences of two
+  concrete models on the same mesh (Q40) are finer than that.
 - No stored number changes with part B: the golden `fem` cases are
   axisymmetric and stay on part A bit for bit.
 - `fem` stays experimental until the audits of the release have passed.

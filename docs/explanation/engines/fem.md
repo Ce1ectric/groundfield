@@ -7,7 +7,7 @@
     | Soil | any number of horizontal layers |
     | Electrodes | every kind, bare or encased (ADR-0012); rods on one vertical axis and rings around it by the axisymmetric model, every other world by the three-dimensional model (the optional `fem3d` extra) |
     | Axisymmetric model | the electrodes as they are (solid cylinders and tori), linear triangles on a graded tensor mesh conforming to every surface and interface; port resistance within about 1e-4 of independent references |
-    | 3-D model | thin wires as smoothed line sources with an analytic radius correction, linear tetrahedra on an isotropic bisection mesh, layer interfaces (and resolved concrete) as partially penalised immersed elements; within about 2e-3 of the axisymmetric model |
+    | 3-D model | thin wires as smoothed line sources with an analytic radius correction, linear tetrahedra on an isotropic bisection mesh, layer interfaces (and resolved concrete) as partially penalised immersed elements; within about 2e-3 of the axisymmetric model away from layer interfaces and other wires (by about $R/0.8$, $R$ = `source_radius`); next to a strongly contrasting interface the thin-wire error applies |
     | Far field | exact monopole Dirichlet-to-Neumann (Robin) condition on a box 1000 lengths away |
     | Extrapolation | Richardson over two nested levels, error estimate reported |
     | Network | the shared pipeline: conductors (lumped, distributed isolated and galvanic), junctions, `return_to`, voltage sources, inductive branches |
@@ -23,8 +23,9 @@ axis and rings around it — as the solid bodies they are, in any
 horizontally layered soil, to about 1e-4. The **three-dimensional model**
 takes every other world — strips, polylines, stars, meshes and grids, rods
 and rings side by side, several clusters, galvanic distributed conductors —
-with its wires as smoothed line sources, to about 2e-3, and can resolve a
-concrete shell as a volume (user decision Q40). `FemOptions.model="auto"`
+with its wires as smoothed line sources, to about 2e-3 away from layer
+interfaces and other wires, and can resolve a concrete shell as a volume
+(user decision Q40). `FemOptions.model="auto"`
 (default) chooses the axisymmetric model where it applies. That makes
 `fem` the independent reference for the image family, `mom` and
 `mom_sommerfeld` where they make their approximations: the uniform current
@@ -206,12 +207,12 @@ solves projected coordinates in a local frame.
 |---|---|---|
 | Electrodes | axisymmetric model: rods on one vertical axis, horizontal rings centred on it (any number, not touching) | the 3-D model (`model="auto"`), or `BackendCapabilityError` with `model="axisymmetric"` |
 | Ring wire | axisymmetric model: its top deeper than 5 % of the wire radius | the 3-D model |
-| 3-D model | wires whose disc of radius `source_radius` lies in the soil and in one layer; the `fem3d` extra | `BackendCapabilityError` / `ImportError` |
-| Soil | any number of horizontal layers, any contrast | — |
+| 3-D model | wires whose disc of radius `source_radius` lies in the soil and in one layer; at most 100 ports (electrodes and leaking pieces of galvanic conductors); the `fem3d` extra | `BackendCapabilityError` / `ResourceLimitError` before meshing / `ImportError` |
+| Soil | any number of horizontal layers; any contrast in the axisymmetric model, up to about 300 tested in the 3-D model | 3-D model: `BackendCapabilityError` when its conjugate gradients do not converge (a rod through a 1 / 1000 Ω·m interface), naming the axisymmetric model and the integral engines |
 | Concrete shells | per-length coefficient on rods and rings | — |
 | Conductors | lumped, inductive, skin effect, isolated distributed chains; galvanic distributed chains in the 3-D model | — |
 | Concrete | per-wire coefficient (both models); resolved prisms in the 3-D model (axis-aligned straight wires) | `BackendCapabilityError` for other wires |
-| Accuracy | axisymmetric: port resistance about 1e-4 at the default; 3-D: about 2e-3, bounded by the error estimate | raise `FemOptions.refinement` |
+| Accuracy | axisymmetric: port resistance about 1e-4 at the default; 3-D: about 2e-3 away from interfaces and other wires (by about $R/0.8$), the error estimate a bound while the ratio of the two levels' errors is at least 2.5; next to a strongly contrasting interface the thin-wire error (see *Validation of the 3-D model*) | axisymmetric: raise `FemOptions.refinement`; 3-D: a smaller `source_radius` or `growth` with a larger `max_nodes_3d` (`refinement` multiplies its nodes by eight: the AP1 station would need about 11.5 million), or one of the integral engines as the second method |
 | Mesh size | `FemOptions.max_nodes` (axisymmetric), `max_nodes_3d` (3-D) | `ResourceLimitError` |
 | Frequency | quasi-static soil; conductor branches per frequency | — |
 
@@ -267,6 +268,12 @@ Generated from the benchmark run measured on 2026-11-14 with groundfield 2026.11
 | B10 Ring with three bonded rods | abs(Z/Z_ref - 1) | excluded | — | — | excluded | refused; excluded: rods off the ring's axis, which the axisymmetric model refuses (user decision Q37; up to 2026.11 -35 % / -45 %, radii summed) |
 <!-- generated:end fem -->
 
+B8 and B10 exclude `fem` because the generated rows were measured when only
+the axisymmetric model existed, which refuses rods and rings off one axis.
+The 3-D model solves both (B8: the port matrix of two clusters is symmetric
+to $1.1\cdot10^{-16}$; B10 is the shape of the AP1 station below); the rows
+are re-measured with the validation page at the release.
+
 ## The three-dimensional model
 
 The three-dimensional model (part B of user decision Q37) needs the
@@ -298,9 +305,19 @@ $$
 
 with the shell coefficient $C$ of an encased wire, $\Phi_k(s; c)$ the
 integral of the reduced kernel $1/\sqrt{d^2 + c^2}$ over piece $k$ (closed
-form), summed over the own piece, its neighbours at corners and junctions
-and their images in the soil surface, and $r_\eta = 0.5442\,R$ the energy
-radius of the bump. Far inside a straight wire this is Sunde's radial
+form) and $r_\eta = 0.5442\,R$ the energy radius of the bump. The sum runs
+over what the mesh does not resolve: the observer's own wire whole (its
+polyline through every corner, and every piece on the same axis line — the
+next piece of a galvanic conductor, the surface image of a rod whose head
+reaches the surface), and of every other piece and every other surface
+image only the part within $1.5\,R$ of the point. Farther away the disc
+average of a smoothed line is its line field (the 2-D mean-value property
+of the radial bump), so the mesh already gives the exact field: for two
+parallel wires the exact correction is below $10^{-3}$ of the self term from
+$1.5\,R$ on, and the surface image of a horizontal wire ($2z \ge 2.5\,R$
+away) never counts. (Up to audit W4B-01 the surface images and every wire
+within $20\,R$ counted: shallow wires read up to +1.9e-3 high, two rings
+10 cm apart +4.6e-3.) Far inside a straight wire $\Delta C$ is Sunde's radial
 resistance $\frac{\rho}{2\pi}\ln(r_\eta/a)$ of the soil between the wire and
 the disc; near an end, a corner or a junction it carries the 3-D geometry.
 
@@ -326,30 +343,64 @@ the disc; near an end, a corner or a junction it carries the 3-D geometry.
   coefficient $C$ — the model of the image family and `mom`, so `fem`
   compares with them directly. With `FemOptions.concrete_resistivity`
   $= \rho_c$ the concrete is a volume: a square prism of conformal radius
-  $r_b$ = `wire_radius` (side $r_b/0.59017$, the same resistance to the
+  $r_b$ = `wire_radius` (side $s = r_b/0.59017$, the same resistance to the
   soil as a circular shell) around every straight encased wire along x, y
   or z, the metal radius following from
   $C = \frac{\rho_c}{2\pi}\ln(r_b/r_a)$. Where wires meet, the prisms share
   their concrete (user decision Q40, see
-  [Concrete shells](../concrete-shells.md)).
+  [Concrete shells](../concrete-shells.md)). The square keeps the
+  resistance to the soil, but in the shell-dominated limit
+  ($\rho_c \gg \rho$) its concrete is 3.8 % less resistive than the
+  circular shell: the concrete between the bar and a nearly equipotential
+  prism surface is set by the square's inner conformal radius at its
+  centre, $0.5394\,s = 0.914\,r_b$ (for a 5 mm bar with 5 cm cover
+  $\ln(50.3/5)/\ln(55/5) = 0.962$; Schwarz–Christoffel and a least-squares
+  Green's function agree, audit W4B-04). One square side cannot match both
+  radii.
 
 ### Solve, levels and cost
 
 The disc averages couple all nodes of a disc, so the coupling is never
 formed: conjugate gradients run on the operator, preconditioned by the
-smoothed-aggregation multigrid of the soil stiffness (pyamg), one solve per
-port (16 … 115 iterations). The finer level is the red refinement of the
-coarser one; the port conductance matrix is extrapolated with the second
-order and the relative difference to the finer level is
-`metadata["fem_error_estimate"]` (3 … 5e-3 at the defaults). The levels
-are not asymptotic for every geometry (error ratios between the levels of
-3.0 … 5.2), so the extrapolated value carries up to about 2e-3; the
-estimate bounds the deviation from the axisymmetric model in every case
-tested. A ring of 12.6 m takes about a minute and 2 GB, the AP1 station
-(28 m of wire, 1.3 million nodes at the finer level) about two minutes and
-4 GB. `FemOptions.max_nodes_3d` (2 million nodes of the finer mesh, about
-3 GB per million) refuses larger meshes before they are built
-(`ResourceLimitError`).
+smoothed-aggregation multigrid of the soil stiffness (pyamg, set up under a
+fixed seed of numpy's global random state, which is restored afterwards, so
+a result does not depend on the user's seed), one solve per port. The
+iterations grow with the layer contrast: 16 … 115 up to the contrast 33 of
+the AP1 soils, 384 … 530 at 100 and 1 225 … 1 264 at 333 at the finer level
+for a rod through the interface (both orders of the layers, each within its
+error estimate of the axisymmetric model; evidence `f13` of stream
+fw4fem3d); at 1 000 they do not converge in 3 000 iterations and the solve
+raises `BackendCapabilityError` naming the contrast, the axisymmetric model
+(any contrast) and the integral engines (audit W4B-03; a multigrid of the
+stiffness plus the diagonal of the wire coupling gives the same counts).
+The finer level is the red refinement of the coarser one; the port
+conductance matrix is extrapolated with the second order and the relative
+difference to the finer level is `metadata["fem_error_estimate"]` (3 … 5e-3
+at the defaults). The levels are not asymptotic for every geometry (error
+ratios between the levels of 3.0 … 5.2), so the extrapolated value carries
+up to about 2e-3. With the ratio $r$ of the two levels' errors the
+extrapolated value errs by $e_1(4 - r)/3$ and the estimate is $e_1(r -
+1)/3$, so the estimate bounds the error while $r \ge 2.5$: rods run at 3.7
+… 5.2 and rings at about 3, where the estimate is 2.1 … 2.7 times the error
+(evidence `f04`, `f08` of stream fw4fem3d). Resolved concrete converges at
+first order ($r \approx 2$): there the estimate is no bound. Next to a
+strongly contrasting interface the two levels can lie on either side of the
+solid wire's value, and the estimate does not see the thin-wire error (see
+*Validation of the 3-D model*).
+
+Cost (fresh processes, one solve each, other jobs running; evidence `f06`,
+`f15` of stream fw4fem3d): a ring of 12.6 m (600 000 nodes at the finer
+level) takes 26 s and 1.8 GB, the AP1 station (28 m of wire, 1.2 … 1.4
+million nodes) 75 … 140 s and 4.3 GB. The solve adds about 2.9 GB per
+million nodes of the finer mesh (3.0 … 3.1 GB with the process itself), so
+`FemOptions.max_nodes_3d` (2 million nodes) refuses meshes of more than
+about 6 GB before they are built (`ResourceLimitError`).
+`metadata["fem_peak_memory_gb"]` is what the solve added to the peak
+resident memory of the process — in a fresh process the memory the solve
+needs, less (down to zero) when an earlier computation of the process
+already needed more — and `metadata["fem_process_peak_memory_gb"]` that
+peak itself, the figure `/usr/bin/time -l` reports (audit W4B-09). Both
+are in GiB.
 
 ### Guards of the 3-D model
 
@@ -357,7 +408,19 @@ tested. A ring of 12.6 m takes about a minute and 2 GB, the AP1 station
 - `BackendCapabilityError`: a wire so close to the soil surface or a layer
   interface that its disc cannot lie in the soil and in one layer; resolved
   concrete around a wire that is not straight along x, y or z (rings,
-  oblique strips) or whose concrete would reach the surface.
+  oblique strips) or whose concrete would reach the surface; conjugate
+  gradients that do not converge (layer contrasts above the tested 300,
+  such as a rod through a 1 / 1000 Ω·m interface), naming the contrast,
+  the axisymmetric model and the integral engines.
+- `ResourceLimitError` before anything is meshed: the display segments
+  above `Engine.max_segments` (a unit error of `segment_length`), more than
+  100 ports — every electrode and every leaking piece of a galvanic
+  distributed conductor is a port and costs one conjugate-gradient solve per
+  level, about 0.9 s per port and level at 600 000 nodes, so the message
+  names the estimated time (coarsen the conductor's
+  `discretize_segment_length`) — and the predicted finer mesh above
+  `FemOptions.max_nodes_3d`; after the coarser mesh, its exact refinement
+  above that limit.
 - `ValueError`: a `source_radius` that does not reach beyond the bare
   wire (it must be at least 2.2 wire radii).
 
@@ -366,38 +429,71 @@ tested. A ring of 12.6 m takes about a minute and 2 GB, the AP1 station
 Two methods each (evidence of stream w4fem3d): the axisymmetric model where
 the world allows it, closed forms and the integral engines otherwise.
 
-**Against the axisymmetric model** (defaults of the 3-D model; levels 0/1 extrapolated):
+**Against the axisymmetric model** (defaults of the 3-D model; levels 0/1
+extrapolated; re-measured after audit W4B-01, evidence `f04` of stream
+fw4fem3d — the rows moved by at most 3e-5):
 
 | World | axisymmetric model | 3-D model / axisymmetric − 1 | error estimate | finer-level nodes | thin-wire engine / axisymmetric − 1 | `mom` / axisymmetric − 1 |
 |---|---|---|---|---|---|---|
-| rod 0 … 3 m, $a$ = 8 mm, 100 Ω·m | 33.19327 Ω | −1.5e-4 | 4.6e-3 | 186 903 | `image` +0.92 % | −1.45 % |
+| rod 0 … 3 m, $a$ = 8 mm, 100 Ω·m | 33.19327 Ω | −1.4e-4 | 4.6e-3 | 186 903 | `image` +0.92 % | −1.45 % |
 | rod 0.5 … 3.5 m, 100 Ω·m | 31.71703 Ω | +6.5e-4 | 4.8e-3 | 203 383 | `image` +1.11 % | −1.22 % |
-| ring $r$ = 2 m at 0.8 m, $a$ = 8 mm, 100 Ω·m | 12.48090 Ω | −1.95e-3 | 4.7e-3 | 600 179 | `image` +0.003 % | −1.17 % |
-| ring $r$ = 5 m at 0.5 m, $a$ = 5 mm, 100 Ω·m | 6.41819 Ω | −1.93e-3 | 4.1e-3 | 1 500 815 | `image` +0.003 % | −0.91 % |
+| ring $r$ = 2 m at 0.8 m, $a$ = 8 mm, 100 Ω·m | 12.48090 Ω | −1.93e-3 | 4.7e-3 | 600 179 | `image` +0.003 % | −1.17 % |
+| ring $r$ = 5 m at 0.5 m, $a$ = 5 mm, 100 Ω·m | 6.41819 Ω | −1.94e-3 | 4.1e-3 | 1 500 815 | `image` +0.003 % | −0.91 % |
 | rod 0 … 3 m through $h_1$ = 2 m, 100 / 1000 Ω·m | 61.22214 Ω | −1.30e-3 | 4.3e-3 | 194 897 | `image_2layer` +0.08 % | −1.32 % |
 | rod 0 … 3 m above $h_1$ = 4 m, 1000 / 30 Ω·m | 300.66258 Ω | +2.1e-4 | 5.2e-3 | 187 027 | `image_2layer` +1.20 % | −1.59 % |
-| rod 0 … 3 m above $h_1$ = 5 m, 100 / 1000 Ω·m | 38.84736 Ω | −3.1e-4 | 4.5e-3 | 195 663 | `image_2layer` +0.74 % | −1.25 % |
-| ring $r$ = 2 m at 0.8 m above $h_1$ = 2 m, 1000 / 30 Ω·m | 80.71707 Ω | −2.00e-3 | 4.3e-3 | 595 993 | `image_2layer` +0.004 % | −1.81 % |
-| ring $r$ = 2 m at 0.8 m, three layers 100 / 1000 / 30 Ω·m (1 m, 2 m) | 21.41013 Ω | −9.2e-4 | 4.0e-3 | 641 613 | `mom_sommerfeld` −0.68 % | refused |
+| rod 0 … 3 m above $h_1$ = 5 m, 100 / 1000 Ω·m | 38.84736 Ω | −3.0e-4 | 4.5e-3 | 195 663 | `image_2layer` +0.74 % | −1.25 % |
+| ring $r$ = 2 m at 0.8 m above $h_1$ = 2 m, 1000 / 30 Ω·m | 80.71707 Ω | −1.97e-3 | 4.3e-3 | 595 993 | `image_2layer` +0.004 % | −1.81 % |
+| ring $r$ = 2 m at 0.8 m, three layers 100 / 1000 / 30 Ω·m (1 m, 2 m) | 21.41013 Ω | −9.1e-4 | 4.0e-3 | 641 613 | `mom_sommerfeld` −0.68 % | refused |
 
-Every case lies within 2.0e-3 of the axisymmetric model and inside its own error estimate. The free ends of a wire read slightly high, a wire without ends (a ring) about 2e-3 low: the two mesh levels are not yet in the asymptotic range for every geometry (error ratio between the levels 3.0 for rings, 4.2 … 5.2 for rods).
+Every case lies within 2.0e-3 of the axisymmetric model and inside its own
+error estimate. The free ends of a wire read slightly high, a wire without
+ends (a ring) about 2e-3 low: the two mesh levels are not yet in the
+asymptotic range for every geometry (error ratio between the levels 3.0 for
+rings, 4.2 … 5.2 for rods). A ring $r$ = 1 m ($a$ = 5 mm) reads −1.62e-3 …
+−1.83e-3 at 0.06, 0.1, 0.3 and 0.8 m deep (before audit W4B-01 the
+surface-image term drifted it from +2.4e-4 to −1.85e-3), and two coaxial
+rings 1.0 m and 1.1 m as two ports −1.19e-3 / −1.48e-3 / −1.57e-3 in
+$R_{11}$ / $R_{22}$ / $R_{12}$ against an estimate of 3.9e-3 (before:
++4.6e-3 in $R_{11}$; evidence `f08`, `f09` of stream fw4fem3d; `image`, the
+exact thin rings, agrees with part A to 3.7e-4).
+
+**Next to a contrasting interface** the thin wire itself errs, and the 3-D
+model with it: its current sits on the wire axis, while on the solid wire
+it crowds to the side that faces a more conductive layer. A ring ($r$ = 1
+m, $a$ = 5 mm, 0.8 m deep) with its axis a gap $g$ above a 1000 / 30 Ω·m
+interface, against the solid torus (evidence `f10` of stream fw4fem3d):
+
+| $g$ | 3-D model / axisymmetric − 1 | error estimate | levels L0 / L1 | exact thin ring (`image_2layer`) / axisymmetric − 1 |
+|---|---|---|---|---|
+| 0.3 m | −1.7e-3 | 3.3e-3 | −1.47 / −0.50 % | +6e-5 |
+| 0.075 m | +2.2e-3 | 8.6e-3 | −3.12 / −0.64 % | +3.3e-4 |
+| 0.03 m ($R$ = 2.4 cm) | −6e-5 | 4.6e-3 | −1.80 / −0.46 % | +2.3e-3 |
+| 0.015 m ($R$ = 1.2 cm) | **+9.2e-3** | 5.4e-3 | −1.24 / **+0.37 %** | +1.24e-2 |
+
+At 1.5 cm (1.9 million nodes) the model lies between the thin ring and the
+torus, above its estimate, its two levels on either side of the torus: the
+estimate does not see the thin-wire error (audit W4B-02). Over a more
+resistive layer (30 / 1000 Ω·m) the same ring reads −6.5e-4 at 1.5 cm,
+within its estimate of 2.3e-3; rods through a 10 / 1000 or 1000 / 10 Ω·m
+interface read −7.1e-4 / +5.3e-4 (evidence `f13`).
 
 **AP1 station** in the seven corner soils of the AP1 grid: square ring
 4 m × 4 m at 0.6 m (5 mm wire), three 4 m rods (8 mm) from three corners,
-bonded; input impedance at DC. The 3-D model lies between the two thin-wire
-engines, as the axisymmetric model does for rods and rings: the uniform
-current per wire of `image_2layer` reads high, the point kernel of `mom`
-low.
+bonded; input impedance at DC (re-measured after audit W4B-01, evidence
+`f06` of stream fw4fem3d: −0.9e-4 … −1.1e-4 against the first version).
+The 3-D model lies between the two thin-wire engines, as the axisymmetric
+model does for rods and rings: the uniform current per wire of
+`image_2layer` reads high, the point kernel of `mom` low.
 
 | $\rho_1$ / $\rho_2$ / $h_1$ (Ω·m, m) | `fem` (3-D) | error estimate | `image_2layer` / `fem` − 1 | `mom` (0.25 m) / `fem` − 1 |
 |---|---|---|---|---|
-| 1000 / 200 / 30 | 72.328 Ω | 4.3e-3 | +1.52 % | −0.63 % |
-| 1000 / 200 / 5 | 57.962 Ω | 4.6e-3 | +2.44 % | −0.80 % |
-| 1000 / 30 / 30 | 71.525 Ω | 4.8e-3 | +1.52 % | −0.65 % |
-| 1000 / 30 / 5 | 52.747 Ω | 4.8e-3 | +2.98 % | −0.86 % |
-| 30 / 200 / 30 | 2.4652 Ω | 4.5e-3 | +1.33 % | −0.56 % |
-| 30 / 200 / 5 | 3.5625 Ω | 4.8e-3 | +0.66 % | −0.38 % |
-| 30 (homogeneous) | 2.2510 Ω | 4.3e-3 | +1.47 % (`image`) | −0.60 % |
+| 1000 / 200 / 30 | 72.322 Ω | 4.3e-3 | +1.53 % | −0.62 % |
+| 1000 / 200 / 5 | 57.956 Ω | 4.6e-3 | +2.45 % | −0.79 % |
+| 1000 / 30 / 30 | 71.519 Ω | 4.8e-3 | +1.53 % | −0.64 % |
+| 1000 / 30 / 5 | 52.741 Ω | 4.8e-3 | +2.99 % | −0.85 % |
+| 30 / 200 / 30 | 2.4650 Ω | 4.5e-3 | +1.34 % | −0.55 % |
+| 30 / 200 / 5 | 3.5623 Ω | 4.8e-3 | +0.67 % | −0.37 % |
+| 30 (homogeneous) | 2.2508 Ω | 4.3e-3 | +1.48 % (`image`) | −0.59 % |
 
 **Two clusters.** Two 2 m rods ($a$ = 8 mm) in 100 Ω·m: the port matrix is
 symmetric to round-off ($|R_{12}/R_{21} - 1| \le 1.1\cdot10^{-16}$), and the
@@ -412,19 +508,29 @@ impedance of the first rod.
 
 **Encased braces and concrete shells.** The house mesh of the generators
 (10 m, 2 × 2 cells, 5 mm bar, 5 cm cover, 100 Ω·m; `source_radius` 0.1 m,
-`growth` 0.6, 1.5 million nodes): encasing its braces raises $Z$ by
-+49.1 / +318.0 % at $\rho_c$ = 1 000 / 5 000 Ω·m (`mom` +49.6 / +321.3 %), and
-the owner model of the image family lies +1.6 / +2.7 % above the 3-D model
+`growth` 0.6, 1.5 million nodes; re-measured after audit W4B-01, evidence
+`f07` of stream fw4fem3d): encasing its braces raises $Z$ by
++49.1 / +318.2 % at $\rho_c$ = 1 000 / 5 000 Ω·m (`mom` +49.6 / +321.3 %), and
+the owner model of the image family lies +1.6 / +2.8 % above the 3-D model
 with bare braces, +0.14 / +0.03 % with encased ones. On straight bars, an
 L, a T-joint and a crossing the per-wire shell of the 3-D model agrees with
-`image` to 0.01 … 0.24 % and with `mom` to 0.06 … 0.29 %. **Resolved
-concrete** (`concrete_resistivity`, user decision Q40) converges at first
-order in its prism faces and edges — it reads the conductance per metre
-2.8 … 4.6 % high at the default levels — so it serves differences on one
-mesh: against each wire's own shell, every junction of a foundation acts
-like at most about one shell radius of wire (a corner −1.5 cm, a crossing
-−3 … −6 cm, a T-joint within ±5 cm), and the house mesh changes by less than
-0.6 % ([Concrete shells](../concrete-shells.md)).
+`image` to 0.01 … 0.21 % and with `mom` to 0.06 … 0.28 % (re-measured after
+audit W4B-01, evidence `f12` of stream fw4fem3d). **Resolved
+concrete** (`concrete_resistivity`, user decision Q40) reads the conductance
+per metre 2.8 … 4.6 % high at the default levels: in the shell-dominated
+limit the square prism's concrete is 3.8 % less resistive than the circular
+shell (see *Mesh, layers and concrete*), and its prism faces and edges
+converge at first order. So it serves differences on one mesh: against
+each wire's own shell a junction of a foundation acts like a few cm of
+wire, at most about $2\,r_b$, sign not settled, and the house mesh of the
+generators changes by about 1 % or less (60 m with 4 corners, 4 T-joints
+and a crossing: 0.35 … 0.85 % with every sign aligned, from the
+extrapolated junctions of both decompositions, 0.5 … 1.2 % from the finer
+level alone; evidence `f12` of stream fw4fem3d). The junction numbers are
+not converged: one refinement of the prism faces moved the corner by
+about 5 cm, the conductance and the impedance decomposition differ in
+sign for the corner and the T-joint, and the T-joint and the crossing were
+not refined (audit W4B-05; [Concrete shells](../concrete-shells.md)).
 
 ## Literature
 
