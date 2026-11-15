@@ -1116,3 +1116,60 @@ def test_the_port_limit_survives_a_json_round_trip_of_the_engine() -> None:
     assert back.options["fem"].max_ports_3d == 250
     default = gf.Engine.model_validate_json(gf.Engine(backend="fem").model_dump_json())
     assert default.backend_options().max_ports_3d == 100
+
+
+def _ring_above_the_interface(gap: float = 0.015) -> gf.World:
+    """Auditor W4B's ring (r = 1 m, a = 5 mm, 0.8 m deep), its axis ``gap``
+    above a 1000 / 30 Ohm m interface."""
+    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=0.8 + gap))
+    gf.create_electrode(
+        w, "ring", name="g1", center=(0, 0, 0.8), radius=1.0, wire_radius=0.005
+    )
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    return w
+
+
+def _interface_warnings(record) -> list:
+    from groundfield.solver._guards import InterfaceContactWarning
+
+    return [r for r in record if issubclass(r.category, InterfaceContactWarning)]
+
+
+def test_the_3d_model_warns_once_for_a_wire_next_to_a_contrasting_interface() -> None:
+    """A bare wire 1.5 cm (3 radii) above a 1000 / 30 Ohm m interface: the 3-D
+    model's smoothed line source shares the thin-wire error there (+9.2e-3
+    against the solid torus, audit W4B-02), so the solve warns once, before
+    its own guards (here the node limit) refuse anything."""
+    # audits W4A-07, W4B-02 (stream fw4int: the 3-D path)
+    from groundfield.diagnostics import ResourceLimitError
+
+    eng = gf.create_engine(
+        backend="fem",
+        segment_length=0.25,
+        options={"fem": {"model": "3d", "max_nodes_3d": 1000}},
+    )
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        with pytest.raises(ResourceLimitError, match="max_nodes_3d"):
+            eng.solve(_ring_above_the_interface())
+    hits = _interface_warnings(record)
+    assert len(hits) == 1, [str(h.message) for h in hits]
+    text = str(hits[0].message)
+    assert "'g1'" in text and "3 wire radii" in text and "reach 3.5 radii" in text
+    # 3 cm (6 radii) lies outside the reach of 3.5 radii at contrast 33
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        with pytest.raises(ResourceLimitError):
+            eng.solve(_ring_above_the_interface(0.03))
+    assert _interface_warnings(record) == []
+
+
+def test_the_axisymmetric_model_does_not_warn_for_the_same_ring() -> None:
+    """The axisymmetric model solves the solid torus and does not warn."""
+    # audits W4A-07, W4B-02 (stream fw4int: the 3-D path)
+    eng = gf.create_engine(backend="fem", segment_length=0.25)
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        result = eng.solve(_ring_above_the_interface())
+    assert result.metadata["fem_model"] == "axisymmetric"
+    assert _interface_warnings(record) == []
