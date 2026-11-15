@@ -205,3 +205,49 @@ def test_the_far_image_term_belongs_to_the_pair() -> None:
     n = alone.shape[0]
     with_far = series_matrix(True)[:n, :n]
     np.testing.assert_allclose(with_far, alone, rtol=1e-13, atol=0.0)
+
+
+@pytest.mark.finding("10.28")
+def test_far_image_terms_below_the_tolerance_are_left_out(monkeypatch) -> None:
+    """Below a thin top layer the images are dense in depth and light.
+
+    A house grid at 0.8 m below h_1 = 0.5 m (cross-layer path): of the 63
+    deep images of the layered correction 58 lie within the reach of the
+    taper and 26 of those carry a quadrupole term that can exceed 1e-9 of a
+    unit point term; leaving out the rest moves Z by less than 1e-10 (1000
+    times below the truncation of the series itself).
+    """
+    from groundfield.solver import _line_kernel as lk
+    from groundfield.solver import image_2layer
+    from groundfield.solver._pipeline import SegmentArrays, discretise
+
+    soil = gf.TwoLayerSoil(rho_1=500.0, rho_2=100.0, h_1=0.5)
+
+    def solve_and_count():
+        w = gf.create_world(soil=soil)
+        gf.create_electrode(
+            w,
+            "grid_mesh",
+            name="g",
+            corner=(0, 0, 0.8),
+            size=(10.0, 10.0),
+            n_x=2,
+            n_y=2,
+        )
+        gf.create_source(w, attached_to="g", magnitude=1.0)
+        a = SegmentArrays.from_segments(
+            discretise(
+                w, gf.Engine(segment_length=0.5), layer_interfaces=(0.5,)
+            ).segments
+        )
+        fam = image_2layer._LayeredImageFamilies(
+            a.line_segments(), a.points[:, 2] >= 0.5, soil
+        )
+        z = _solve(w, 0.5).cluster_impedance("g")[0].real
+        return z, max(len(f) for f in fam.far), max(len(g[0]) for g in fam.groups)
+
+    z_tol, n_tol, n_all = solve_and_count()
+    monkeypatch.setattr(lk, "IMAGE_QUADRUPOLE_TOL", 0.0)
+    z_all, n_none, _ = solve_and_count()
+    assert (n_tol, n_none, n_all) == (26, 58, 63)
+    assert abs(z_tol / z_all - 1.0) < 1e-10

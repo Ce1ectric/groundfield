@@ -148,6 +148,7 @@ def image_quadrupole_rows(
     factor,
     reach_lo,
     reach_hi,
+    tol,
     out,
 ):  # pragma: no cover
     """Far-field term of far images, ``Σ_k w_k · τ_k · Q_k``, in 1/m.
@@ -175,6 +176,9 @@ def image_quadrupole_rows(
         Near-pair factor (pairs nearer than ``factor · max(L)`` get 0).
     reach_lo, reach_hi
         The taper of the quadrupole term, in segment lengths.
+    tol
+        The term is left out for a pair where
+        ``|w| (L² + 3a²) / (6 dz²) < tol``.
     out
         Output block, shape ``(b, N)``, overwritten.
     """
@@ -186,7 +190,9 @@ def image_quadrupole_rows(
     a2t = np.empty(n)
     lim2 = np.empty(n)
     inv_l = np.empty(n)
+    qtol = np.empty(n)
     inv_span = 1.0 / (reach_hi - reach_lo)
+    inv_tol = 1.0 / (6.0 * tol)
     for r in range(out.shape[0]):
         lo2 = lo[r] * lo[r]
         tzo = toz[r]
@@ -202,11 +208,15 @@ def image_quadrupole_rows(
             lim = factor * lmax
             lim2[c] = lim * lim
             inv_l[c] = 1.0 / lmax
+            qtol[c] = (
+                lmax * lmax + 3.0 * (0.5 * (ro[r] * ro[r] + rs[c] * rs[c]))
+            ) * inv_tol
             out[r, c] = 0.0
         row = out[r]
         zr = zo[r]
         for k in range(z_img.shape[0]):
             wk = weights[k]
+            wa = abs(wk)
             zk = z_img[k]
             tk = tz_img[k]
             # One loop per observer kind, so that the inner loop has no
@@ -224,7 +234,8 @@ def image_quadrupole_rows(
                     q /= 24.0 * rq * np.sqrt(rq)
                     s = min(max((abs(dz) * inv_l[c] - reach_lo) * inv_span, 0.0), 1.0)
                     tau = 1.0 - s * s * (3.0 - 2.0 * s)
-                    row[c] += wk * (q * tau) if r2 >= lim2[c] else 0.0
+                    keep = (r2 >= lim2[c]) & (wa * qtol[c] >= dz * dz)
+                    row[c] += wk * (q * tau) if keep else 0.0
             elif has_t:
                 for c in range(n):
                     dz = zr - zk[c]
@@ -237,7 +248,8 @@ def image_quadrupole_rows(
                     q /= 24.0 * rq * np.sqrt(rq)
                     s = min(max((abs(dz) * inv_l[c] - reach_lo) * inv_span, 0.0), 1.0)
                     tau = 1.0 - s * s * (3.0 - 2.0 * s)
-                    row[c] += wk * (q * tau) if r2 >= lim2[c] else 0.0
+                    keep = (r2 >= lim2[c]) & (wa * qtol[c] >= dz * dz)
+                    row[c] += wk * (q * tau) if keep else 0.0
             else:
                 for c in range(n):
                     dz = zr - zk[c]
@@ -248,5 +260,6 @@ def image_quadrupole_rows(
                     q /= 24.0 * rq * np.sqrt(rq)
                     s = min(max((abs(dz) * inv_l[c] - reach_lo) * inv_span, 0.0), 1.0)
                     tau = 1.0 - s * s * (3.0 - 2.0 * s)
-                    row[c] += wk * (q * tau) if r2 >= lim2[c] else 0.0
+                    keep = (r2 >= lim2[c]) & (wa * qtol[c] >= dz * dz)
+                    row[c] += wk * (q * tau) if keep else 0.0
     return out

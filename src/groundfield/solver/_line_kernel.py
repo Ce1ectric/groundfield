@@ -67,6 +67,7 @@ from numpy.polynomial.legendre import leggauss
 __all__ = [
     "FAR_IMAGE_QUADRUPOLE",
     "IMAGE_QUADRUPOLE_REACH",
+    "IMAGE_QUADRUPOLE_TOL",
     "NEAR_FACTOR",
     "SELF_TERM_CROSSOVER",
     "SWITCH_FACTOR",
@@ -112,6 +113,18 @@ _SWITCH_U: float = (SWITCH_FACTOR / NEAR_FACTOR) ** 2
 #: on every image, the solve takes 1.2 instead of 3.9 times the time without
 #: it (``item1_gain.py`` of stream w3xl).
 IMAGE_QUADRUPOLE_REACH: tuple[float, float] = (60.0, 120.0)
+
+#: A far image's quadrupole term is left out for a pair when its largest
+#: possible size, ``|w| (L² + 3a²) / (6 dz²)`` relative to a unit point term
+#: (``w`` the image weight, ``dz`` the vertical distance of observer and
+#: image, ``L`` and ``a`` the longer segment and the radius of the pair), is
+#: below this value — a thousandth of the tail the Tagg/Sunde series itself
+#: leaves out (``Engine.image_series_tol``, default 1e-6). Decided per pair;
+#: an image is skipped where no pair can reach it. Below a thin top layer the
+#: images are dense in depth and their weights small: of the 58 images per
+#: family within the reach of a house grid below h_1 = 0.5 m, 26 remain
+#: (Z moves by less than 1e-10).
+IMAGE_QUADRUPOLE_TOL: float = 1e-9
 
 #: Tolerance of ``|t_i · t_j|`` for the closed-form parallel integral.
 _PARALLEL_TOL = 1e-10
@@ -820,13 +833,23 @@ def far_images(
         return []
     z = segs.mid[:, 2]
     z_lo, z_hi = float(z.min()), float(z.max())
-    reach = IMAGE_QUADRUPOLE_REACH[1] * float(segs.length.max())
+    l_max = float(segs.length.max())
+    reach = IMAGE_QUADRUPOLE_REACH[1] * l_max
+    # The largest (L² + 3a²) of any pair: a field point has a = 0, a segment
+    # pair a² = (a_i² + a_j²)/2 <= max a².
+    size = (l_max * l_max + 3.0 * float(segs.radius.max()) ** 2) / (6.0 * _qtol())
     out = []
     for weight, offset, sign in images:
         band = sorted((offset + sign * z_lo, offset + sign * z_hi))
-        if _depth_gap(z_obs, band[0], band[1]) < reach:
+        gap = _depth_gap(z_obs, band[0], band[1])
+        if gap < reach and abs(weight) * size >= gap * gap:
             out.append((weight, offset, sign))
     return out
+
+
+def _qtol() -> float:
+    """:data:`IMAGE_QUADRUPOLE_TOL`, floored at 1e-300 (0 keeps every term)."""
+    return max(float(IMAGE_QUADRUPOLE_TOL), 1e-300)
 
 
 def image_taper(dz: np.ndarray, length: np.ndarray) -> np.ndarray:
@@ -853,8 +876,9 @@ def image_quadrupole_rows(
     ``Q_k`` is the far-field term of :func:`quadrupole_block` of the
     observers against the image ``(offset_k, sign_k)`` of the segments
     (:meth:`LineSegments.image`), nonzero where
-    ``r² >= (NEAR_FACTOR · max(L_i, L_j))²``; ``w_k`` the image weight and
-    ``τ_k`` the taper :func:`image_taper` of the pair. Item 1 of wave 3
+    ``r² >= (NEAR_FACTOR · max(L_i, L_j))²`` and the term can exceed
+    :data:`IMAGE_QUADRUPOLE_TOL`; ``w_k`` the image weight and ``τ_k`` the
+    taper :func:`image_taper` of the pair. Item 1 of wave 3
     (10.28): up to it the Tagg/Sunde images were point sources beyond six
     segment lengths. With numba (extra ``fast``) and enough work the
     compiled kernel runs; both paths give bit-identical blocks.
@@ -900,7 +924,8 @@ def image_quadrupole_rows(
             c(ro, dtype=float), with_radius,
             c(segs.mid[:, 0]), c(segs.mid[:, 1]), c(segs.tangent[:, 0]),
             c(segs.tangent[:, 1]), c(segs.length, dtype=float), c(segs.radius, dtype=float),
-            z_img, tz_img, weights, float(NEAR_FACTOR), float(lo), float(hi), out,
+            z_img, tz_img, weights, float(NEAR_FACTOR), float(lo), float(hi),
+            _qtol(), out,
         )  # fmt: skip
         return out
     # numpy: the operations of the compiled kernel, block by block.
@@ -917,6 +942,9 @@ def image_quadrupole_rows(
     lim2 = lim * lim
     inv_l = 1.0 / lmax
     inv_span = 1.0 / (hi - lo)
+    qtol = (
+        lmax * lmax + 3.0 * (0.5 * np.add.outer(ro * ro, segs.radius * segs.radius))
+    ) * (1.0 / (6.0 * _qtol()))
     zo = obs_mid[:, 2:3]
     tzo = t[:, 2:3]
     for weight, offset, sign in images:
@@ -934,7 +962,8 @@ def image_quadrupole_rows(
         x = np.abs(dz) * inv_l
         s = np.minimum(np.maximum((x - lo) * inv_span, 0.0), 1.0)
         tau = 1.0 - s * s * (3.0 - 2.0 * s)
-        out += np.where(r2 >= lim2, weight * (q * tau), 0.0)
+        keep = (r2 >= lim2) & (abs(weight) * qtol >= dz * dz)
+        out += np.where(keep, weight * (q * tau), 0.0)
     return out
 
 
