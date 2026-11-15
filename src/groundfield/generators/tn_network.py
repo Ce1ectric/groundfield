@@ -929,9 +929,14 @@ def _check_cabinet_clearance(
                 f"TnNetworkGenerator: the cable cabinet {cab.name!r} of the "
                 f"building group of {far.name!r} (its far-end building) stands at "
                 f"({cx:.3f}, {cy:.3f}) m, CabinetConfig.end_clearance_m = "
-                f"{clearance_m:g} m beyond the group, but its earth electrodes "
-                f"(within {radius:g} m of that point) come closer than "
-                f"{clearance_m:g} m to those of {', '.join(blocked)}. Give the "
+                f"{clearance_m:g} m beyond that building, but "
+                + (
+                    f"its earth electrodes (within {radius:g} m of that point) come"
+                    if radius > 0.0
+                    else "its earth electrode there comes"
+                )
+                + f" closer than {clearance_m:g} m to those of "
+                f"{', '.join(blocked)}. Give the "
                 "cabinets a CabinetConfig.placement, or change end_clearance_m "
                 "or the cabinet count (audit W1B-02)."
             )
