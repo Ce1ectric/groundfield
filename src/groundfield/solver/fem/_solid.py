@@ -5,9 +5,10 @@ axisymmetric model (:mod:`groundfield.solver.fem._axisymmetric`) cannot
 hold — strips, polylines, stars, meshes, grids, rods and rings side by
 side, several clusters, galvanic distributed conductors — is solved in
 three dimensions. The soil is meshed with linear tetrahedra
-(:mod:`groundfield.solver.fem._mesh3d`; every layer interface a mesh
-plane), the electrodes enter as smoothed line sources along their wire
-axes with an analytic radius correction
+(:mod:`groundfield.solver.fem._mesh3d`: an isotropic bisection mesh, no
+interface is a mesh plane; the elements a layer interface cuts are
+partially penalised immersed elements), the electrodes enter as smoothed
+line sources along their wire axes with an analytic radius correction
 (:mod:`groundfield.solver.fem._wires3d`), a concrete shell either as its
 per-length coefficient (each wire its own shell, ADR-0012) or — with
 ``concrete_resistivity`` — resolved as a volume of concrete around the
@@ -21,7 +22,15 @@ Two nested meshes (the second the uniform refinement of the first) give
 the port conductance matrix twice; it is extrapolated to zero mesh size
 with the second order of linear elements, and the relative difference
 between the extrapolated and the finer level is the error estimate
-(``metadata["fem_error_estimate"]``), as in the axisymmetric model.
+(``metadata["fem_error_estimate"]``), as in the axisymmetric model. With
+the ratio $r$ of the two levels' errors the extrapolated value errs by
+$e_1(4 - r)/3$ and the estimate is $e_1(r - 1)/3$: a bound while
+$r \\ge 2.5$ (rods and rings run at 3 … 5), no bound for resolved concrete,
+which converges at first order (audit W4B-02).
+
+Before anything is meshed the solve checks the display segments against
+``Engine.max_segments`` and the number of ports against
+:data:`MAX_PORTS_3D` (audit W4B-08).
 
 The model needs the optional ``fem3d`` extra (``scikit-fem`` and
 ``pyamg``); without it the solve raises :class:`ImportError` naming the
@@ -31,9 +40,9 @@ extra.
 from __future__ import annotations
 
 import math
-import resource
 import sys
 import time
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -42,6 +51,7 @@ from groundfield.solver._layered import as_layer_stack
 from groundfield.solver.fem._ports import EarthPorts
 from groundfield.solver.fem._wires3d import (
     BUMP_ENERGY_RADIUS,
+    NEAR_FACTOR,
     WireModel,
     axial_quadrature,
     frames,
@@ -77,11 +87,31 @@ INTERFACE_RATIO = 0.3
 PRISM_DIVISIONS = 8.0
 
 #: Side of a square concrete prism per metre of conformal radius: a square
-#: of side $s$ has the logarithmic capacity (conformal radius) $0.59017\\,s$
-#: (Pólya & Szegő 1951), so a circular shell of outer radius $r_b$ becomes
-#: the square prism of side $r_b/0.59017$ with the same resistance to the
-#: soil.
+#: of side $s$ has the logarithmic capacity (outer conformal radius)
+#: $0.59017\\,s$ (Pólya & Szegő 1951), so a circular shell of outer radius
+#: $r_b$ becomes the square prism of side $r_b/0.59017$ with the same
+#: resistance to the soil. The concrete between the bar and a nearly
+#: equipotential prism surface ($\\rho_c \\gg \\rho$) is set by the square's
+#: inner conformal radius at its centre, $0.539353\\,s = 0.9139\\,r_b$: in
+#: that limit the prism's concrete is 3.8 % less resistive than the circular
+#: shell (5 mm bar, 5 cm cover; audit W4B-04, evidence ``f03`` of stream
+#: fw4fem3d). One side cannot match both radii; the prism keeps the outer one.
 SQUARE_CONFORMAL_RADIUS = 0.5901702
+
+#: The 3-D model refuses worlds with more ports than this before meshing
+#: (audit W4B-08). Every electrode and every leaking piece of a galvanic
+#: distributed conductor is a port, and every port costs one
+#: conjugate-gradient solve per mesh level: 0.93 … 0.96 s per port and level
+#: at 583 000 nodes of the finer mesh (a galvanic chain of 18 and 34 ports;
+#: auditor W4B and evidence ``f14`` of stream fw4fem3d), growing with the
+#: mesh. 100 ports are about 3 minutes of port solves at that size and about
+#: 11 minutes at ``max_nodes_3d``.
+MAX_PORTS_3D = 100
+
+#: Port-solve time in s per port and per node of the finer mesh, both levels
+#: together (0.93 s per port and level at 583 073 nodes, auditor W4B): the
+#: estimate the port refusal names.
+PORT_SECONDS_PER_NODE = 2.0 * 0.93 / 583_073
 
 
 def require_extra() -> None:
@@ -103,7 +133,14 @@ def _refuse(world: "World", engine: "Engine", why: str) -> None:
 
 
 def _peak_memory_gb() -> float:
-    """Peak resident memory of the process in GB (``ru_maxrss``)."""
+    """Peak resident memory of the process so far in GB (``ru_maxrss``).
+
+    ``nan`` where the :mod:`resource` module does not exist (Windows).
+    """
+    try:
+        import resource
+    except ImportError:  # pragma: no cover - Windows
+        return math.nan
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     return float(peak) / (2**30 if sys.platform == "darwin" else 2**20)
 
@@ -285,6 +322,7 @@ def solid_earth(
     concrete_resistivity: float | None = None,
     extra_segments=(),
     concrete_mesh: float | None = None,
+    max_ports: int = MAX_PORTS_3D,
 ) -> EarthPorts:
     """Port model of any world in three dimensions (see the module docstring).
 
@@ -324,16 +362,24 @@ def solid_earth(
         (prism refinement, source radius) as for resolved concrete of this
         resistivity in Ω·m but keep every wire's own shell coefficient, so
         both concrete models are compared on the same mesh.
+    max_ports
+        Resource limit: the number of ports (electrodes and leaking
+        conductor pieces), checked before meshing (:data:`MAX_PORTS_3D`).
 
     Raises
     ------
     ImportError
         Without the ``fem3d`` extra.
     BackendCapabilityError
-        For a wire too close to the surface or an interface, and for
-        resolved concrete around wires that are not axis-aligned.
+        For a wire too close to the surface or an interface, for resolved
+        concrete around wires that are not axis-aligned, and when the
+        conjugate gradients do not converge (high layer contrast; tested up
+        to about 300).
     groundfield.diagnostics.ResourceLimitError
-        If the finer mesh would exceed ``max_nodes`` nodes.
+        Before meshing: if the display segments exceed
+        ``Engine.max_segments``, the ports ``max_ports`` or the predicted
+        finer mesh ``max_nodes`` nodes; after the coarser mesh is built: if
+        its refinement would exceed ``max_nodes``.
     """
     require_extra()
     from groundfield.diagnostics import ResourceLimitError
@@ -342,9 +388,14 @@ def solid_earth(
     from groundfield.solver.fem._axisymmetric import _display_segments
 
     t_start = time.perf_counter()
+    peak_before = _peak_memory_gb()
     stack = as_layer_stack(world.soil)
     rhos = np.asarray(stack.rhos, dtype=float)
     depths = [float(d) for d in np.cumsum(stack.h)]
+    # Display segments (electrodes as the integral backends cut them, a
+    # conductor piece as itself): their count is checked against
+    # Engine.max_segments before anything is meshed (audit W4B-08).
+    segs, owner = _display_segments(world, engine, depths)
     model = world_pieces(world, extra_segments)
     n_ports = len(model.names)
 
@@ -371,6 +422,18 @@ def solid_earth(
 
     predicted = mesh3.predicted_nodes(model.total_length, h_w, growth, r_src)
     predicted_fine = predicted * 8 ** (refinement + n_levels - 1)
+    if n_ports > max_ports:
+        minutes = n_ports * PORT_SECONDS_PER_NODE * predicted_fine / 60.0
+        raise ResourceLimitError(
+            f"Backend 'fem': the three-dimensional model would solve {n_ports} "
+            f"ports, above its limit of {max_ports} ports (every electrode and "
+            "every leaking piece of a galvanic distributed conductor is a port, "
+            "and every port one conjugate-gradient solve per mesh level: about "
+            f"{minutes:.0f} minutes at the predicted {predicted_fine} nodes of the "
+            "finer mesh). Coarsen the galvanic conductors "
+            "(discretize_segment_length), or use an integral backend "
+            "(image, image_2layer, mom)."
+        )
     if predicted_fine > max_nodes:
         raise ResourceLimitError(
             f"Backend 'fem': the three-dimensional mesh would have about "
@@ -435,16 +498,18 @@ def solid_earth(
             -2.0 * math.pi * np.array([p.shell for p in model.pieces]) / rho_c
         )
         metal = [
-            p if p.shell == 0.0 else type(p)(p.port, p.start, p.end, float(ra[i]), 0.0)
+            p if p.shell == 0.0 else replace(p, radius=float(ra[i]), shell=0.0)
             for i, p in enumerate(model.pieces)
         ]
         corrected = WireModel(
             model.names, metal, model.points, model.weights, model.piece
         )
         rho_q = np.where(encased, rho_c, rho_q)
-        coefficient = radius_correction(corrected, r_eta, rho_q, 20.0 * r_src)
+        coefficient = radius_correction(corrected, r_eta, rho_q, NEAR_FACTOR * r_src)
     else:
-        coefficient = shell_q + radius_correction(model, r_eta, rho_q, 20.0 * r_src)
+        coefficient = shell_q + radius_correction(
+            model, r_eta, rho_q, NEAR_FACTOR * r_src
+        )
     if not np.all(coefficient > 0.0):  # pragma: no cover - guarded by source_radius
         raise ValueError("fem: a non-positive radial resistance of a wire.")
     tangent = np.array([p.direction for p in model.pieces])[model.piece]
@@ -508,9 +573,22 @@ def solid_earth(
             p, t, model.points, e1, e2, disc, disc_w, candidates
         )
         t2 = time.perf_counter()
-        sol = asm3.solve_ports_3d(
-            stiff, average, model.weights, coefficient, model.port, n_ports
-        )
+        try:
+            sol = asm3.solve_ports_3d(
+                stiff, average, model.weights, coefficient, model.port, n_ports
+            )
+        except asm3.ConvergenceError as exc:
+            _refuse(
+                world,
+                engine,
+                "the conjugate gradients of its three-dimensional model did not "
+                f"converge for port '{model.names[exc.port]}' in "
+                f"{asm3.CG_MAX_ITERATIONS} iterations at a layer contrast of "
+                f"{contrast:.4g} (max rho / min rho; the model is tested up to a "
+                "contrast of about 300). Its axisymmetric model solves rods on "
+                "one vertical axis and rings around it at any contrast "
+                "(FemOptions.model='auto' or model='axisymmetric').",
+            )
         solutions.append(sol)
         info.append(
             {
@@ -526,9 +604,7 @@ def solid_earth(
     conductance = g_fine + (g_fine - g_levels[0]) / 3.0 if extrapolate else g_fine
     conductance = 0.5 * (conductance + conductance.T)
 
-    # Display segments (electrodes as the integral backends cut them, a
-    # conductor piece as itself) and their leakage per port volt.
-    segs, owner = _display_segments(world, engine, depths)
+    # Leakage of the display segments per port volt.
     segs = list(segs) + list(extra_segments)
     owner = np.concatenate(
         [owner, np.arange(len(world.electrodes), n_ports, dtype=int)]
@@ -541,6 +617,9 @@ def solid_earth(
     r_ext = np.linalg.inv(conductance)
     diag = np.abs(np.diag(r_ext))
     estimate = float(np.max(np.abs(np.diag(r_ext) - np.diag(r_levels[-1])) / diag))
+    # Memory (audit W4B-09): what the solve added to the peak resident memory
+    # of the process, and that peak itself.
+    peak_after = _peak_memory_gb()
     metadata = {
         "fem_model": "3d",
         "fem_ports": list(model.names),
@@ -557,7 +636,8 @@ def solid_earth(
         "fem_concrete": "shell coefficient per wire"
         if not prisms
         else f"resolved, {float(concrete_resistivity):g} Ohm m",
-        "fem_peak_memory_gb": _peak_memory_gb(),
+        "fem_peak_memory_gb": max(0.0, peak_after - peak_before),
+        "fem_process_peak_memory_gb": peak_after,
         "fem_time_s": time.perf_counter() - t_start,
         "far_field": far_field,
     }

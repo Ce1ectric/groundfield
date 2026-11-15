@@ -174,7 +174,7 @@ def test_the_radius_correction_is_sundes_far_inside_a_straight_wire() -> None:
     wires3.axial_quadrature(model, 0.1)
     r_eta = wires3.BUMP_ENERGY_RADIUS * 0.06
     c = wires3.radius_correction(
-        model, r_eta, np.full(model.points.shape[0], 100.0), 1.2
+        model, r_eta, np.full(model.points.shape[0], 100.0), wires3.NEAR_FACTOR * 0.06
     )
     middle = np.abs(model.points[:, 0] - 10.0) < 1.0
     expected = 100.0 / (2.0 * math.pi) * math.log(r_eta / 0.005)
@@ -634,3 +634,388 @@ def test_a_rod_through_a_thin_middle_layer() -> None:
     z_low = _z(rod((100.0, 100.0, 1000.0)))
     z_high = _z(rod((100.0, 1000.0, 1000.0)))
     assert z_low < z_mid < z_high
+
+
+# ---------------------------------------------------------------------
+# Audit W4B (stream fw4fem3d)
+# ---------------------------------------------------------------------
+
+
+def _w4b_strip_world(z, extra=None):
+    w = gf.create_world(soil=H100)
+    gf.create_electrode(
+        w, "strip", name="g", start=(-20, 0, z), end=(20, 0, z), wire_radius=0.005
+    )
+    if extra is not None:
+        gf.create_electrode(
+            w,
+            "strip",
+            name="h",
+            start=(-20, extra, z),
+            end=(20, extra, z),
+            wire_radius=0.005,
+        )
+    return w
+
+
+def _w4b_mid_correction(world, r_src=0.06):
+    model = wires3.world_pieces(world)
+    wires3.axial_quadrature(model, 0.01)
+    r_eta = wires3.BUMP_ENERGY_RADIUS * r_src
+    dc = wires3.radius_correction(
+        model, r_eta, np.full(model.points.shape[0], 100.0), wires3.NEAR_FACTOR * r_src
+    )
+    z = model.pieces[0].start[2]
+    k = np.argmin(np.linalg.norm(model.points - np.array([0.0, 0.0, z]), axis=1))
+    return dc[k], r_eta
+
+
+def test_w4b_01_no_surface_image_term_in_the_radius_correction() -> None:
+    """The finite elements give the exact field of the surface image of a
+    smoothed source (it lies 2 z > 2 R away), so the radius correction far
+    inside a straight wire 0.1 m deep is Sunde's rho/(2 pi) ln(r_eta/a); the
+    base added rho/(4 pi) ln((4 z^2 + r_eta^2)/(4 z^2 + a^2)) (+0.7 %)."""
+    # audit W4B-01 (test of auditor W4B)
+    dc, r_eta = _w4b_mid_correction(_w4b_strip_world(0.1))
+    sunde = 100.0 / (2 * math.pi) * math.log(r_eta / 0.005)
+    assert abs(dc / sunde - 1.0) < 1e-3
+
+
+def test_w4b_01_no_term_of_a_parallel_wire_of_another_port() -> None:
+    """A parallel wire of another port 0.15 m away (beyond the disc) must not
+    change the radius correction: its field is exact in the mesh, and its
+    current is not the observer's."""
+    # audit W4B-01 (test of auditor W4B)
+    alone, _ = _w4b_mid_correction(_w4b_strip_world(1.5))
+    pair, _ = _w4b_mid_correction(_w4b_strip_world(1.5, extra=0.15))
+    assert abs(pair / alone - 1.0) < 1e-3
+
+
+def test_w4b_01_an_arm_folded_back_beside_the_wire_counts_like_another_wire() -> None:
+    """A U-shaped polyline whose arms run 0.15 m apart (beyond the disc):
+    the far arm is the same electrode's wire but lies beside the point, so
+    it must not change the correction (it would add the spurious term of a
+    parallel wire, 1.2 %)."""
+    # audit W4B-01 (attack of stream fw4fem3d on its own fix)
+    w = gf.create_world(soil=H100)
+    gf.create_electrode(
+        w,
+        "polyline",
+        name="g",
+        vertices=[(-20, 0, 1.5), (20, 0, 1.5), (20, 0.15, 1.5), (-20, 0.15, 1.5)],
+        closed=False,
+        wire_radius=0.005,
+    )
+    folded, _ = _w4b_mid_correction(w)
+    alone, _ = _w4b_mid_correction(_w4b_strip_world(1.5))
+    assert abs(folded / alone - 1.0) < 1e-3
+
+
+def _w4b_model_at(pieces, points):
+    """A wire model whose axial points are given (each on its piece)."""
+    model = wires3.WireModel(
+        names=tuple(f"p{k}" for k in range(len(pieces))), pieces=pieces
+    )
+    pts = np.asarray(points, dtype=float)
+    owner = []
+    for x in pts:
+        dist = []
+        for p in pieces:
+            t = np.clip((x - p.start) @ p.direction, 0.0, p.length)
+            dist.append(np.linalg.norm(x - p.start - t * p.direction))
+        owner.append(int(np.argmin(dist)))
+    model.points = pts
+    model.piece = np.array(owner, dtype=int)
+    model.weights = np.ones(len(pts))
+    return model
+
+
+def test_w4b_01_collinear_pieces_and_a_rods_image_count_whole() -> None:
+    """The observer's own wire is kept whole: a straight wire cut into
+    collinear pieces of separate ports (the pieces of a galvanic conductor)
+    has the correction of the uncut wire, and the surface image of a rod
+    whose head reaches the surface continues the rod (the closed form over
+    the rod and its image)."""
+    # audit W4B-01
+    r_src = 0.06
+    r_eta = wires3.BUMP_ENERGY_RADIUS * r_src
+    a = 0.005
+    x = [[0.3 * k + 0.05, 0.0, 1.0] for k in range(1, 13)]
+    whole = [
+        wires3.WirePiece(0, np.array([0.0, 0, 1.0]), np.array([4.0, 0, 1.0]), a, 0.0)
+    ]
+    cut = [
+        wires3.WirePiece(
+            k, np.array([0.5 * k, 0, 1.0]), np.array([0.5 * (k + 1), 0, 1.0]), a, 0.0
+        )
+        for k in range(8)
+    ]
+    rho = np.full(len(x), 100.0)
+    c_whole = wires3.radius_correction(
+        _w4b_model_at(whole, x), r_eta, rho, wires3.NEAR_FACTOR * r_src
+    )
+    c_cut = wires3.radius_correction(
+        _w4b_model_at(cut, x), r_eta, rho, wires3.NEAR_FACTOR * r_src
+    )
+    assert np.allclose(c_cut, c_whole, rtol=1e-12, atol=0.0)
+
+    rod = [
+        wires3.WirePiece(
+            0, np.array([0.0, 0, 0.0]), np.array([0.0, 0, 3.0]), 0.008, 0.0
+        )
+    ]
+    y = np.array([[0.0, 0.0, 0.3]])
+    c_rod = wires3.radius_correction(
+        _w4b_model_at(rod, y), r_eta, np.array([100.0]), wires3.NEAR_FACTOR * r_src
+    )
+    both = 0.0
+    for lo, hi in (((0.0, 0, 0.0), (0.0, 0, 3.0)), ((0.0, 0, -3.0), (0.0, 0, 0.0))):
+        lo, hi = np.array(lo), np.array(hi)
+        both += wires3._line_integral(y, lo, hi, np.array([0.008]))[0]
+        both -= wires3._line_integral(y, lo, hi, np.array([r_eta]))[0]
+    assert abs(c_rod[0] / (100.0 / (4 * math.pi) * both) - 1.0) < 1e-12
+
+
+@pytest.mark.slow
+def test_w4b_01_two_coaxial_rings_10_cm_apart_within_the_estimate() -> None:
+    """Two coaxial rings (1.0 m and 1.1 m, 0.8 m deep) as two ports: R11 of
+    the 3-D model lies within its error estimate of part A (base: +4.6e-3
+    against an estimate of 3.9e-3)."""
+    # audit W4B-01 (test of auditor W4B)
+    from groundfield.solver.fem import solve_fem
+
+    w = gf.create_world(soil=H100)
+    gf.create_electrode(
+        w, "ring", name="a", center=(0, 0, 0.8), radius=1.0, wire_radius=0.005
+    )
+    gf.create_electrode(
+        w, "ring", name="b", center=(0, 0, 0.8), radius=1.1, wire_radius=0.005
+    )
+    gf.create_source(w, attached_to="a", magnitude=1.0)
+    eng = gf.create_engine(backend="fem", segment_length=0.25)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        axi = solve_fem(w, eng, model="axisymmetric").metadata["fem_port_resistance"]
+        r3 = solve_fem(w, eng, model="3d")
+    est = r3.metadata["fem_error_estimate"]
+    r = np.asarray(r3.metadata["fem_port_resistance"])
+    for i in (0, 1):
+        assert abs(r[i, i] / axi[i][i] - 1.0) <= est
+
+
+@pytest.mark.slow
+def test_w4b_01_the_ring_residual_is_flat_in_depth() -> None:
+    """A ring r = 1 m (a = 5 mm) at 0.06 m and at 0.8 m: the deviation of the
+    3-D model from the solid torus is the same to 3e-4 (base: +2.4e-4 and
+    -1.85e-3, the surface-image term drifting with depth)."""
+    # audit W4B-01
+    from groundfield.solver.fem import solve_fem
+
+    eng = gf.create_engine(backend="fem", segment_length=0.25)
+    residual = []
+    for z in (0.06, 0.8):
+        w = gf.create_world(soil=H100)
+        gf.create_electrode(
+            w, "ring", name="g", center=(0, 0, z), radius=1.0, wire_radius=0.005
+        )
+        gf.create_source(w, attached_to="g", magnitude=1.0)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            za = solve_fem(w, eng, model="axisymmetric").cluster_impedance("g")[0].real
+            z3 = solve_fem(w, eng, model="3d").cluster_impedance("g")[0].real
+        residual.append(z3 / za - 1.0)
+    assert abs(residual[0] - residual[1]) <= 3e-4
+
+
+def test_w4b_03_a_failed_cg_solve_names_the_contrast_and_the_alternatives(
+    monkeypatch,
+) -> None:
+    """A conjugate-gradient solve that does not converge raises a
+    BackendCapabilityError naming the layer contrast, the tested range, the
+    axisymmetric model and the integral engines (base: a bare RuntimeError)."""
+    # audit W4B-03
+    monkeypatch.setattr(asm3, "CG_MAX_ITERATIONS", 2)
+    w = _rod(gf.TwoLayerSoil(rho_1=1.0, rho_2=1000.0, h_1=1.5))
+    with pytest.raises(gf.BackendCapabilityError, match="did not converge") as info:
+        _solve(w)
+    text = str(info.value)
+    assert "contrast of 1000" in text and "300" in text
+    assert "model='axisymmetric'" in text
+    assert "'mom'" in text and "'image_2layer'" in text
+
+
+@pytest.mark.slow
+def test_w4b_03_a_rod_through_a_1_to_1000_interface_solves_or_is_refused() -> None:
+    """A rod 0 ... 3 m through a 1 / 1000 Ohm m interface at 1.5 m with the
+    3-D model forced: it solves within its estimate of part A, or it is
+    refused with BackendCapabilityError (base: RuntimeError after about a
+    minute)."""
+    # audit W4B-03 (test of auditor W4B)
+    from groundfield.solver.fem import solve_fem
+
+    w = _rod(gf.TwoLayerSoil(rho_1=1.0, rho_2=1000.0, h_1=1.5))
+    eng = gf.create_engine(backend="fem", segment_length=0.25)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        za = solve_fem(w, eng, model="axisymmetric").cluster_impedance("g1")[0].real
+        try:
+            r3 = solve_fem(w, eng, model="3d")
+        except gf.BackendCapabilityError:
+            return
+    z3 = r3.cluster_impedance("g1")[0].real
+    assert abs(z3 / za - 1.0) <= r3.metadata["fem_error_estimate"]
+
+
+def test_w4b_06_face_terms_do_not_depend_on_the_node_numbering() -> None:
+    """The face key of ife_face_terms aliased above 2**21 nodes; the face
+    terms of three immersed tetrahedra must not change when their nodes are
+    renumbered above 2**21 (base: a spurious face pair, 128 instead of 64
+    entries)."""
+    # audit W4B-06 (test of auditor W4B)
+    big = 1 << 21
+    xyz = {
+        "P0": (0.0, 0.0, 0.0),
+        "P1": (1.0, 0.0, 1.0),
+        "P2": (0.0, 1.0, 1.0),
+        "P3": (1.0, 1.0, 0.0),
+        "P4": (-1.0, -1.0, 0.4),
+        "P5": (0.0, -1.0, 1.0),
+        "P6": (-1.0, 0.0, 1.0),
+        "P7": (-1.0, -1.0, 0.0),
+    }
+
+    def terms(ids):
+        p = np.zeros((3, max(ids.values()) + 1))
+        for name, i in ids.items():
+            p[:, i] = xyz[name]
+        tets = (
+            ("P0", "P1", "P2", "P3"),
+            ("P0", "P1", "P2", "P4"),
+            ("P0", "P5", "P6", "P7"),
+        )
+        t = np.array([[ids[n] for n in tet] for tet in tets]).T
+        x = np.moveaxis(p[:, t], 0, 2)
+        vol, _ = asm3.tet_gradients(p, t)
+        ax, val = np.full(3, 2, dtype=np.int64), np.full(3, 0.5)
+        sp, sm = np.full(3, 1.0), np.full(3, 0.01)
+        _, inv = asm3.ife_matrices(x, ax, val, sp, sm, vol, return_maps=True)
+        rows, cols, vals = asm3.ife_face_terms(p, t, inv, ax, val, sp, sm)
+        back = {i: n for n, i in ids.items()}
+        out = {}
+        for r, c, v in zip(rows, cols, vals, strict=True):
+            out[(back[r], back[c])] = out.get((back[r], back[c]), 0.0) + v
+        return out
+
+    small = terms({n: k for k, n in enumerate(xyz)})
+    large = terms(
+        {
+            "P0": 0,
+            "P1": 5,
+            "P2": big + 100,
+            "P3": big + 200,
+            "P4": big + 300,
+            "P5": 6,
+            "P6": 100,
+            "P7": big + 400,
+        }
+    )
+    assert set(small) == set(large)
+    assert all(abs(small[k] - large[k]) <= 1e-12 * (1 + abs(small[k])) for k in small)
+
+
+def _w4b_short_strip():
+    w = gf.create_world(soil=H100)
+    gf.create_electrode(w, "strip", name="g", start=(0, 0, 0.6), end=(5, 0, 0.6))
+    gf.create_source(w, attached_to="g", magnitude=1.0)
+    return w
+
+
+def test_w4b_07_the_3d_solve_is_independent_of_numpys_global_random_state() -> None:
+    """pyamg's set-up draws from numpy's global random state: the result must
+    be bit-identical whatever the user's seed (base: 1e-14 ... 1e-6 apart)."""
+    # audit W4B-07 (script a17 of auditor W4B)
+    w = _w4b_short_strip()
+    np.random.seed(1)
+    z1 = _z(w, "g")
+    np.random.seed(2)
+    z2 = _z(w, "g")
+    np.random.seed(3)
+    np.random.rand(1000)
+    z3 = _z(w, "g")
+    assert z1 == z2 == z3
+
+
+def test_w4b_07_the_3d_solve_leaves_the_users_random_stream_unchanged() -> None:
+    """A 3-D solve must not advance the user's random stream (base: the next
+    draws after np.random.seed(7) changed)."""
+    # audit W4B-07 (script a17 of auditor W4B)
+    w = _w4b_short_strip()
+    np.random.seed(7)
+    expected = np.random.rand(3)
+    np.random.seed(7)
+    _z(w, "g")
+    assert np.array_equal(np.random.rand(3), expected)
+
+
+def test_w4b_08_the_segment_budget_is_checked_before_meshing(monkeypatch) -> None:
+    """A unit error of segment_length fails before the 3-D mesh is built
+    (base: after both levels were solved)."""
+    # audit W4B-08
+    from groundfield.diagnostics import ResourceLimitError
+
+    def no_mesh(*args, **kwargs):
+        raise AssertionError("the 3-D mesh was built before the budget check")
+
+    monkeypatch.setattr(mesh3, "background", no_mesh)
+    eng = gf.create_engine(
+        backend="fem", segment_length=1e-4, max_segments=1000, options={"fem": COARSE}
+    )
+    with pytest.raises(ResourceLimitError, match="max_segments"):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            eng.solve(_w4b_short_strip())
+
+
+def test_w4b_08_too_many_ports_are_refused_before_meshing(monkeypatch) -> None:
+    """Every leaking piece of a galvanic conductor is a port and costs one
+    conjugate-gradient solve per level: above the port limit the 3-D model
+    refuses before meshing and names the estimated time (base: no limit, a
+    20 m conductor in 5 cm pieces ran for about 25 minutes)."""
+    # audit W4B-08
+    from groundfield.diagnostics import ResourceLimitError
+    from groundfield.solver.fem import _solid
+
+    def no_mesh(*args, **kwargs):
+        raise AssertionError("the 3-D mesh was built before the port check")
+
+    monkeypatch.setattr(mesh3, "background", no_mesh)
+    w = gf.create_world(soil=H100)
+    gf.create_electrode(w, "rod", name="a", position=(0, 0, 0.6), length=2.0)
+    gf.create_electrode(w, "rod", name="b", position=(8, 0, 0.6), length=2.0)
+    gf.create_conductor(
+        w,
+        start="a",
+        end="b",
+        cross_section=50e-6,
+        coupling_to_soil="galvanic",
+        discretize_segment_length=0.05,
+    )
+    gf.create_source(w, attached_to="a", magnitude=1.0)
+    with pytest.raises(ResourceLimitError, match="ports") as info:
+        _solve(w)
+    text = str(info.value)
+    assert f"{_solid.MAX_PORTS_3D}" in text and "minutes" in text
+
+
+def test_w4b_09_the_memory_figure_is_the_increase_during_the_solve() -> None:
+    """fem_peak_memory_gb is what the solve added to the peak memory of the
+    process, not the peak of everything the process did before (base: a
+    small solve after a large allocation reported the large one); the
+    process peak is reported separately."""
+    # audit W4B-09
+    big = np.ones(80_000_000)  # 0.64 GB, touched
+    big[::4096] += 1.0
+    del big
+    md = _solve(_w4b_short_strip()).metadata
+    assert md["fem_process_peak_memory_gb"] >= 0.6
+    assert 0.0 <= md["fem_peak_memory_gb"] < md["fem_process_peak_memory_gb"] - 0.5
