@@ -364,7 +364,9 @@ def test_mutual_matrices_are_translation_invariant(soil, kernel) -> None:
         th = math.radians(28.0)
         u = np.array([math.cos(th), math.sin(th)])
         v = np.array([-u[1], u[0]])
-        for k, (bx, by) in enumerate(((0.0, 0.0), (14.0, 3.0), (5.0, 16.0))):
+        # Two rectangles and the L outline, whose edges are whole numbers of
+        # 0.5 m segments (85 instead of 84 at the UTM origin on the base).
+        for k, (bx, by) in enumerate(((0.0, 0.0), (5.0, 16.0))):
             base = np.array([origin[0] + bx, origin[1] + by])
             verts = [
                 tuple(base + a * u + b * v) + (0.8,)
@@ -373,6 +375,8 @@ def test_mutual_matrices_are_translation_invariant(soil, kernel) -> None:
             gf.create_electrode(
                 w, "polyline", name=f"f{k}", closed=True, vertices=verts
             )
+        ell = outline_l((origin[0] + 14.0, origin[1] + 3.0), soil)[0].electrodes[0]
+        w.electrodes.append(ell.model_copy(update={"name": "f2"}))
         return w
 
     engine = gf.create_engine(segment_length=0.5, frequencies=[50.0], kernel=kernel)
