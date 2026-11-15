@@ -106,8 +106,13 @@ shows what agrees with independent references and how well.
   straight wire of equal segments the pairs six segments apart sit exactly on that
   boundary, so round-off decides their form wherever the world stands. Results of the
   same world at different positions (shifted by 0.1 m … 8.8 km, or to UTM coordinates)
-  therefore spread by up to 2.4e-7 in the impedance, 4.7e-7 in the mutual matrix and
-  1.7e-6 in step voltages. The point kernel (`kernel="point"`, `mom`,
+  therefore spread by up to 5e-7 in the impedance and 1e-6 in touch voltages for the
+  direct pairs (a 12 m strip in homogeneous soil: 4.4e-7). In two-layer soil an image
+  distance of six segment lengths (2nh₁ for wires at one depth, or 2(nh₁ − z)) puts every
+  segment's own image pair on the switch, whose far form there is the point form: the
+  spread reaches 1e-5 … 3e-5 in the impedance and 5e-5 in touch voltages — for example
+  the generated house mesh at its default 0.8 m depth with h₁ = 2.3 m and 0.5 m
+  segments, or h₁ = 3 m with 1 m segments (audit W2B-01). The point kernel (`kernel="point"`, `mom`,
   `mom_sommerfeld`) is invariant to 1e-14 at local offsets and 3e-11 at UTM coordinates.
 
 ## Soil layers

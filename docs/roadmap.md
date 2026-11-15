@@ -96,8 +96,9 @@ limits a result, the reference documentation states the limit.
   `centroid_ray_gap_m` show meanwhile where a study crosses it.
 - **Continuous line-kernel switch.** A deterministic near/far switch (a margin on the
   distance) or a far form exact to round-off would make the line kernel translation
-  invariant to round-off. It moves worlds near the origin by up to about 2e-7 (golden
-  strict), so it is a decision.
+  invariant to round-off. It covers the direct pairs, the series images and the
+  cross-layer pairs and moves golden cases by up to 1.6e-5 (audit W2B-02; user
+  decision D2: in 2026.11).
 - **Overlapping concrete shells at junctions.** Where the wires of an
   encased foundation meet (the corners of a rectangle, the crossings and
   T-joints of a mesh), their shells overlap within about $r_b$ of the

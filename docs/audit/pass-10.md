@@ -1391,9 +1391,9 @@ Test: `tests/test_soil_models.py::test_old_keyword_warns_and_maps_to_canonical_f
   is solved — with the closest names. `magnitude` and `phase_deg` must be
   finite, also when assigned later. Tests: `tests/test_source_validation.py`.
 - **`VoltageSource` solved to all-zero potentials (10.51).** Solving a world with
-  a voltage source raises `NotImplementedError` naming the alternative (a 1 A
-  current source scaled by U / Z_in; solved since stream `w2src` of the
-  extended release). Test:
+  a voltage source raised `NotImplementedError` in the release preparation,
+  naming the alternative (a 1 A current source scaled by U / Z_in); voltage
+  sources are solved since 2026.11 (stream `w2src`, audit W2A-11). Test:
   `tests/test_source_validation.py::test_voltage_source_solves_and_fixes_the_feeding_potential`.
 - **`HARD_LIMIT` only warned (10.06).** A world whose predicted segment count
   exceeds `groundfield.diagnostics.HARD_LIMIT` (20 000, read at solve time) is
