@@ -258,10 +258,20 @@ def source_radius(
     return r
 
 
+def _owner(name: str) -> str:
+    """User-facing name of a port: an electrode, or the conductor of a piece."""
+    import re
+
+    piece = re.fullmatch(r"__cond_(?P<name>.+)__seg_(?P<k>\d+)", name, re.DOTALL)
+    if piece is None:
+        return f"electrode '{name}'"
+    return f"conductor '{piece.group('name')}' (its piece {piece.group('k')})"
+
+
 def _beside_text(model: WireModel, close) -> str:
     """Where the wires of :func:`beside_wires` run beside each other."""
-    a = f"'{model.names[close.port]}'"
-    b = f"'{model.names[close.other]}'"
+    a = _owner(model.names[close.port])
+    b = _owner(model.names[close.other])
     d = f"{1000.0 * close.distance:.3g} mm"
     if close.kind == "folded":
         return f"an arm of {a} runs back beside itself {d} apart, axis to axis"

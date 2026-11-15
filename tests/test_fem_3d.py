@@ -1642,7 +1642,7 @@ def test_w4r2b_03_the_source_radius_keeps_wires_beside_each_other_1_5_radii_apar
     w = _w4r2b_rings(1.075)
     r = _solid.source_radius(w, eng, _w4r2b_model(w), [], None, None, **kw)
     assert abs(r - 0.05) < 5e-5
-    assert "'g2' runs beside 'g1' 75 mm apart" in kw["notes"][0]
+    assert "electrode 'g2' runs beside electrode 'g1' 75 mm apart" in kw["notes"][0]
     w = _w4r2b_station()
     assert _solid.source_radius(w, eng, _w4r2b_model(w), [], None, None) == 0.06
 
@@ -1691,8 +1691,37 @@ def test_w4r2b_03_a_node_refusal_names_the_limited_source_radius() -> None:
             max_nodes_3d=100_000,
         )
     text = str(info.value)
-    assert "'g2' runs beside 'g1' 30 mm apart" in text
+    assert "electrode 'g2' runs beside electrode 'g1' 30 mm apart" in text
     assert "FemOptions.source_radius" not in text and "raise max_nodes_3d" in text
+
+
+def test_w4r2b_03_a_galvanic_piece_is_named_by_its_conductor() -> None:
+    """A galvanic conductor 5 cm beside an earthing strip limits the source
+    radius to 3.3 cm; the reason names the conductor, not the internal name
+    of its piece."""
+    # audit W4R2B-03
+    from groundfield.solver.fem import _solid
+
+    w = gf.create_world(soil=H100)
+    gf.create_electrode(
+        w, "strip", name="g", start=(0, 0, 0.6), end=(8, 0, 0.6), wire_radius=0.005
+    )
+    gf.create_electrode(w, "rod", name="a", position=(0, 0.05, 0.6), length=2.0)
+    gf.create_electrode(w, "rod", name="b", position=(8, 0.05, 0.6), length=2.0)
+    gf.create_conductor(
+        w,
+        name="pen",
+        start="a",
+        end="b",
+        cross_section=50e-6,
+        coupling_to_soil="galvanic",
+        discretize_segment_length=0.5,
+    )
+    notes: list[str] = []
+    eng = gf.create_engine(backend="fem", segment_length=0.25)
+    r = _solid.source_radius(w, eng, _w4r2b_model(w), [], None, None, notes=notes)
+    assert abs(r - 0.05 / 1.5) < 1e-9
+    assert "conductor 'pen' (its piece" in notes[0] and "__cond_" not in notes[0]
 
 
 def test_w4r2a_01_the_3d_fallback_of_a_ring_without_room_is_not_silently_off() -> None:
@@ -1723,7 +1752,9 @@ def test_w4r2a_01_the_w4a_world_is_refused_with_a_remedy() -> None:
     15.2 mm of the rod: refused before meshing, naming the integral engines.
     Base: +0.80 % against the boundary elements, estimate 0.66 %."""
     # audit W4R2A-01
-    with pytest.raises(gf.BackendCapabilityError, match="whole wire of 'ring'") as info:
+    with pytest.raises(
+        gf.BackendCapabilityError, match="whole wire of electrode 'ring'"
+    ) as info:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             gf.create_engine(backend="fem", segment_length=0.25).solve(_w4a_world())
