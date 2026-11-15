@@ -103,11 +103,12 @@ class StarCabinetTopology(PickleUpgrade, BaseModel):
     are grouped by :meth:`group_buildings` (runs of consecutive bearings
     around the substation, one per cabinet), and the cabinet of a group
     stands at the group's far end — on the ray from the substation
-    through the group's far-end building (the largest projection of its
-    position on the direction of the group's centroid),
-    ``CabinetConfig.end_clearance_m`` beyond that building's earth
-    electrodes, rods included, plus the plan extent of the cabinet's own
-    grounding (audits W1B-01, W1B-02) — and feeds the group. With a given placement every building is fed by its nearest
+    through the group's centroid, ``CabinetConfig.end_clearance_m`` beyond
+    the group's earth electrodes along it, rods included, when it stands
+    there within ``CabinetConfig.max_far_end_gap_m`` of its houses,
+    otherwise on the ray through the group's far-end building (the largest
+    projection of its position on the direction of the centroid), beyond
+    that building (audits W1B-01, W1B-02) — and feeds the group. With a given placement every building is fed by its nearest
     cabinet (Manhattan metric between the site positions), as before. A
     building that a cabinet's cable (main) crosses is joined to that main
     where it crosses the foundation, without a service drop, and is fed

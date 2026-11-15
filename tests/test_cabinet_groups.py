@@ -10,12 +10,13 @@ buildings are ordered by their bearing around the substation, starting
 after the widest angular gap, and cut into as many runs of consecutive
 bearings as there are cabinets, of sizes that differ by at most one; the
 cabinet of a group stands on the ray from the substation through the
-group's far-end building (the largest projection on the direction of the
-group's centroid), ``CabinetConfig.end_clearance_m`` (1 m) beyond that
-building's electrodes, rods included, and feeds its group; a cabinet that
-would come closer than that to another site raises (audits W1B-01, W1B-02;
-up to then the ray ran through the centroid, 1 m beyond the group's
-farthest foundation vertex). A given ``CabinetConfig.placement`` keeps the former rule (every
+group's centroid, ``CabinetConfig.end_clearance_m`` (1 m) beyond the group's
+electrodes along it (rods included since audit W1B-02), when it stands there
+within ``CabinetConfig.max_far_end_gap_m`` (20 m) of its houses, otherwise on
+the ray through the group's far-end building (the largest projection on the
+direction of the centroid), 1 m beyond that building (audit W1B-01); it feeds
+its group; a cabinet that would come closer than ``end_clearance_m`` to
+another site raises (audit W1B-02). A given ``CabinetConfig.placement`` keeps the former rule (every
 building fed by its nearest cabinet). In ``RadialTrunkTopology`` a building
 in a substation slot that no trunk crosses taps its feeder's trunk instead
 of getting its own line from the substation.
@@ -143,9 +144,10 @@ def test_each_cabinet_feeds_its_group_from_the_far_end(n: int) -> None:
     """Default grids of 50 and 150 houses (3 and 8 cabinets): every
     building is fed by the main of its group's cabinet (a building that
     another main crosses by that main, user decision Q41); each cabinet
-    stands on the ray through its group's far-end building, 1 m beyond that
-    building's electrodes along the ray (recomputed from the built world's
-    electrodes; audit W1B-01)."""
+    stands where the rule of audit W1B-01 and the coordinator's decision on
+    it puts it (recomputed from the built world's electrodes): on the ray
+    through its group's centroid when it stands there within 20 m of its
+    houses, otherwise on the ray through the far-end building."""
     plan = _plan(building_counts={"residential": n})
     world = plan.to_world()
     buildings = [s for s in plan.sites if s.role == "building"]
@@ -180,7 +182,7 @@ def test_each_cabinet_feeds_its_group_from_the_far_end(n: int) -> None:
     # beyond that building (audit W1B-01; up to then on the ray through the
     # centroid, 1 m beyond the group's farthest foundation vertex).
     expected = _expected_cabinet(plan, world)
-    for cab, (xy, far, _) in zip(cabinets, expected, strict=True):
+    for cab, (xy, far, _, _) in zip(cabinets, expected, strict=True):
         assert cab.position_xy == pytest.approx(tuple(xy), abs=1e-9), far
     assert crossed <= n // 10
 
@@ -473,13 +475,30 @@ def _reach(world: gf.World, root: str, v: np.ndarray) -> float:
     return best
 
 
-def _expected_cabinet(plan, world: gf.World, clearance: float = 1.0) -> list:
-    """Cabinet positions by the rule of audit W1B-01 / W1B-02, recomputed:
-    the group's direction is its centroid's; the far-end building has the
-    largest projection of its position on it (ties: nearest to the ray);
-    the cabinet stands on the ray through that building, ``clearance`` m
-    beyond the largest projection of that building's electrodes on the ray,
-    rods included (the default cabinet rod has no plan extent)."""
+def _point_gap(world: gf.World, root: str, xy) -> float:
+    """Plan distance in m from ``xy`` to the electrodes of a site (2 mm
+    sampling of its wires and circles, exact to its rods and wire pieces)."""
+    points, segments = _site_samples(world, root)
+    p = np.asarray(xy, dtype=float)[None, :]
+    gap = float(np.min(np.hypot(*(points - p).T))) if len(points) else math.inf
+    if len(segments):
+        gap = min(gap, _points_to_segments(p, segments))
+    return gap
+
+
+def _expected_cabinet(
+    plan, world: gf.World, clearance: float = 1.0, max_gap: float = 20.0
+) -> list:
+    """Cabinet positions by the rule of audits W1B-01 / W1B-02 and the
+    coordinator's decision on them, recomputed from the built world: on the
+    ray through the group's centroid, ``clearance`` m beyond the largest
+    projection on it of every electrode of the group (rods included) when
+    that point lies within ``max_gap`` m of an electrode of the group;
+    otherwise on the ray through the far-end building (the largest
+    projection of its position on the centroid direction; ties: nearest to
+    the ray), ``clearance`` m beyond that building's electrodes (the default
+    cabinet rod has no plan extent). Returns (position, the building it
+    stands beyond, group, rule)."""
     buildings = [s for s in plan.sites if s.role == "building"]
     n = len([s for s in plan.sites if s.role == "cabinet"])
     out = []
@@ -490,12 +509,17 @@ def _expected_cabinet(plan, world: gf.World, clearance: float = 1.0) -> list:
         pos = np.asarray([buildings[i].position_xy for i in group], dtype=float)
         u = pos.mean(axis=0)
         u = u / np.hypot(*u)
+        reach = max(_reach(world, buildings[i].name, u) for i in group)
+        centre = (reach + clearance) * u
+        if min(_point_gap(world, buildings[i].name, centre) for i in group) <= max_gap:
+            out.append((centre, None, group, "centroid"))
+            continue
         proj = pos @ u
         ties = [k for k in range(len(group)) if proj[k] >= proj.max() - 1e-9]
         far = min(ties, key=lambda k: (abs(_cross(u, pos[k])), k))
         v = pos[far] / np.hypot(*pos[far])
         reach = _reach(world, buildings[group[far]].name, v)
-        out.append(((reach + clearance) * v, buildings[group[far]].name, group))
+        out.append(((reach + clearance) * v, buildings[group[far]].name, group, "far"))
     return out
 
 
@@ -521,13 +545,56 @@ def test_the_cabinet_of_a_wide_group_stands_next_to_its_far_end_building(
     world = plan.to_world()
     cabinets = [s for s in plan.sites if s.role == "cabinet"]
     buildings = [s for s in plan.sites if s.role == "building"]
-    for cab, (xy, far, group) in zip(
+    for cab, (xy, far, group, rule) in zip(
         cabinets, _expected_cabinet(plan, world), strict=True
     ):
+        assert rule == "far"  # 50.4 m from the houses on the centroid ray
         assert cab.position_xy == pytest.approx(tuple(xy), abs=1e-9), far
         nearest = min(_site_gap(world, cab.name, buildings[i].name) for i in group)
         assert 1.0 - 1e-3 <= nearest <= 2.0, (cab.name, nearest)
         assert _site_gap(world, cab.name, far) == pytest.approx(nearest, abs=1e-3)
+
+
+# audit W1B-01 (CabinetConfig.max_far_end_gap_m); user decisions Q22, Q35
+def test_the_50_house_grid_keeps_its_cabinets_on_the_centroid_rays() -> None:
+    """The three groups of the default 50-house grid stand 8.8 ... 12.8 m from
+    their houses on the rays through their centroids (as up to audit W1B):
+    within ``max_far_end_gap_m`` (20 m), so they stay there and no house is
+    fed straight from the substation. With the far-end rule alone (the first
+    fix of W1B-01, also ``max_far_end_gap_m`` below 8.8 m) six houses of the
+    southern group, whose main ran to its eastern corner, had a drop from
+    the substation ring, up to 116.8 m."""
+    plan = _plan(building_counts={"residential": 50})
+    world = plan.to_world()
+    rules = [e[3] for e in _expected_cabinet(plan, world)]
+    assert rules == ["centroid"] * 3
+    cabinets = [s.position_xy for s in plan.sites if s.role == "cabinet"]
+    for xy, (expected, *_rest) in zip(
+        cabinets, _expected_cabinet(plan, world), strict=True
+    ):
+        assert xy == pytest.approx(tuple(expected), abs=1e-9)
+    assert not [d for d in _drops(world) if d.start_electrode.startswith("trafo")]
+    far = _plan(
+        building_counts={"residential": 50},
+        cabinets=CabinetConfig(max_far_end_gap_m=5.0),
+    ).to_world()
+    from_trafo = [d for d in _drops(far) if d.start_electrode.startswith("trafo")]
+    assert len(from_trafo) == 6
+    assert max(math.dist(d.start[:2], d.end[:2]) for d in from_trafo) == pytest.approx(
+        116.8, abs=0.05
+    )
+
+
+# audit W1B-01 (CabinetConfig.max_far_end_gap_m)
+@pytest.mark.parametrize("value", [-1.0, 0.0, float("nan"), float("inf")])
+def test_a_non_positive_or_infinite_far_end_gap_is_rejected(value: float) -> None:
+    with pytest.raises(ValueError, match="max_far_end_gap_m"):
+        CabinetConfig(max_far_end_gap_m=value)
+    cfg = TnNetworkConfig(
+        cabinets=CabinetConfig(max_far_end_gap_m=Discrete(values=[-2.0]))
+    )
+    with pytest.raises(ValueError, match="max_far_end_gap_m.*-2"):
+        TnNetworkGenerator(cfg, seed=0).plan()
 
 
 # audit W1B-02; user decisions Q22, Q35

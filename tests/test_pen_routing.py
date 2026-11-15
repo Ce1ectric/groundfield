@@ -455,15 +455,17 @@ def test_z_in_of_a_100_house_network_drops_against_the_old_routing() -> None:
     against 8.86 km), but the houses share their main instead of having a
     drop of their own (bonded by ideal conductors instead, the two sets of
     electrodes differ by -0.09 %; evidence q22/z100_ideal_pen.py). Since
-    audit W1B-01 each cabinet stands on the ray through its group's far-end
-    building: 0.202204 ohm (+0.051 %; 1 m segments 0.202205 ohm), PEN
-    3.77 km."""
+    audit W1B-01 a cabinet that would stand farther than 20 m from its
+    houses on the ray through its group's centroid stands on the ray through
+    the group's far-end building instead (two of the five here): 0.202053 ohm
+    (-0.023 %; 1 m segments 0.202054 ohm), PEN 3.78 km (far-end rule for every
+    group: 0.202204 ohm)."""
     world = _build(building_types=[_RING_HOUSE], building_counts={"residential": 100})
     engine = gf.create_engine(backend="image", segment_length=2.0, frequencies=[50.0])
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         z = complex(np.asarray(engine.solve(world).input_impedance())[0]).real
-    assert z == pytest.approx(0.202204, rel=1e-5)
+    assert z == pytest.approx(0.202053, rel=1e-5)
     assert z < 0.202724
 
 
