@@ -71,7 +71,11 @@ Geometric layout
   :attr:`CabinetConfig.max_far_end_gap_m` (20 m) of its houses, otherwise
   on the ray through the group's far-end building, 1 m beyond that
   building (audits W1B-01, W1B-02); in the default grid of 30 houses at
-  (-118.5, 0) and (118.5, 0) m. A cabinet
+  (-118.5, 0) and (118.5, 0) m. The threshold is a step (user decision
+  D7): a group that crosses it moves its cabinet by up to the width of the
+  group; the plan records per cabinet which rule placed it and its
+  distance on the centroid ray (``PlannedSite.cabinet_rule``,
+  ``PlannedSite.centroid_ray_gap_m``, audit W1R2-02). A cabinet
   whose electrodes would come closer than ``end_clearance_m`` to those of
   another site raises a :class:`ValueError` that names both.
   A :attr:`CabinetConfig.placement` places them as before (the former
@@ -364,15 +368,29 @@ class CabinetConfig(GeneratorConfig):
         larger value sent every group to the far-end ray, silently (audit
         W1R2-09); a distribution is checked where it is drawn (audit W1B-05).
     max_far_end_gap_m
-        Largest plan distance in m (default 20, positive and finite) between
-        a cabinet on the ray through its group's centroid and the nearest
-        electrode of its group; a cabinet farther from the houses it feeds
-        stands on the ray through the group's far-end building instead
-        (building groups only). The default separates the groups of the
-        default grid of 50 houses (8.8 … 12.8 m on the centroid ray) from
-        the wide groups of the AP1 mixes (23.7 … 50.4 m, e.g. 10 houses and
+        Largest plan distance in m (default 20, positive, finite, larger than
+        ``end_clearance_m``) between a cabinet on the ray through its group's
+        centroid and the nearest electrode of its group; a cabinet farther
+        from the houses it feeds stands on the ray through the group's
+        far-end building instead (building groups only; e.g. 10 houses and
         one small commercial building: 50.4 m on the centroid ray, 1.6 m on
-        the far-end ray).
+        the far-end ray). The plan records per cabinet which rule placed it
+        and that distance
+        (:attr:`~groundfield.generators.plan.PlannedSite.cabinet_rule`,
+        :attr:`~groundfield.generators.plan.PlannedSite.centroid_ray_gap_m`).
+        The threshold is a step, kept for 2026.11 (user decision D7; audit
+        W1R2-02): a group whose distance crosses it moves its cabinet by up
+        to the width of the group, and the results jump — the 50-house grid
+        with its house columns 32.0 / 32.2 m apart (southern group 19.99 →
+        20.22 m) moves one cabinet by 141.8 m, its drops by −19 %, the input
+        resistance at 50 Hz by −0.14 % beyond the smooth trend and, with an
+        inductive PEN, the reactance at 1 kHz by −22 / −19 %
+        (``carson_series`` / ``sommerfeld``). Groups lie on both sides of
+        it: on the centroid ray the groups of the default 50-house grid
+        stand 8.8 … 12.8 m from their houses, those of the 100-house grid
+        10.05 … 23.01 m (two beyond 20 m; 15 / 25 m put four / none of its
+        groups on the far-end ray), and over the 80 AP1 mixes the groups
+        beyond it 20.21 … 53.56 m, the largest one kept 18.84 m.
     """
 
     placement: Optional[PlacementSpec] = Field(
@@ -415,11 +433,13 @@ class CabinetConfig(GeneratorConfig):
     max_far_end_gap_m: Union[_PositiveDistance, AnyDistribution] = Field(
         default=20.0,
         description=(
-            "Largest distance in m (positive, finite) between a cabinet on the "
-            "ray through its group's centroid and the nearest electrode of its "
-            "group; farther, the cabinet stands on the ray through the group's "
-            "far-end building instead (placement=None only; a distribution is "
-            "checked where it is drawn)."
+            "Largest distance in m (positive, finite, larger than "
+            "end_clearance_m) between a cabinet on the ray through its group's "
+            "centroid and the nearest electrode of its group; farther, the "
+            "cabinet stands on the ray through the group's far-end building "
+            "instead (placement=None only; a distribution is checked where it "
+            "is drawn). A step: a group that crosses it moves its cabinet; the "
+            "plan records the rule per cabinet (PlannedSite.cabinet_rule)."
         ),
     )
 

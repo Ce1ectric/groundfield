@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import json
 import math
+import pathlib
 import re
 import warnings
 
@@ -819,6 +820,29 @@ def test_a_drawn_end_clearance_not_below_the_far_end_gap_is_rejected() -> None:
     assert [s.cabinet_rule for s in plan.sites if s.role == "cabinet"] == [
         "far_end_ray"
     ] * 3
+
+
+# audit W1R2-04; user decision D7
+def test_the_cabinet_texts_quote_the_measured_threshold_numbers() -> None:
+    """The generator texts said the 20 m default separates the 50-house grid
+    (8.8 ... 12.8 m) from the wide AP1 groups (23.7 ... 50.4 m). Over the 80
+    AP1 mixes the groups beyond 20 m stand 20.21 ... 53.56 m from their
+    houses on the centroid ray and the largest gap kept is 18.84 m: groups
+    lie on both sides of the threshold, where results jump. (The known
+    limitations are the coordinator's; their text test is in the report.)"""
+    root = pathlib.Path(gf.__file__).resolve().parents[2]
+    files = [
+        *sorted((root / "src" / "groundfield" / "generators").rglob("*.py")),
+        root / "docs" / "reference" / "api" / "generators.md",
+        root / "docs" / "adr" / "0009-world-generators.md",
+    ]
+    texts = {p.name: " ".join(p.read_text(encoding="utf-8").split()) for p in files}
+    for name, text in texts.items():
+        assert "23.7 … 50.4" not in text, name
+        assert not re.search(r"separates the (wide )?groups", text), name
+    for name in ("tn_network.py", "generators.md"):
+        assert "20.21 … 53.56 m" in texts[name], name
+        assert "18.84 m" in texts[name], name
 
 
 # audit W1B-02; user decisions Q22, Q35
