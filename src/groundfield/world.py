@@ -338,6 +338,12 @@ class World(BaseModel):
             twice; a current source has magnitude 0; a source has a
             non-finite magnitude / phase; the world has no electrode or
             no source of non-zero magnitude (with ``require_source``).
+            A conductor with ``conductor_type="cable_shield"`` and
+            ``resistance_model="skin"``, which the conductor's validator
+            rejects but ``model_copy(update=...)`` lets through (user
+            decision Q33; audit W1R2-10: up to then only the inductive
+            assembly of ``image`` and ``mom`` raised, ``fem`` solved its
+            resistive fallback).
 
         Notes
         -----
@@ -354,6 +360,12 @@ class World(BaseModel):
         nodes = set(self._node_names())
         for c in self.conductors:
             self._check_conductor_ends(c, nodes)
+            # model_copy(update=...) skips the conductor's validator: a
+            # cable shield copied onto the solid-round skin model is
+            # rejected here, for every backend (audit W1R2-10, Q33)
+            shield_check = getattr(c, "_check_shield_resistance_model", None)
+            if shield_check is not None:
+                shield_check()
         n_driving = 0
         zero_volt: list[str] = []
         for src in self.sources:

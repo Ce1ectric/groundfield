@@ -573,3 +573,106 @@ def test_a_lone_floating_grid_reports_a_plain_zero_current() -> None:
     assert current == 0j
     assert math.copysign(1.0, current.real) == 1.0
     assert math.copysign(1.0, current.imag) == 1.0
+
+
+# ---------------------------------------------------------------------
+# Straight runs grow against the chord of the whole run (audit W1R2-05)
+# ---------------------------------------------------------------------
+
+
+def _square_with_near_duplicate(origin, d: float) -> list[tuple]:
+    """Edges of a 10 m square outline with a second vertex ``d`` from the
+    corner (10, 0), on the 45 deg bisector."""
+    ox, oy = origin
+    pts = [(0, 0), (10, 0), (10 + d / 2**0.5, d / 2**0.5), (10, 10), (0, 10)]
+    p = [np.array([x + ox, y + oy, -0.8]) for x, y in pts]
+    return [(p[k], p[(k + 1) % 5]) for k in range(5)]
+
+
+# audit W1R2-05, user decision Q30
+@pytest.mark.parametrize("d", [1e-9, 1e-7, 3e-7, 1e-6, 1e-3])
+def test_a_near_duplicate_corner_vertex_does_not_join_two_sides(d: float) -> None:
+    """The four sides of the square are four wires at the local and the
+    UTM origin. Base ecff7b6: each vertex was tested against the chord of
+    its neighbours only, so at UTM the corner next to a vertex 0.1 / 0.3 um
+    away passed as straight and two perpendicular sides became one wire
+    (3 wires). Below the UTM tolerance (0.46 um) the tiny edge itself joins
+    one of the two sides it touches (4 wires; at 1e-9 m it is below one
+    unit of round-off of the coordinates and points along the second side;
+    5 wires at local coordinates, where the tolerance is 2.4e-12 m); above
+    the tolerance both origins agree. A polyline
+    electrode rejects edges shorter than its wire radius, so such a vertex
+    cannot occur in a valid electrode."""
+    from groundfield.geometry.primitives import _straight_runs
+
+    for origin in ((0.0, 0.0), UTM):
+        w = _straight_runs(_square_with_near_duplicate(origin, d), closed=True)
+        assert len({w[0], w[2], w[3], w[4]}) == 4
+    local = _straight_runs(_square_with_near_duplicate((0.0, 0.0), d), closed=True)
+    utm = _straight_runs(_square_with_near_duplicate(UTM, d), closed=True)
+    assert local == [0, 1, 2, 3, 4]
+    if d >= 1e-6:
+        assert utm == local
+    else:
+        assert utm in ([0, 0, 1, 2, 3], [0, 1, 1, 2, 3])
+
+
+# audit W1R2-05, user decision Q30
+def test_a_finely_sampled_arc_is_not_one_straight_wire_at_utm() -> None:
+    """A quarter arc of R = 2 m in 1 mm edges (each vertex 0.25 um off the
+    chord of its neighbours): base ecff7b6 one straight wire turning by 90
+    deg at UTM; now no wire turns by more than 0.06 deg (two edges, the
+    chord of a run bounds every vertex by the tolerance), and at local
+    coordinates every edge stays a wire of its own."""
+    from groundfield.geometry.primitives import _straight_runs
+
+    R, n = 2.0, 3142
+    t = np.linspace(0.0, math.pi / 2, n + 1)
+    for (ox, oy), most in (((0.0, 0.0), 1), (UTM, 2)):
+        p = [np.array([ox + R * math.cos(a), oy + R * math.sin(a), -0.8]) for a in t]
+        w = _straight_runs([(p[k], p[k + 1]) for k in range(n)], closed=False)
+        assert max(np.bincount(w)) == most
+
+
+# audit W1R2-05, user decision Q30
+def test_an_arc_electrode_at_utm_keeps_its_bends() -> None:
+    """A valid electrode: a 2 deg arc of R = 50 m in 6 mm edges (r = 5 mm),
+    each vertex 0.36 um off the chord of its neighbours. Base ecff7b6 at
+    the UTM origin: one straight wire, Z +1.27 % against the local origin
+    (291 wires); now 146 wires (pairs of edges below the tolerance) and
+    Z +5.5e-4 (+3.6e-5 of it is the round-off of the absolute coordinates
+    in the image kernel, measured with every edge a wire)."""
+    from groundfield.geometry.primitives import _straight_runs
+
+    R = 50.0
+    t = np.linspace(0.0, math.radians(2.0), 292)
+    zs, wires = [], []
+    for ox, oy in ((0.0, 0.0), UTM):
+        v = [(ox + R * math.cos(a), oy + R * math.sin(a), 0.8) for a in t]
+        world = gf.create_world(soil=gf.HomogeneousSoil(rho=RHO))
+        gf.create_electrode(
+            world, "polyline", name="arc", vertices=v, closed=False, wire_radius=0.005
+        )
+        wires.append(1 + max(_straight_runs(world.electrodes[0].edges, closed=False)))
+        gf.create_source(world, attached_to="arc", magnitude=1.0)
+        res = _solve(world, _engine(ds=0.5))
+        zs.append(complex(res.cluster_impedance("arc")[0]).real)
+    assert wires[0] == 291
+    assert wires[1] >= 145
+    assert zs[1] == pytest.approx(zs[0], rel=1e-3)
+
+
+# audit W1R2-05 (guard: three vertices are the old test, bit for bit)
+def test_the_chord_of_three_vertices_is_the_neighbour_test() -> None:
+    from groundfield.geometry.primitives import _continues_straight, _on_chord
+
+    rng = np.random.default_rng(5)
+    for origin in (np.zeros(3), np.array([UTM[0], UTM[1], 0.0])):
+        for _ in range(500):
+            a = origin + rng.uniform(-50, 50, 3)
+            u = rng.normal(size=3)
+            u /= np.linalg.norm(u)
+            b = a + rng.uniform(0.1, 20) * u
+            off = rng.normal(size=3) * 10.0 ** rng.uniform(-13, -5)
+            c = b + rng.uniform(0.1, 20) * u + off
+            assert _on_chord([a, b, c]) == _continues_straight(a, b, c)
