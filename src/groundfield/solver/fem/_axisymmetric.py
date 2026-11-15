@@ -3,9 +3,11 @@
 The world must be a body of revolution about one vertical axis: every
 electrode is a :class:`~groundfield.geometry.electrodes.RodElectrode` on
 the axis or a :class:`~groundfield.geometry.electrodes.RingElectrode`
-centred on it, in any horizontally layered soil. Every other world is
-refused (:class:`~groundfield.solver.registry.BackendCapabilityError`,
-naming the backends that solve it). The electrodes are modelled as they
+centred on it, in any horizontally layered soil. ``model="auto"`` (the
+default) hands every other world to the three-dimensional model;
+``model="axisymmetric"`` refuses it
+(:class:`~groundfield.solver.registry.BackendCapabilityError`, naming the
+backends that solve it). The electrodes are modelled as they
 are: the rod as a solid cylinder with flat end faces, the ring as a solid
 torus of circular cross section, both perfect conductors, an encased
 electrode with its concrete shell (:mod:`groundfield.solver.fem._assembly`).
@@ -65,9 +67,18 @@ __all__: list[str] = []
 #: kappa (delta / L)^2: below 1e-6 at delta <= 1e-3 L for kappa <= 1. Measured
 #: with ``image`` and ``mom`` on identical discretisations (a ring around a
 #: rod, two rods 0.1 m apart on one axis, two rings 34 mm apart): kappa <= 6e-4
-#: for L the wire radius, <= 1.1e-2 for L the gap. Up to audit W4A-08 the
-#: tolerance was 1e-9 of the world's size (3 nm for a 3 m rod), and a rod
-#: 1 um off a ring's axis went to the 3-D model (40.7 s, 2.35 GB).
+#: for L the wire radius, <= 1.1e-2 for L the gap. Thin wires have no end
+#: faces, so these measurements cannot show coaxial rods end to end with a gap
+#: g of a wire radius or less (audit W4R2A-06): an offset shrinks the overlap
+#: of the two end faces by 2 delta / (pi a) of their area, linearly in |delta|
+#: in the parallel-plate picture, and with the sensitivity
+#: d ln Z / d ln g = 0.020 / 0.053 / 0.100 of the axisymmetric model at
+#: g = a / a/4 / a/10 (a = 8 mm) that estimates 1.3e-5 / 8.4e-6 / 6.3e-6 at the
+#: tolerance (evidence ``fw4r2a/e04``): below about 1e-5 there. An estimate,
+#: not a measurement; the offset is at most 1e-3 g, where the dependence on it
+#: is smooth and therefore quadratic, so the estimate errs high. Up to audit
+#: W4A-08 the tolerance was 1e-9 of the world's size (3 nm for a 3 m rod), and
+#: a rod 1 um off a ring's axis went to the 3-D model (40.7 s, 2.35 GB).
 AXIS_TOL = 1e-3
 
 #: Floor of the axis tolerance relative to the larger of 1 m and the world's
@@ -420,7 +431,9 @@ def _display_segments(world: "World", engine: "Engine", interfaces: list[float])
     They carry the point sources of the result. Their count is checked
     against the engine's resource limit first, like the segments of every
     backend (:func:`groundfield.diagnostics.check_segment_budget`), so a unit
-    error of ``segment_length`` fails before anything is allocated.
+    error of ``segment_length`` fails before anything is allocated. Used by
+    the three-dimensional model (:func:`groundfield.solver.fem._solid.solid_earth`);
+    the axisymmetric model takes :func:`_ring_and_rod_segments`.
     """
     from groundfield.diagnostics import check_segment_budget
     from groundfield.solver._discretize import _discretize_electrode
@@ -435,19 +448,60 @@ def _display_segments(world: "World", engine: "Engine", interfaces: list[float])
     return segs, np.array(owner, dtype=int)
 
 
+class _DisplaySegments(NamedTuple):
+    """Leakage segments of the result (midpoints, lengths, directions, owner)."""
+
+    points: np.ndarray
+    lengths: np.ndarray
+    directions: np.ndarray
+    owner: np.ndarray
+
+
+def _ring_and_rod_segments(
+    world: "World", engine: "Engine", interfaces: list[float]
+) -> _DisplaySegments:
+    """The display segments of :func:`_display_segments` for the axisymmetric model.
+
+    The same segments (the electrodes' own discretisation, checked against
+    the engine's resource limit first), without the thin-wire guard of the
+    integral backends (a segment no longer than the wire radius,
+    :func:`groundfield.solver._guards._require_thin_wire`): it protects
+    their thin-wire self-term, which this model does not use (audit
+    W4R2A-07: a ring of radius 1.2 a, a solid torus that the model
+    resolves, was refused with that guard's ``ValueError``).
+    """
+    from groundfield.diagnostics import check_segment_budget
+
+    check_segment_budget(world, engine, interfaces or None)
+
+    points, lengths, directions, owner = [], [], [], []
+    for k, e in enumerate(world.electrodes):
+        geo = e.segments(engine.segment_length, interfaces or None)
+        points.append(np.asarray(geo.midpoints, dtype=float).reshape(-1, 3))
+        lengths.append(np.asarray(geo.lengths, dtype=float).reshape(-1))
+        directions.append(np.asarray(geo.directions, dtype=float).reshape(-1, 3))
+        owner.append(np.full(lengths[-1].size, k, dtype=int))
+    return _DisplaySegments(
+        np.concatenate(points),
+        np.concatenate(lengths),
+        np.concatenate(directions),
+        np.concatenate(owner),
+    )
+
+
 def _leakage_matrix(
     world: "World",
     electrodes: list[CoaxialElectrode],
     port_of_mesh: list[int],
     mesh,
     sol,
-    segs,
-    owner: np.ndarray,
+    segs: _DisplaySegments,
 ) -> np.ndarray:
     """Leakage per display segment for 1 V per port, shape ``(M, P)``."""
     n_ports = len(electrodes)
-    q = np.zeros((len(segs), n_ports))
-    lengths = np.array([s.length for s in segs])
+    owner = segs.owner
+    q = np.zeros((segs.lengths.size, n_ports))
+    lengths = segs.lengths
     for m, k in enumerate(port_of_mesh):
         e = electrodes[k]
         rows = np.nonzero(owner == k)[0]
@@ -465,7 +519,7 @@ def _leakage_matrix(
         lateral = s == g.radius
         top = (z == g.z_top) & ~lateral
         bottom = (z == g.z_bottom) & ~lateral
-        mids = np.array([float(segs[i].midpoint[2]) for i in rows])
+        mids = np.array([float(segs.points[i, 2]) for i in rows])
         order = np.argsort(mids)
         rows = rows[order]
         half = 0.5 * lengths[rows]
@@ -564,7 +618,7 @@ def axisymmetric_earth(
         )
         shells.append(1.0 / (2.0 * math.pi * radius * e.shell) if e.shell > 0 else 0.0)
 
-    segs, owner = _display_segments(world, engine, depths)
+    segs = _ring_and_rod_segments(world, engine, depths)
     levels = [refinement, refinement + 1] if extrapolate else [refinement]
     lines = [
         mesh_lines(rod_geo, ring_geo, inside, r_far, params, level) for level in levels
@@ -596,7 +650,7 @@ def axisymmetric_earth(
     conductance = 0.5 * (conductance + conductance.T)
 
     leakage = _leakage_matrix(
-        world, electrodes, port_of_mesh, meshes[-1], solutions[-1], segs, owner
+        world, electrodes, port_of_mesh, meshes[-1], solutions[-1], segs
     )
     r_levels = [np.linalg.inv(g) for g in g_levels]
     r_ext = np.linalg.inv(conductance)
@@ -620,10 +674,10 @@ def axisymmetric_earth(
     return EarthPorts(
         names=tuple(e.name for e in world.electrodes),
         conductance=conductance,
-        segment_points=np.array([s.midpoint for s in segs], dtype=float),
-        segment_lengths=np.array([s.length for s in segs], dtype=float),
-        segment_directions=np.array([s.direction for s in segs], dtype=float),
-        segment_owner=owner,
+        segment_points=segs.points,
+        segment_lengths=segs.lengths,
+        segment_directions=segs.directions,
+        segment_owner=segs.owner,
         segment_leakage=leakage,
         metadata=metadata,
     )

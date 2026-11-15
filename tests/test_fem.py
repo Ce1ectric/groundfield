@@ -1245,3 +1245,44 @@ def test_tutorial_t09_describes_both_models() -> None:
     assert "three-dimensional model" in text and "fem3d" in text
     version = "".join(cells[1]["source"])
     assert "print(gf.__version__)" in version
+
+
+def test_w4r2a_07_a_ring_of_radius_1_2_a_is_solved_as_the_torus_it_is() -> None:
+    """A ring of radius 1.2 a (a = 50 mm: a solid torus with a hole of 0.2 a)
+    was refused with the thin-wire ``ValueError`` of the result's display
+    segments (chords of 0.94 a), a guard of the integral engines' self-term
+    that the axisymmetric model does not use. Auditor W4A's solid-body BEM
+    (four levels, last step 1.5e-8; evidence ``fw4r2a/e02``) gives
+    89.509319 Ohm."""
+    # audit W4R2A-07
+    a = 0.05
+    w = _ring_world(H100, r0=1.2 * a, depth=0.8, radius=a)
+    res = _engine().solve(w)
+    assert res.metadata["fem_model"] == "axisymmetric"
+    error = abs(res.cluster_impedance("g1")[0].real / 89.509319 - 1.0)
+    assert error < 2e-4 and error <= res.metadata["fem_error_estimate"]
+    # the integral engines keep their guard
+    with pytest.raises(ValueError, match="thin-wire self-term"):
+        gf.create_engine(segment_length=0.25).solve(w)
+
+
+def test_w4r2a_07_tutorial_t09_says_that_fem_has_no_source_kernel() -> None:
+    """T09 cell 11 lists ``fem`` among the backends that accept
+    ``kernel='line'``, which read as if ``fem`` implemented the line kernel;
+    it has no source kernel (the capability table of cell 3 shows none), the
+    engine's kernel only selects the field evaluation of its result."""
+    # audit W4R2A-07
+    import json
+    from pathlib import Path
+
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "docs/tutorials/T09_choosing_an_engine_and_convergence.ipynb"
+    )
+    cells = json.loads(path.read_text(encoding="utf-8"))["cells"]
+    i = next(k for k, c in enumerate(cells) if 'kernel="line"' in "".join(c["source"]))
+    before = "".join(cells[i - 1]["source"])
+    assert "that can do it" not in before
+    assert "no source kernel of its own" in before
+    out = "".join("".join(o.get("text", "")) for o in cells[i].get("outputs", []))
+    assert "'fem' (experimental)" in out  # the registry's list, explained above
