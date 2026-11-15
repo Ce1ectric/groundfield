@@ -211,19 +211,28 @@ substation at the point of the ring nearest to the house.
   audit R5A-01) starts where it leaves it, at its node at the end of the
   shared stretch (audit R4B-01);
 - the layout builder keeps its taps on the layout polyline, where the
-  cable's junctions are, and builds the cable from where its polyline
-  leaves the site's closed electrodes (a rectangle, a building outline, a
-  circle) for the last time, on the last segment that passes inside them,
-  to where it first enters the end site's: the corners in between and the
-  sites are part of the sites (audit R6A-01 — a router corner inside a
-  small cabinet ring was a node that houses tapped, 82 of 2 540 drops in
-  200 random layouts with a 2 m cabinet ring started inside it; also a
-  cable that overshoots its cabinet and turns back into it), and the
-  segment that leaves (enters) a site is clipped at the projection of the
-  site's point nearest to its far waypoint, so no tap and no corner lies
-  inside a site foundation, also for a rotated, polygon or offset one; a
-  tap at the projection, or at the site's waypoint, is the site (audits
-  R4A-03, R5A-02);
+  cable's junctions are. The leading run of waypoints inside the start
+  site's closed electrodes (a rectangle, a building outline, a circle) and
+  the trailing run inside the end site's are part of those sites (audit
+  R6A-01 — a router corner inside a small cabinet ring was a node that
+  houses tapped, 82 of 2 540 drops in 200 random layouts with a 2 m cabinet
+  ring started inside it), and the segment that leaves (enters) the site
+  is clipped at the projection of the site's point nearest to its far
+  waypoint. Every other passage of the cable through the closed electrodes
+  of the substation or a cabinet — another cabinet on its way, or its own
+  start or end site when it comes back through it — is clipped the same
+  way: the cable reaches the site where it enters and leaves it where it
+  leaves, joined to it there, and the waypoints in between are part of it
+  (audits W1B-03, W1B-04; up to then a cable to a far cabinet kept a tap
+  inside a near cabinet's ring, and a leg that left its start site and came
+  back through it, or overshot its cabinet, was merged into the site and
+  lost its taps: 142.8 m instead of 30.0 m of drops in the audit's loop
+  case). So no tap and no corner lies inside the foundation of the
+  substation or a cabinet, also for a rotated, polygon or offset one; a
+  tap at a clip point, or at the site's waypoint, is the site (audits
+  R4A-03, R5A-02). A cable through a house foundation is not joined to it:
+  the house keeps its own drop, of no length in plan where the cable crosses
+  its foundation;
 - ties go to the lowest wire index, then to the smallest arc position
   along the wire: a cable parallel to the side facing it meets the side
   at the start of the range of equal distance, for a side it passes along

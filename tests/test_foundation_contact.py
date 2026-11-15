@@ -1350,6 +1350,261 @@ def test_no_layout_drop_or_junction_lies_inside_a_cabinet_foundation_in_random_l
     assert checked == 194
 
 
+def _street_layout(
+    houses, cabinets, cables, *, station_m: float = 4.0, cabinet_m: float = 2.0
+) -> tuple[LvNetworkLayout, gf.World]:
+    """A layout with ring-outline houses, a station and cabinets with square
+    ring foundations (``station_m`` / ``cabinet_m`` side), and the given
+    cables: ``{"start", "end"}`` (router-made) or ``{"start", "waypoints",
+    "end"?}`` (hand-made, ``end`` optional)."""
+    from groundfield.generators.layout.routing import PenCable
+
+    fps = [
+        gf.BuildingFootprint(polygon_xy_m=h, building_use="residential", osm_id=k + 1)
+        for k, h in enumerate(houses)
+    ]
+    lay = LvNetworkLayout.from_footprints(
+        fps, substation_xy=(0.0, 0.0), obstacle_clearance_m=0.0
+    )
+    for name, xy in cabinets:
+        lay.add_cabinet(xy, name=name)
+    for k, cable in enumerate(cables):
+        if "waypoints" in cable:
+            lay.pen_cables.append(
+                PenCable(
+                    name=f"pen_{k}",
+                    start_anchor=cable["start"],
+                    waypoints=list(cable["waypoints"]),
+                    end_anchor=cable.get("end"),
+                )
+            )
+        else:
+            lay.add_pen_cable(start=cable["start"], end=cable["end"])
+    lay.connect_buildings()
+
+    def ring(size):
+        return GroundingSystemSpec(
+            electrodes=[FoundationElectrodeSpec(style="ring", depth_m=0.6, size_m=size)]
+        )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        world = lay.to_world(
+            house_grounding=GroundingSystemSpec(
+                electrodes=[FoundationElectrodeSpec(style="ring", depth_m=0.8)]
+            ),
+            substation_grounding=ring(station_m),
+            cabinet_grounding=ring(cabinet_m),
+            foundation_outline="polygon",
+        )
+    return lay, world
+
+
+def _assert_nothing_inside_a_site(world: gf.World, sites: list[str]) -> None:
+    """No drop starts and no junction lies strictly inside the foundation of
+    one of ``sites`` (even-odd test against its wires, independent of the
+    generator)."""
+    for root in (f"{s}_foundation_0" for s in sites):
+        for drop in _drops(world):
+            assert not _inside_site(world, root, drop.start[:2]), (root, drop.name)
+        for j in world.junctions:
+            assert not _inside_site(world, root, j.connection_point[:2]), (root, j.name)
+
+
+def _joined_sites(world: gf.World, cable: str) -> set[str]:
+    """Sites (substation, cabinets) that the sections of ``cable`` end at."""
+    out = set()
+    for c in world.conductors:
+        if c.name.startswith(f"{cable}_seg_"):
+            for e in (c.start_electrode, c.end_electrode):
+                if "_foundation_" in e:
+                    out.add(e.split("_foundation_")[0])
+    return out
+
+
+_STREET_HOUSES = [_box(x, 6.0, 7.0, 6.0) for x in range(8, 100, 11)] + [
+    _box(x, -6.0, 7.0, 6.0) for x in range(8, 100, 11)
+]
+
+
+# audit W1B-03
+@pytest.mark.parametrize("xc", [47.5, 48.0, 48.8, 50.0, 52.5])
+def test_no_layout_tap_lies_inside_a_cabinet_the_cable_passes(xc: float) -> None:
+    """Router-made cables along one street with two cabinets on it, a 2 m
+    ring at (``xc``, 20) m and one at (100, 20) m: the cable to the far
+    cabinet passes through the near one's ring. Base ``6f63deb`` (as
+    ``e6124cd``): at 48.0 and 48.8 m the drop of the house at x = 52 m
+    started at ``pen_0_tap_10`` (48.5, 20) m inside the near ring (the clip
+    of audit R6A-01 covered only a cable's own start and end sites). Now
+    the cable is clipped at every site it passes: it reaches the near
+    cabinet where it enters its ring and leaves it where it leaves the
+    ring, the part inside belongs to the cabinet."""
+    houses = [_box(x, 6.0, 7.0, 6.0) for x in range(8, 100, 11)] + [
+        _box(x, 34.0, 7.0, 6.0) for x in range(8, 100, 11)
+    ]
+    lay, world = _street_layout(
+        houses,
+        [("kvs_0", (xc, 20.0)), ("kvs_1", (100.0, 20.0))],
+        [
+            {"start": "substation", "end": "kvs_1"},
+            {"start": "substation", "end": "kvs_0"},
+        ],
+    )
+    _assert_nothing_inside_a_site(world, ["substation", "kvs_0", "kvs_1"])
+    far = lay.pen_cables[0]
+    passes = any(
+        _inside_site(
+            world,
+            "kvs_0_foundation_0",
+            (a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])),
+        )
+        for a, b in far.segments()
+        for t in np.linspace(0.0, 1.0, 2001)
+    )
+    if passes:
+        assert _joined_sites(world, far.name) == {"substation", "kvs_0", "kvs_1"}
+
+
+# audit W1B-03
+@pytest.mark.parametrize(
+    "waypoints",
+    [
+        [(0.0, 0.0), (100.0, 0.0)],
+        [(0.0, 0.0), (48.8, 0.0), (48.8, 0.5), (100.0, 0.5)],
+    ],
+    ids=["straight", "corners-inside"],
+)
+def test_a_hand_made_cable_is_joined_to_a_cabinet_it_passes(waypoints) -> None:
+    """A cable to the far cabinet straight through the 2 m ring of a cabinet
+    at (48.8, 0) m, or with two corners inside it. Base ``6f63deb``: the
+    house at x = 52 m was tapped at ``pen_0_tap_9`` inside the ring, and the
+    corners were junctions inside it. Now the cable reaches the near cabinet
+    where it enters its ring (47.8 m) and leaves it where it leaves the ring
+    (49.8 m); no junction or drop start lies inside a site."""
+    lay, world = _street_layout(
+        _STREET_HOUSES,
+        [("kvs_0", (48.8, 0.0)), ("kvs_1", (100.0, waypoints[-1][1]))],
+        [
+            {"start": "substation", "waypoints": waypoints, "end": "kvs_1"},
+            {
+                "start": "substation",
+                "waypoints": [(0.0, 0.0), (48.8, 0.0)],
+                "end": "kvs_0",
+            },
+        ],
+    )
+    _assert_nothing_inside_a_site(world, ["substation", "kvs_0", "kvs_1"])
+    assert _joined_sites(world, "pen_0") == {"substation", "kvs_0", "kvs_1"}
+    into = [
+        c
+        for c in world.conductors
+        if c.name.startswith("pen_0_seg_") and c.end_electrode.startswith("kvs_0")
+    ]
+    out = [
+        c
+        for c in world.conductors
+        if c.name.startswith("pen_0_seg_") and c.start_electrode.startswith("kvs_0")
+    ]
+    assert len(into) == len(out) == 1
+    assert into[0].end[0] == pytest.approx(47.8) and out[0].start[0] == pytest.approx(
+        49.8
+    )
+
+
+# audit W1B-03 (self-check of the fix)
+@pytest.mark.parametrize(
+    "waypoints",
+    [[(0.0, 0.0), (48.8, 0.0)], [(0.0, 0.0), (40.0, 0.0), (40.0, 0.5), (48.5, 0.5)]],
+    ids=["straight", "corner"],
+)
+def test_a_cable_whose_free_end_lies_inside_a_cabinet_ends_at_it(waypoints) -> None:
+    """A cable without an end site whose last waypoint lies inside a
+    cabinet's 2 m ring (not one of its ends) ends where it reaches the ring,
+    at (47.8, y) m, joined to the cabinet; no junction lies inside."""
+    _, world = _street_layout(
+        _STREET_HOUSES,
+        [("kvs_0", (48.8, 0.0))],
+        [{"start": "substation", "waypoints": waypoints}],
+    )
+    _assert_nothing_inside_a_site(world, ["substation", "kvs_0"])
+    sections = [c for c in world.conductors if c.name.startswith("pen_0_seg_")]
+    assert sections[-1].end_electrode.startswith("kvs_0")
+    assert sections[-1].end[:2] == pytest.approx((47.8, waypoints[-1][1]))
+
+
+# audit W1B-04
+def test_a_cable_through_its_start_station_keeps_its_outbound_taps() -> None:
+    """Hand-made cable (0, 0) -> (60, 0) -> (60, 1) -> (-60, 1) m from a 4 m
+    station foundation: it leaves the station, turns and passes back
+    through it. The eastern houses (y = 3 ... 9 m) are 2 m from the return
+    leg, the western ones (y = -9 ... -3 m) 4 m: 30.0 m of drops, as on
+    ``e6124cd``. Base ``6f63deb``: the merge of audit R6A-01 took every
+    waypoint before the last passage through the station into it, cutting
+    off both eastern legs; the eastern houses were re-tapped on the western
+    leg, 142.8 m. Now only the leading run of waypoints inside the station
+    is merged, and the return leg is clipped where it passes the station."""
+    houses = [_box(x, 6.0, 7.0, 6.0) for x in range(8, 60, 11)] + [
+        _box(-x, -6.0, 7.0, 6.0) for x in range(8, 60, 11)
+    ]
+    _, world = _street_layout(
+        houses,
+        [],
+        [
+            {
+                "start": "substation",
+                "waypoints": [(0.0, 0.0), (60.0, 0.0), (60.0, 1.0), (-60.0, 1.0)],
+            }
+        ],
+    )
+    _assert_nothing_inside_a_site(world, ["substation"])
+    lengths = sorted(math.dist(d.start[:2], d.end[:2]) for d in _drops(world))
+    assert lengths == pytest.approx([2.0] * 5 + [4.0] * 5)
+
+
+# audit W1B-04
+def test_a_cable_that_overshoots_its_cabinet_keeps_its_far_leg() -> None:
+    """Hand-made cable (0, 0) -> (80, 0) -> (80, -1.5) -> (50, -1.5) ->
+    (50, 0) m to a cabinet with a 4 m foundation at (50, 0) m: it passes
+    through the cabinet, runs on to 80 m and comes back. The eight houses
+    north of it (y = 3 ... 9 m) are 3 m from the outbound leg: 24.35 m of
+    drops on ``e6124cd``, one of them from a tap inside the cabinet. Base
+    ``6f63deb``: the cable was cut where it first entered the cabinet, the
+    houses east of it re-tapped there, 68.6 m. Now the far leg keeps its
+    taps (3 m each; the last house, beyond the turn, 3.354 m from it); the
+    outbound leg is joined to the cabinet where it passes it, (48, 0) and
+    (52, 0) m, and the house above the cabinet is fed from the cabinet's
+    foundation, 1 m: 22.354 m."""
+    houses = [_box(x, 6.0, 7.0, 6.0) for x in range(8, 90, 11)]
+    _, world = _street_layout(
+        houses,
+        [("kvs_0", (50.0, 0.0))],
+        [
+            {
+                "start": "substation",
+                "waypoints": [
+                    (0.0, 0.0),
+                    (80.0, 0.0),
+                    (80.0, -1.5),
+                    (50.0, -1.5),
+                    (50.0, 0.0),
+                ],
+                "end": "kvs_0",
+            }
+        ],
+        cabinet_m=4.0,
+    )
+    _assert_nothing_inside_a_site(world, ["substation", "kvs_0"])
+    lengths = sorted(math.dist(d.start[:2], d.end[:2]) for d in _drops(world))
+    assert lengths == pytest.approx([1.0] + [3.0] * 6 + [math.hypot(1.5, 3.0)])
+    assert _joined_sites(world, "pen_0") == {"substation", "kvs_0"}
+    into = [
+        c.end[:2]
+        for c in world.conductors
+        if c.name.startswith("pen_0_seg_") and c.end_electrode.startswith("kvs_0")
+    ]
+    assert sorted(map(tuple, into)) == [(48.0, 0.0), (52.0, -1.5)]
+
+
 # user decision Q41, audit R5A-01
 @pytest.mark.parametrize("dy", [0.0, 2e-6, 1e-4, 1e-3, 9e-3])
 def test_a_drop_beside_a_trunk_leaves_it_at_its_end(dy: float) -> None:
