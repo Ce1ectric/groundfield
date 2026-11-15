@@ -185,15 +185,44 @@ The author's decision of 2026-11-15 and audit W3A (stream fw3xl).
    (an interpolation error instead of round-off) and multi-threading
    (the base is single-threaded, parameter sweeps run processes in parallel).
 3. **Option.** `Engine.image_far_field = "point"` keeps the far images in
-   point form, as before wave 3 (on the cross-layer path the line form of the
-   interface image only); the continuous switch and the transverse distance
-   stay. The quadrupole form stays the default. The point form moves
-   networks by 2e-5 … 1.8e-4, a straight wire near the interface by 4e-4
-   and the surface potential above it by up to 0.8 %, and takes 0.46 of the
-   default's time on the 40-house network (0.84 times the solve before wave
-   3). A common `Engine` field next to `image_max_terms` / `image_series_tol`
-   rather than a backend option, because `solve_mutual_*` and
-   `FieldResult.potential` read it too.
+   point form: the dense far-field term is left out, the near image pairs
+   (within 7.5 segment lengths, a segment's own images included) stay
+   Galerkin integrals on the series and the cross-layer path alike, and the
+   continuous switch and the transverse distance stay. It is not the result
+   before wave 3: within the upper layer up to 2.3e-4 from it (the blend of
+   D2). The quadrupole form stays the default. The point form moves
+   networks by 3e-6 … 4.3e-4 (16 house grids 0.4 m above a 1000 / 10 Ω·m
+   interface), a straight wire near the interface by 4e-4 and the surface
+   potential above it by up to 0.8 %, and takes 0.49 of the default's time
+   on the 40-house network (0.91 times the solve before wave 3; the network
+   solves on the cross-layer path). A common `Engine` field next to
+   `image_max_terms` / `image_series_tol` rather than a backend option,
+   because `solve_mutual_*` and `FieldResult.potential` read it too; any
+   other value raises `ValueError` (audit W3R2A-02).
+
+   Audit W3R2A-01 (round 2): the option first kept, on the cross-layer
+   path, the line form of the interface image only, as before wave 3. The
+   own surface and transmitted images of a segment below the interface were
+   then point sources, so a 75 m strip below a 0.5 m top layer read −1.0e-3
+   at a segment length of 2.5 m and −58 % at 37.5 m, and a network with a
+   75 m conductor in two pieces +1.1 % against the default. Every image of
+   the layered correction now keeps its near pairs, and a segment's own
+   images follow the switch of every pair (exact within six segment lengths,
+   blended to 7.5, point beyond — the self pair of the series path): the
+   strip within 1.1e-5 at every segment length, the network within 4e-6.
+   Below thin top layers this costs the near image pairs the option had
+   saved: 1.5 … 2.4 times the solve before wave 3 instead of 1.2 (still
+   0.51 … 0.94 of the default's time). The auditor's variant (every self
+   image at every distance) and the default's tapered diagonal agree with it
+   to 2e-6 on networks and cost up to 14 % more.
+4. **Wires within a fraction of a radius of the interface** (audit
+   W3R2A-03). The image of a wire within $a/20$ of the interface blends into
+   the reduced kernel of the direct pair over a tenth of the wire radius
+   (before: over one radius, whose blended distance peaked at $a/\sqrt 2$
+   and gave a ring 1.75 mm above a 1000 / 30 Ω·m interface +22 %). Z then
+   moves through $\pm a$ of the interface with wiggles of at most 0.17 %
+   against its direction (strips and rings in 1000 / 30 and 30 / 1000 Ω·m;
+   before up to 24 %).
 
 ## References
 

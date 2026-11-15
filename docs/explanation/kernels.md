@@ -211,10 +211,15 @@ multiplied the work by 5.6, and a high contrast made a 40-house network in
 1000 / 30 Ω·m with $h_1$ = 1.5 m, 82 images within reach, 4.2 times the
 solve before wave 3 with numba and 9.7 times without). That network now
 takes 1.8 times the solve before wave 3 with numba and 3.6 times without.
-`Engine.image_far_field = "point"` keeps far images as point sources: 0.84
-times the solve before wave 3 on that network (0.46 times the default),
-1.1 … 1.3 times on house grids. The [performance page](performance.md)
-has the table. `kernel="point"` remains available and reproduces the
+`Engine.image_far_field = "point"` keeps far images as point sources and
+leaves out their far-field term; the near image pairs stay Galerkin
+integrals (audit W3R2A-01). It takes 1.1 … 1.3 times the solve before wave 3
+on house grids within the upper layer. That network solves on the
+cross-layer path (its transformer rods reach below $h_1$): 0.91 times the
+solve before wave 3 and 0.49 times the default with numba. Below thin top
+layers the near image pairs remain, 1.5 … 2.4 times the solve before wave 3
+(0.51 … 0.74 times the default). The [performance page](performance.md) has
+the table. `kernel="point"` remains available and reproduces the
 numbers of 0.15.0.
 
 ## Where each kernel is used
