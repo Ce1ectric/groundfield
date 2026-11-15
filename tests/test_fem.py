@@ -1224,3 +1224,24 @@ def test_the_predicted_node_count_bounds_the_mesh(name) -> None:
     for level, (lines, n) in enumerate(counts):
         predicted = predicted_nodes(*lines, rings, level, inside)
         assert n <= predicted <= 1.15 * n, (level, n, predicted)
+
+
+def test_tutorial_t09_describes_both_models() -> None:
+    """Audit W4A-04: T09 said that ``fem`` refuses every world but coaxial rods
+    and rings and two rods side by side; since part B ``model="auto"`` solves
+    them in three dimensions."""
+    # audit W4A-04
+    import json
+    from pathlib import Path
+
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "docs/tutorials/T09_choosing_an_engine_and_convergence.ipynb"
+    )
+    cells = json.loads(path.read_text(encoding="utf-8"))["cells"]
+    text = "".join("".join(c["source"]) for c in cells)
+    assert "refuses every other world" not in text
+    assert "its conforming model refuses them" not in text
+    assert "three-dimensional model" in text and "fem3d" in text
+    version = "".join(cells[1]["source"])
+    assert "print(gf.__version__)" in version
