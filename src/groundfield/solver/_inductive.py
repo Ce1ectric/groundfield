@@ -751,7 +751,19 @@ def branch_records(
         If an inductive or skin-effect conductor cannot be matched to the
         branches the topology built for it (its inductance or skin effect
         would otherwise be lost without a trace).
+
+    Raises
+    ------
+    ValueError
+        For a cable shield with ``resistance_model="skin"``, which the
+        validator of :class:`~groundfield.conductors.Conductor` rejects but
+        ``model_copy(update=...)`` lets through (user decision Q33, audit
+        W1A-05).
     """
+    for c in conductors:
+        check = getattr(c, "_check_shield_resistance_model", None)
+        if check is not None:
+            check()
     lumped_conductors = _lumped_branch_conductors(
         conductors, cluster_id, finite_branches[:n_lumped_branches]
     )

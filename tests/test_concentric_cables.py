@@ -449,3 +449,73 @@ def test_the_on_axis_rule_is_free_of_order_and_direction() -> None:
     expected = L[np.ix_(perm, perm)] * np.outer(flip, flip)
     cross = labels[perm][:, None] != labels[perm][None, :]
     assert np.array_equal(L_p[cross], expected[cross])
+
+
+# audit W1A-05, user decision Q33
+@pytest.mark.parametrize("route", ["skin_onto_shield", "shield_onto_skin"])
+def test_a_copied_skin_shield_is_rejected_at_solve_time(route: str) -> None:
+    """``model_copy(update=...)`` skips the validator, so a shield with the
+    solid-round skin model can be built that way. The snapshot 6f63deb
+    solved it with the skin impedance of a solid wire on the shield
+    (1 kHz: 0.10588 + 1.03849j Ohm instead of 0.10129 + 1.03966j Ohm) and
+    its own JSON did not load; the solve now raises."""
+    base = dict(
+        name="s",
+        start=(0, 0, DEPTH),
+        end=(LENGTH, 0, DEPTH),
+        start_electrode="a",
+        end_electrode="b",
+        wire_radius=R_SHIELD,
+        cross_section=25e-6,
+        inductance_model="neumann",
+    )
+    if route == "skin_onto_shield":
+        c = Conductor(conductor_type="cable_shield", **base).model_copy(
+            update={"resistance_model": "skin"}
+        )
+    else:
+        c = Conductor(resistance_model="skin", **base).model_copy(
+            update={"conductor_type": "cable_shield"}
+        )
+    w = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    gf.create_electrode(w, "rod", name="a", position=(0, 0, 0.5), length=2.0)
+    gf.create_electrode(w, "rod", name="b", position=(LENGTH, 0, 0.5), length=2.0)
+    w.add_conductor(c)
+    gf.create_source(w, attached_to="a", return_to="b", magnitude=1.0)
+    with pytest.raises(ValueError, match="thin-walled"):
+        gf.create_engine(frequencies=[1000.0]).solve(w)
+
+
+# audit W1A-10, user decision Q33
+def test_buried_lead_says_that_it_is_a_shield() -> None:
+    """``buried_lead()`` builds a cable shield (50 nH/m less self inductance
+    than a solid wire, a thinner conductor on its axis is its core); its
+    documentation says so."""
+    from groundfield.generators.measurement import MeasurementLeadConfig, buried_lead
+
+    lead = buried_lead()
+    assert lead.conductor_type == "cable_shield"
+    doc = " ".join(buried_lead.__doc__.split())
+    assert "cable shield" in doc and "50 nH/m" in doc and "core" in doc
+    field_doc = MeasurementLeadConfig.model_fields["conductor_type"].description
+    assert "thin-walled tube" in field_doc
+
+
+# audit W1A-09, user decision Q33
+def test_the_shield_marker_alone_keeps_the_internal_inductance() -> None:
+    """``shields=`` marks the inside reading only; the self terms follow
+    ``include_internal`` (documented): without ``include_internal=~shields``
+    the coax keeps the 50 nH/m of a solid shield, 31.97 uH."""
+    seg = np.concatenate([_axis_pieces(1), _axis_pieces(1)])
+    radii = np.array([R_CORE, R_SHIELD])
+    shields = np.array([False, True])
+    s = np.array([1.0, -1.0])
+    marker_only = build_inductance_matrix(seg, radii, image="none", shields=shields)
+    both = build_inductance_matrix(
+        seg, radii, image="none", shields=shields, include_internal=~shields
+    )
+    assert float(s @ marker_only @ s) - float(s @ both @ s) == pytest.approx(
+        MU0 * LENGTH / (8 * math.pi), rel=1e-12
+    )
+    doc = " ".join(build_inductance_matrix.__doc__.split())
+    assert "include_internal=~shields" in doc and "31.97" in doc
