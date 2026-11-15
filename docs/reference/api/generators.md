@@ -286,6 +286,21 @@ cable's point may lie that far off the wire it crosses; audit R4A-05).
 `LvNetworkLayout.plot(world=...)` draws the drops as built (tap to
 foundation contact) instead of the layout's centroid stubs.
 
+**Coordinates.** Both generators build in local coordinates around the
+origin. `SubstationConfig.position` moves the substation only: the
+buildings, cabinets and the measurement stay around (0, 0), so a substation
+placed at projected coordinates builds a world that mixes projected and
+local coordinates (10 houses with the substation at the UTM origin: one PEN
+cable of 33 118 km), which `diagnose()` reports and the solve warns about
+with `MixedCoordinatesWarning`; `RadialTrunkTopology` then drops every
+building and fails to build (audit W2R2-07). To place a network at
+projected coordinates, build it around the origin and translate the whole
+built world — every electrode, conductor and junction by the same offset;
+groundfield has no public helper for that, and the solve does not need it,
+since every result depends on coordinate differences only (the translated
+network of 10 houses has the input impedance of the local one to twelve
+digits).
+
 **Measurement set-up.** A fall-of-potential measurement is a
 two-terminal source between the earthing system and an auxiliary
 electrode; the current and probe leads end on leakage-free junctions at

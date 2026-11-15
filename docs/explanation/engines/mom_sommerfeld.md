@@ -21,8 +21,11 @@ it is the only kernel there is. The discretisation and the current model
 are those of `mom`, so it is not an independent check of the
 point-matching scheme. Concrete-encased wires carry the per-segment shell
 term of `mom` (ADR-0012, since 2026.11): on two-layer soil the two engines
-agree to about $10^{-8}$ with and without shells ($10^{-9}$ …
-$1.5\cdot10^{-8}$ for a 10 m grid in four soils, audit W2B-07; the
+agree to about $10^{-8}$ with and without shells where neither engine warns
+($10^{-9}$ … $1.5\cdot10^{-8}$ for a 10 m grid in four soils, audit W2B-07;
+$9\cdot10^{-8}$ with the layer interface 0.2 m below the wires, under
+`PointKernelInterfaceWarning`, and 9 % for a truncated series under
+`SeriesTruncationWarning`, audit W2R2-09; the
 agreement of the two kernels, the shell increments agree to
 $1.4\cdot10^{-10}$), and an encased ring in three layers rises by exactly
 $C/(2\pi r)$ over the bare ring of the outer radius.

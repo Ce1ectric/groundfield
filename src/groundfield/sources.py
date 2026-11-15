@@ -67,16 +67,29 @@ inductive coupling and layered soil (to round-off,
   terminals (or to remote earth); the solve returns the current through
   it. With $Z_q \\ne 0$ it is a passive impedance.
 * $Z_q$ is evaluated at every solved frequency; $j\\omega L$ makes the
-  system complex, so a galvanic world whose sources carry an inductance
-  is solved once per frequency (otherwise once for all frequencies).
-  Before 2026.11 a series impedance was modelled as a junction at the
-  source terminal and a finite conductor to the electrode
+  constraint rows complex. A galvanic world whose sources carry an
+  inductance is solved once per frequency in the image family (its
+  owner-level system is small), while ``mom`` and ``mom_sommerfeld``
+  factorise their segment system once and solve one V × V system per
+  frequency for the V source currents (exact; audit W2R2-02: ×1.02 the
+  R-only solve at 20 frequencies on 1 488 segments, ×28 before). Before
+  2026.11 a series impedance was modelled as a junction at the source
+  terminal and a finite conductor to the electrode
   (``lumped_series_resistance_ohm``); the two give the same solution to
   round-off.
+* For $R \\gg Z_E$ (the impedance the source sees) a current source
+  $U/R$ is the better model: the potentials of the voltage solve and
+  ``input_impedance()`` ($U/I - Z_q$) lose about $\\log_{10}(R/Z_E)$
+  digits (2.7e-6 relative at $R = 10^{12}$ Ω on a 36 Ω rod, ``image``;
+  audit W2R2-10). $R$ and $L$ are 0 or at least the smallest normal
+  float, 2.2e-308: a subnormal value is rejected (it turned the solve
+  into ``nan``).
 * Rejected before any numerics run (:meth:`World.check
   <groundfield.world.World.check>`): a voltage source whose terminals
   are bonded into one cluster by ideal conductors (short circuit, with
-  or without $Z_q$), and voltage sources without internal resistance
+  or without $Z_q$; with $Z_q$ its current $U/Z_q$ would circulate
+  through the bond and the source, none through the soil), and voltage
+  sources without internal resistance
   that form a loop through ideal bonds or remote earth (two of them from
   one cluster to remote earth, a ring of two-terminal ones) — the loop
   fixes one potential difference twice. A source with
@@ -101,6 +114,11 @@ chain.
 Assignments are validated (``validate_assignment``), so a source
 handle edited between two solves (``src.magnitude = 20.0``) cannot
 take a non-finite value.
+
+A :class:`VoltageSource` (and a
+:class:`~groundfield.solver.result.SourceRecord`) pickled before 2026.11
+unpickles with ``internal_resistance_ohm = internal_inductance_h = 0``,
+the ideal source it was, as its JSON loads (audit W2R2-01).
 """
 
 from __future__ import annotations
@@ -210,9 +228,9 @@ class VoltageSource(_SourceBase):
         ``numpy.finfo(float).tiny``, 2.2e-308; a subnormal $R$ turned the
         solve into ``nan``, audit W2R2-10). Default 0. For $R \\gg Z_E$
         (the impedance the source sees) a current source $U/R$ is the
-        better model: the potentials of the voltage solve can lose about
-        $\\log_{10}(R/Z_E)$ digits (2.7e-6 relative at $R = 10^{12}$ Ω
-        on a 36 Ω rod, ``image``).
+        better model: the potentials of the voltage solve and
+        ``input_impedance()`` lose about $\\log_{10}(R/Z_E)$ digits
+        (2.7e-6 relative at $R = 10^{12}$ Ω on a 36 Ω rod, ``image``).
     internal_inductance_h
         Internal series inductance $L$ in H; finite, ≥ 0, 0 or normal
         like $R$. Default 0. It enters as $j\\omega L$ at each solved
