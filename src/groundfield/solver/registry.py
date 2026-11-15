@@ -392,7 +392,8 @@ class FemOptions(BackendOptions):
     is a conforming finite-element model (user decision Q37): axisymmetric
     for rods on one axis and rings around it, three-dimensional for every
     other world (``model``, ``source_radius``, ``growth``,
-    ``concrete_resistivity``; the optional ``fem3d`` extra). The controls of
+    ``concrete_resistivity``, ``max_nodes_3d``, ``max_ports_3d``; the
+    optional ``fem3d`` extra). The controls of
     the equivalent-hemisphere mesh (``n_radial``, ``n_axial``,
     ``z_far_factor``) are gone.
     """
@@ -453,7 +454,22 @@ class FemOptions(BackendOptions):
             "Resource limit of the three-dimensional model (count): the node "
             "count of its finer mesh, predicted before meshing and counted "
             "before the finer level is built (ResourceLimitError above it). "
-            "The 3-D solve needs 3.0 ... 3.4 GB per million nodes."
+            "The 3-D solve adds about 2.9 GB per million nodes to the peak "
+            "memory of the process (3.0 ... 3.1 GB with the process itself), "
+            "so about 6 GB at the default."
+        ),
+    )
+    max_ports_3d: int = Field(
+        default=100,
+        gt=0,
+        description=(
+            "Resource limit of the three-dimensional model (count): the number "
+            "of ports, every electrode and every leaking piece of a galvanic "
+            "distributed conductor, checked before meshing (ResourceLimitError "
+            "above it). Every port costs one conjugate-gradient solve per mesh "
+            "level, about 0.9 s per port and level at 600 000 nodes of the "
+            "finer mesh: 100 ports take about 3 minutes of port solves there "
+            "and about 11 minutes at max_nodes_3d."
         ),
     )
     model: Literal["auto", "axisymmetric", "3d"] = Field(

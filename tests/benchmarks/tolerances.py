@@ -210,10 +210,13 @@ BENCHMARKS: dict[str, Benchmark] = {
             "fem": Bound(
                 None,
                 "abs(Z_AB/Z_BA - 1)",
-                "refused",
-                "excluded: rod and ring on different axes, which the axisymmetric "
-                "model refuses (user decision Q37); the port matrix of coaxial "
-                "electrodes is symmetric to round-off",
+                "3-D model, run once outside the suite (stream fw4int): 0 in all "
+                "three soils, its port matrix symmetric to 2.2e-16; Z_BA 0.67 / "
+                "0.96 % below the floating-port mom (h₁ = 5 / 2 m)",
+                "excluded from the benchmark run for its cost: rod and ring on "
+                "different axes are not axisymmetric, so fem solves them with its "
+                "3-D model (the fem3d extra; user decision Q37), 0.5 … 1.2 minutes "
+                "and up to 2 GB per solve, two solves per soil",
             ),
         },
     ),
@@ -263,9 +266,13 @@ BENCHMARKS: dict[str, Benchmark] = {
             "fem": Bound(
                 None,
                 _REL,
-                "refused",
-                "excluded: rods off the ring's axis, which the axisymmetric model "
-                "refuses (user decision Q37; up to 2026.11 -35 % / -45 %, radii summed)",
+                "3-D model, run once outside the suite (stream fw4int): +0.62 % / "
+                "+0.84 % against mom (error estimate 3.9e-3 / 4.3e-3; image / "
+                "image_2layer +0.81 / +1.97 % above fem)",
+                "excluded from the benchmark run for its cost: rods off the ring's "
+                "axis are not axisymmetric, so fem solves the world with its 3-D "
+                "model (the fem3d extra; user decision Q37), 2 … 3.5 minutes and up "
+                "to 3.8 GB per soil (up to 2026.11 -35 % / -45 %, radii summed)",
             ),
         },
     ),

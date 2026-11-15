@@ -70,7 +70,20 @@ half-plane $(s, z)$ with the weight $2\pi s$:
   (32 nodes at level 0). The block keeps clear of the surface, the axis,
   the other electrodes and every interface more than $1.05\,a$ from the
   wire axis; a nearer interface (a ring on it, or within its radius) is
-  cut into the block's elements, so every element lies in one layer.
+  cut into the block's elements, so every element lies in one layer. Such
+  a block has 64 instead of 8 tensor intervals per side: the gap between
+  the wire and the interface, and the narrow wedge where the interface
+  cuts the wire near its edge, make the field vary over
+  $\sqrt{2a\,|d - a|}$ ($0.14\,a$ at $d = 1.01\,a$). With the default
+  block the levels converged at first order and not monotonically there
+  (up to −6.0e-3 next to a layer 33 times more conductive, the error
+  estimate below the error in 7 of 14 cases, audit W4A-01); refined, the
+  default lies within 3.3e-4 of auditor W4A's boundary elements of the
+  solid torus at $d = 0.95 \ldots 1.05\,a$ and the estimate exceeds the
+  error in all 14 cases, at about four times the ring's nodes (evidence
+  `e06` of stream fw4axi). Neither a graded O-grid nor a block shrunk
+  clear of the interface alone resolves this: the interface cuts a wire
+  with $d < a$, and a shrunk block keeps the coarse lateral spacing.
 - **Truncation.** A box at `r_far_factor` (1000) characteristic lengths —
   the electrodes' size, or the depth of the deepest interface times the
   layer contrast if larger (a resistive bottom keeps the current in the
@@ -82,21 +95,41 @@ half-plane $(s, z)$ with the weight $2\pi s$:
   port conductance matrix is the Schur complement of the stiffness matrix
   onto the ports (one sparse LU factorisation for all ports).
 - **Refinement and extrapolation.** Level $\ell$ bisects every interval of
-  the level-0 lines $\ell$ times (nested tensor spaces: the resistance of
-  one level converges monotonically from below). The default solves levels
-  0 and 1 and extrapolates the port conductance matrix with the observed
-  second order (Richardson); the relative difference between the
-  extrapolated and the finer level is reported as
-  `metadata["fem_error_estimate"]`.
+  the level-0 lines $\ell$ times. The tensor part of the spaces is nested,
+  the O-grid of a ring is not (its layers move with the level, the
+  inscribed polygon grows): one level converges at second order and, in
+  every case tested away from interfaces, from below — observed, not
+  guaranteed (audit W4A-09). The default solves levels 0 and 1 and
+  extrapolates the port conductance matrix with the observed second order
+  (Richardson); the relative difference between the extrapolated and the
+  finer level is reported as `metadata["fem_error_estimate"]` (about the
+  finer level's error, 0.88 … 0.99 of it in 36 cases of auditor W4A; NaN
+  with `extrapolate=False`, audit W4A-02).
+- **Resource guard.** `FemOptions.max_nodes` (2 million nodes of the finer
+  mesh, about 8 GB: the axisymmetric solve needs about 4 GB per million
+  nodes, 0.82 / 3.15 / 5.15 GB at 0.20 / 0.80 / 1.22 million measured with
+  `/usr/bin/time -l`, evidence `e02` of stream fw4axi; audit W4A-05)
+  against a prediction from the mesh lines before anything is assembled.
+  The prediction counts the O-grid exactly and bounds the cut of an
+  interface, so it errs high (audit W4A-10).
 
 Every other world — electrodes other than rods and rings, a rod or ring
 off the common axis, galvanic distributed conductors (their leakage runs
-along their route), touching electrodes and a ring wire that reaches
-within 5 % of its radius to the soil surface (the solid torus must fit) —
-goes to the three-dimensional model of section 5 under the default
+along their route), touching electrodes, a ring wire that reaches within
+5 % of its radius to the soil surface (the solid torus must fit) and a
+ring without room for its mesh block (within about a wire radius,
+diagonally, of a rod's end edge; audit W4A-03) — goes to the
+three-dimensional model of section 5 under the default
 `FemOptions.model = "auto"`. With `model = "axisymmetric"` it is refused
 with `BackendCapabilityError`, naming the backends that solve it. (Part A
-alone, before part B, refused every such world.)
+alone, before part B, refused every such world.) The common axis has a
+tolerance of 1e-3 of the smallest wire radius or surface gap between two
+electrodes (at least 1e-12 of the world's size): the resistance is even
+in the offset $\delta$, so the axisymmetric reading is off by
+$\kappa(\delta/L)^2$ with $|\kappa| \le$ 6e-4 for $L$ the wire radius and
+$\le$ 1.1e-2 for $L$ the gap (`image` and `mom`, three worlds), below 1e-6.
+Up to audit W4A-08 it was 1e-9 of the world's size (3 nm): a rod 1 µm off
+a ring's axis went to the 3-D model (40.7 s, 2.35 GB, −1.43e-3).
 
 ### 3. Network and results on the shared pipeline
 
@@ -234,6 +267,17 @@ applies (bit for bit) and takes the 3-D model otherwise; `"3d"` forces it,
   torus, its levels on either side of the torus; audit W4B-02). Resolved
   concrete converges at first order ($r \approx 2$): there the estimate is
   no bound.
+- **Thin wire next to an interface.** The smoothed line source shares the
+  thin-wire limit of the integral engines next to a contrasting interface
+  (+9.2e-3 against the solid torus for a ring 3 radii above a 1000 / 30
+  Ω·m interface, beyond its estimate; evidence `f10` of stream fw4fem3d,
+  audit W4B-02). The dispatch therefore emits `InterfaceContactWarning`
+  for a horizontal wire within the reach of an interface (3.5 radii at a
+  contrast of 33; the table of the reach is in the warnings reference)
+  before the 3-D model runs, as the integral engines do (audit W4A-07);
+  the axisymmetric model resolves the wire and does not warn. The 3-D
+  model's own guard refuses bare wires closer than about 2.8 radii (the
+  disc of the source must lie in one layer).
 - **Ports and network.** Every electrode is one port, every leaking piece
   of a galvanic distributed conductor one more; `_network.solve_network`
   takes the pipeline's topology of those pieces, the rest is section 3.
@@ -260,7 +304,8 @@ applies (bit for bit) and takes the 3-D model otherwise; `"3d"` forces it,
   evidence `f12` of stream fw4fem3d). The per-wire shells keep their place
   as the default (no correction rule).
 - **Resource guard.** Before anything is meshed: the display segments
-  against `Engine.max_segments`, the number of ports against 100 (every
+  against `Engine.max_segments`, the number of ports against
+  `FemOptions.max_ports_3d` (default 100; every
   port is one conjugate-gradient solve per level, 0.93 … 0.96 s per port
   and level at 583 000 nodes, auditor W4B and evidence `f14` of stream
   fw4fem3d; audit W4B-08) and `FemOptions.max_nodes_3d` (2 million nodes
@@ -284,7 +329,8 @@ applies (bit for bit) and takes the 3-D model otherwise; `"3d"` forces it,
 
 - Every `fem` number changes (both stored golden cases by −4.6 %; the
   benchmark tables of the fem page). `fem` agrees with independent
-  references to about 1e-4 at a cost of a second per solve
+  references to about 1e-4 (3.3e-4 for a ring wire within 1.05 radii of an
+  interface) at a cost of a second per solve
   ([fem page](../explanation/engines/fem.md#validation)).
 - `fem` solves every world again: the axisymmetric model where it applies
   (about 1e-4), the 3-D model otherwise (about 2e-3, with the optional
@@ -293,7 +339,8 @@ applies (bit for bit) and takes the 3-D model otherwise; `"3d"` forces it,
   and every conductor model (registry capabilities).
 - `FemOptions` changes: `refinement`, `extrapolate`, `r_far_factor`
   (default 1000), `far_field`, `max_nodes`; for the 3-D model `model`,
-  `source_radius`, `growth`, `concrete_resistivity`, `max_nodes_3d`.
+  `source_radius`, `growth`, `concrete_resistivity`, `max_nodes_3d`,
+  `max_ports_3d`.
   The 2026.11 fields `n_radial`,
   `n_axial`, `z_far_factor` are gone; as keyword arguments of `solve_fem`
   (0.15.0) they warn and have no effect. `equivalent_hemisphere_radius` is

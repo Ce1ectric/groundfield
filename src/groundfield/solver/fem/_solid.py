@@ -30,7 +30,7 @@ which converges at first order (audit W4B-02).
 
 Before anything is meshed the solve checks the display segments against
 ``Engine.max_segments`` and the number of ports against
-:data:`MAX_PORTS_3D` (audit W4B-08).
+``FemOptions.max_ports_3d`` (default :data:`MAX_PORTS_3D`; audit W4B-08).
 
 The model needs the optional ``fem3d`` extra (``scikit-fem`` and
 ``pyamg``); without it the solve raises :class:`ImportError` naming the
@@ -98,8 +98,8 @@ PRISM_DIVISIONS = 8.0
 #: fw4fem3d). One side cannot match both radii; the prism keeps the outer one.
 SQUARE_CONFORMAL_RADIUS = 0.5901702
 
-#: The 3-D model refuses worlds with more ports than this before meshing
-#: (audit W4B-08). Every electrode and every leaking piece of a galvanic
+#: Default of ``FemOptions.max_ports_3d``: the 3-D model refuses worlds with
+#: more ports than this before meshing (audit W4B-08). Every electrode and every leaking piece of a galvanic
 #: distributed conductor is a port, and every port costs one
 #: conjugate-gradient solve per mesh level: 0.93 … 0.96 s per port and level
 #: at 583 000 nodes of the finer mesh (a galvanic chain of 18 and 34 ports;
@@ -364,7 +364,8 @@ def solid_earth(
         both concrete models are compared on the same mesh.
     max_ports
         Resource limit: the number of ports (electrodes and leaking
-        conductor pieces), checked before meshing (:data:`MAX_PORTS_3D`).
+        conductor pieces), checked before meshing (``FemOptions.max_ports_3d``,
+        default :data:`MAX_PORTS_3D`).
 
     Raises
     ------
@@ -426,13 +427,15 @@ def solid_earth(
         minutes = n_ports * PORT_SECONDS_PER_NODE * predicted_fine / 60.0
         raise ResourceLimitError(
             f"Backend 'fem': the three-dimensional model would solve {n_ports} "
-            f"ports, above its limit of {max_ports} ports (every electrode and "
-            "every leaking piece of a galvanic distributed conductor is a port, "
-            "and every port one conjugate-gradient solve per mesh level: about "
+            f"ports, above its limit of {max_ports} ports "
+            "(FemOptions.max_ports_3d; every electrode and every leaking piece "
+            "of a galvanic distributed conductor is a port, and every port one "
+            "conjugate-gradient solve per mesh level: about "
             f"{minutes:.0f} minutes at the predicted {predicted_fine} nodes of the "
             "finer mesh). Coarsen the galvanic conductors "
-            "(discretize_segment_length), or use an integral backend "
-            "(image, image_2layer, mom)."
+            "(discretize_segment_length), use an integral backend "
+            "(image, image_2layer, mom), or raise FemOptions.max_ports_3d to "
+            "solve it on purpose."
         )
     if predicted_fine > max_nodes:
         raise ResourceLimitError(

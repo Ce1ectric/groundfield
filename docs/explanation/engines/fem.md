@@ -6,12 +6,12 @@
     |---|---|
     | Soil | any number of horizontal layers |
     | Electrodes | every kind, bare or encased (ADR-0012); rods on one vertical axis and rings around it by the axisymmetric model, every other world by the three-dimensional model (the optional `fem3d` extra) |
-    | Axisymmetric model | the electrodes as they are (solid cylinders and tori), linear triangles on a graded tensor mesh conforming to every surface and interface; port resistance within about 1e-4 of independent references |
+    | Axisymmetric model | the electrodes as they are (solid cylinders and tori), linear triangles on a graded tensor mesh conforming to every surface and interface; port resistance within about 1e-4 of independent references (3.3e-4 for a ring wire within 1.05 radii of an interface) |
     | 3-D model | thin wires as smoothed line sources with an analytic radius correction, linear tetrahedra on an isotropic bisection mesh, layer interfaces (and resolved concrete) as partially penalised immersed elements; within about 2e-3 of the axisymmetric model away from layer interfaces and other wires (by about $R/0.8$, $R$ = `source_radius`); next to a strongly contrasting interface the thin-wire error applies |
     | Far field | exact monopole Dirichlet-to-Neumann (Robin) condition on a box 1000 lengths away |
     | Extrapolation | Richardson over two nested levels, error estimate reported |
     | Network | the shared pipeline: conductors (lumped, distributed isolated and galvanic), junctions, `return_to`, voltage sources, inductive branches |
-    | Options | `FemOptions`: `model`, `refinement`, `extrapolate`, `r_far_factor`, `far_field`, `max_nodes`, `max_nodes_3d`, `source_radius`, `growth`, `concrete_resistivity` |
+    | Options | `FemOptions`: `model`, `refinement`, `extrapolate`, `r_far_factor`, `far_field`, `max_nodes`, `max_nodes_3d`, `max_ports_3d`, `source_radius`, `growth`, `concrete_resistivity` |
     | Status | **experimental** (`ExperimentalBackendWarning` once per process), a reference backend |
 
 `fem` solves the volume form of the current-flow problem: it meshes the
@@ -65,9 +65,12 @@ faces, a ring the solid torus of its `wire_radius`; the current density
 along and around them follows from the field (more at the rod ends, more on
 the side of a ring that faces a conductive layer). The **port conductance
 matrix** $G$, $\mathbf I = G\,\mathbf U$, is the earth part of the solve:
-symmetric, positive definite, and by the minimum-energy principle the
-discrete $G$ of one mesh is larger than the exact one (the resistance
-converges from below).
+symmetric and positive definite. By the minimum-energy principle the
+discrete $G$ of a mesh that holds the electrodes exactly (a rod is a
+rectangle of mesh lines) is larger than the exact one, so its resistance
+lies below the exact one; a ring's O-grid inscribes a polygon in the
+wire's circle, so for rings this is observed, not guaranteed (see
+*Refinement and extrapolation*; audit W4A-09).
 
 An **encased electrode** (`concrete_shell_coefficient_ohm_m` $= C$,
 [concrete shells](../concrete-shells.md)) keeps its metal at $U_k$ and
@@ -97,7 +100,22 @@ as in `mom`.
   axis, the other electrodes and of every interface more than $1.05\,a$
   from the wire axis; a nearer interface — a ring on it or within its
   radius — is cut into the block's elements, so every element lies in one
-  layer.
+  layer. A ring wire within $1.05\,a$ of an interface has 64 instead of 8
+  tensor intervals per side of its block: the gap between the wire and the
+  interface, and the narrow wedge where the interface cuts the wire near
+  its edge, make the field vary over $\sqrt{2a\,|d - a|}$ ($0.14\,a$ at
+  $d = 1.01\,a$, $d$ the distance of the wire axis from the interface).
+  With the default block the levels converged at first order and not
+  monotonically there (up to −6.0e-3 next to a layer 33 times more
+  conductive, the error estimate below the error in 7 of 14 cases; audit
+  W4A-01). Now the default lies within 3.3e-4 of an independent
+  boundary-element model of the solid torus (auditor W4A) at
+  $d = 0.95 \ldots 1.05\,a$ in all 14 cases and the estimate
+  (7.5e-4 … 1.9e-3) exceeds the error in each, at about four times the
+  ring's nodes (46 203 / 182 605 at levels 0 / 1) and 2.4 … 3.5 s
+  (evidence `e06` of stream fw4axi); a ring on the interface ($d = 0$)
+  reads −1.1e-5 … −1.2e-5 against the same model (evidence `e05` of
+  stream fw4int).
 - **Truncation.** A box at `r_far_factor` = 1000 characteristic lengths
   (the electrodes' depth and radius, or the depth of the deepest interface
   times the layer contrast $\max\rho/\min\rho$ if larger, since a
@@ -110,19 +128,29 @@ as in `mom`.
   the Schur complement of the stiffness matrix onto the ports, one sparse
   LU factorisation for all of them.
 - **Refinement and extrapolation.** Level $\ell$ bisects every interval of
-  the level-0 lines $\ell$ times (and doubles the O-grid), so the tensor
-  part of the spaces is nested and the resistance of one level rises
-  monotonically to the limit. By default `fem` solves levels 0 and 1 and
+  the level-0 lines $\ell$ times (and doubles the O-grid). The tensor part
+  of the spaces is nested, the O-grid of a ring is not (its layers move
+  with the level, the inscribed polygon grows): one level converges at
+  second order and, in every case tested away from interfaces, from below
+  — observed, not guaranteed. By default `fem` solves levels 0 and 1 and
   extrapolates $G$ with the observed second order (Richardson,
   $G = G_1 + (G_1 - G_0)/3$); `metadata["fem_error_estimate"]` is the
   largest relative difference of a port's resistance between the
-  extrapolated and the finer level — a bound of the finer level's error,
-  and some ten to a hundred times the error of the extrapolated value.
-  `FemOptions(refinement=k)` starts at level $k$; `extrapolate=False`
-  solves one level (a lower bound of the resistance).
+  extrapolated and the finer level — about the finer level's error (0.88
+  … 0.99 of it in 36 cases of auditor W4A, 0.80 … 1.0 next to an
+  interface cut into a ring's block) and 10 … 130 times the error of the
+  extrapolated value, which it bounds while both levels lie on the same
+  side of the converged value and the finer level's error is at most
+  1/2.5 of the coarser one's (1/3.9 observed). `FemOptions(refinement=k)`
+  starts at level $k$; `extrapolate=False` solves one level, usually
+  below the converged value, and reports `fem_error_estimate` as NaN
+  (audit W4A-02).
 
 Convergence (one level without extrapolation; deviation from the
-independent reference; time on an M1 Pro core with other jobs running):
+independent reference; time on an M1 Pro core with other jobs running;
+the ring on $h_1$ re-measured with its refined block of audit W4A-01,
+evidence `e05` of stream fw4int: 45 360 … 2 875 264 nodes at levels 0 … 3,
+the level 3 in 156 s and 8.2 GB):
 
 | World | level 0 | level 1 | level 2 | level 3 | observed order | default (0/1 extrapolated) |
 |---|---|---|---|---|---|---|
@@ -130,7 +158,7 @@ independent reference; time on an M1 Pro core with other jobs running):
 | rod 0.5 … 3.5 m, $a$ = 8 mm, 100 Ω·m (solid-rod FV) | −0.42 % | −0.11 % | −0.027 % | −0.0069 % | 1.98 / 1.99 | −1.4e-5 |
 | the rod through $h_1$ = 2 m, 30 / 1000 Ω·m (FV) | −0.40 % | −0.10 % | −0.025 % | −0.0061 % | 1.98 / 1.99 | −1.0e-5 |
 | rod 0.5 … 5 m with its tip on $h_1$, 1000 / 30 Ω·m (FV) | −0.43 % | −0.11 % | −0.029 % | −0.0075 % | 1.96 / 1.95 | −4.1e-5 |
-| ring ($a$ = 5 mm) on $h_1$ = 2 m, 30 / 1000 Ω·m (Hankel ring) | −0.51 % | −0.13 % | −0.026 % | −0.0014 % | 1.97 / 2.00 | +4.7e-5 |
+| ring ($a$ = 5 mm) on $h_1$ = 2 m, 30 / 1000 Ω·m (solid-torus boundary elements) | −0.44 % | −0.11 % | −0.028 % | −0.0069 % | 1.98 / 2.00 | −1.1e-5 |
 | the ring 1 cm above $h_1$, 1000 / 30 Ω·m (Hankel ring + proximity) | −0.69 % | −0.18 % | −0.049 % | −0.015 % | 1.98 / 1.96 | −7.0e-5 |
 | ring in three layers 100 / 1000 / 30 Ω·m (Hankel ring) | −0.48 % | −0.12 % | −0.034 % | −0.011 % | 1.97 / 2.00 | −5.2e-5 |
 
@@ -138,11 +166,13 @@ Mesh size and cost: a ring has 7 341 / 28 934 nodes at levels 0 / 1, a
 3 m rod 18 868 / 74 871, a ring with a central rod in two layers 56 079 /
 223 112; the default solve takes 0.20 s, 0.58 s and 2.0 s (best of three),
 `refinement=1` 12 s for the last, level 3 of a rod through an interface
-2.4 million nodes and 36 s. The error estimate of the finer level
-($1.0 \ldots 1.7 \cdot 10^{-3}$ in these cases) matches its actual error
-within 5 %. The truncation is converged: the box at 30, 100, 300 … 10 000
-characteristic lengths moves a rod over 30 / 10 000 Ω·m by at most 4e-5
-(5e-6 from 100 on), a grounded box at the default size by 7e-5.
+2.4 million nodes and 36 s (above the default `max_nodes`). The error
+estimate of the finer level ($1.0 \ldots 1.7 \cdot 10^{-3}$ in these
+cases) is 0.88 … 0.99 of its actual error in the 36 cases of auditor W4A
+(0.88 for a rod head on a 30 / 10 000 Ω·m interface). The truncation is
+converged: the box at 30, 100, 300 … 10 000 characteristic lengths moves a
+rod over 30 / 10 000 Ω·m by at most 4e-5 (5e-6 from 100 on), a grounded
+box at the default size by 7e-5.
 
 ## Network, sources and results
 
@@ -176,14 +206,24 @@ solves projected coordinates in a local frame.
 ## Guards
 
 - **The 3-D model instead** (`FemOptions.model="auto"`): an electrode
-  other than a rod or a ring; a rod or a ring off the common axis (to 1e-9
-  of the world's size); a galvanic distributed conductor (it leaks along
-  its route); rods that touch or overlap on the axis, a ring that touches a
-  rod or another ring, a ring wire that reaches within 5 % of its radius to
-  the soil surface (the solid torus must fit). With
-  `FemOptions.model="axisymmetric"` these worlds are refused
+  other than a rod or a ring; a rod or a ring off the common axis; a
+  galvanic distributed conductor (it leaks along its route); rods that
+  touch or overlap on the axis, a ring that touches a rod or another ring,
+  a ring wire that reaches within 5 % of its radius to the soil surface
+  (the solid torus must fit), a ring without room for its mesh block
+  (within about a wire radius, diagonally, of a rod's end edge; audit
+  W4A-03). With `FemOptions.model="axisymmetric"` these worlds are refused
   (`BackendCapabilityError`, naming the backends whose own checks accept
   the world).
+- **The common axis** has a tolerance of 1e-3 of the smallest wire radius
+  or surface gap between two electrodes in the meridian plane (at least
+  1e-12 of the world's size). The resistance is even in the offset
+  $\delta$, so the axisymmetric reading is off by $\kappa(\delta/L)^2$:
+  $|\kappa| \le$ 6e-4 for $L$ the wire radius and $\le$ 1.1e-2 for $L$ the
+  gap (`image` and `mom` on the same discretisations, three worlds), below
+  1e-6 at the tolerance. Up to audit W4A-08 it was 1e-9 of the world's
+  size (3 nm): a rod 1 µm off a ring's axis went to the 3-D model (40.7 s,
+  2.35 GB, −1.43e-3; evidence `e01` of stream fw4axi).
 - **Error** (`ValueError`, before anything else): an electrode, driven or
   passive, at or above the soil surface, in the surface plane
   ($2z \le a$) or reaching above it, and a galvanic distributed conductor
@@ -191,10 +231,15 @@ solves projected coordinates in a local frame.
   rod with its head at $z = 0$ is the ordinary driven rod.
 - **Error** (`ResourceLimitError`): the node count of the finer mesh,
   predicted from its lines before anything is assembled, above
-  `FemOptions.max_nodes` (4 000 000; level 3 of a rod has about 2.4
-  million). The display segments of the point sources count against
-  `Engine.max_segments` like the segments of every backend (a unit error
-  of `segment_length` fails before anything is allocated).
+  `FemOptions.max_nodes` (2 000 000 nodes, about 8 GB: the axisymmetric
+  solve needs about 4 GB per million nodes of the finer mesh — 0.82 /
+  3.15 / 5.15 GB at 0.20 / 0.80 / 1.22 million, `/usr/bin/time -l`,
+  evidence `e02` of stream fw4axi; level 3 of a rod, 2.4 million, needs it
+  raised). The prediction counts the O-grid exactly and errs high
+  (+0.7 … +11 % in five worlds; audit W4A-10). The display segments of
+  the point sources count against `Engine.max_segments` like the segments
+  of every backend (a unit error of `segment_length` fails before anything
+  is allocated).
 - The remedy of every refusal comes from the other backends' own checks:
   a backend that a setting of the engine would let solve the world is
   named with that setting (a larger `Engine.max_segments`, a finer
@@ -207,13 +252,13 @@ solves projected coordinates in a local frame.
 |---|---|---|
 | Electrodes | axisymmetric model: rods on one vertical axis, horizontal rings centred on it (any number, not touching) | the 3-D model (`model="auto"`), or `BackendCapabilityError` with `model="axisymmetric"` |
 | Ring wire | axisymmetric model: its top deeper than 5 % of the wire radius | the 3-D model |
-| 3-D model | wires whose disc of radius `source_radius` lies in the soil and in one layer; at most 100 ports (electrodes and leaking pieces of galvanic conductors); the `fem3d` extra | `BackendCapabilityError` / `ResourceLimitError` before meshing / `ImportError` |
+| 3-D model | wires whose disc of radius `source_radius` lies in the soil and in one layer; at most `FemOptions.max_ports_3d` ports (100; electrodes and leaking pieces of galvanic conductors); the `fem3d` extra | `BackendCapabilityError` / `ResourceLimitError` before meshing / `ImportError` |
 | Soil | any number of horizontal layers; any contrast in the axisymmetric model, up to about 300 tested in the 3-D model | 3-D model: `BackendCapabilityError` when its conjugate gradients do not converge (a rod through a 1 / 1000 Ω·m interface), naming the axisymmetric model and the integral engines |
 | Concrete shells | per-length coefficient on rods and rings | — |
 | Conductors | lumped, inductive, skin effect, isolated distributed chains; galvanic distributed chains in the 3-D model | — |
 | Concrete | per-wire coefficient (both models); resolved prisms in the 3-D model (axis-aligned straight wires) | `BackendCapabilityError` for other wires |
-| Accuracy | axisymmetric: port resistance about 1e-4 at the default; 3-D: about 2e-3 away from interfaces and other wires (by about $R/0.8$), the error estimate a bound while the ratio of the two levels' errors is at least 2.5; next to a strongly contrasting interface the thin-wire error (see *Validation of the 3-D model*) | axisymmetric: raise `FemOptions.refinement`; 3-D: a smaller `source_radius` or `growth` with a larger `max_nodes_3d` (`refinement` multiplies its nodes by eight: the AP1 station would need about 11.5 million), or one of the integral engines as the second method |
-| Mesh size | `FemOptions.max_nodes` (axisymmetric), `max_nodes_3d` (3-D) | `ResourceLimitError` |
+| Accuracy | axisymmetric: port resistance about 1e-4 at the default (3.3e-4 for a ring wire within 1.05 radii of an interface to a more conductive layer); 3-D: about 2e-3 away from interfaces and other wires (by about $R/0.8$), the error estimate a bound while the ratio of the two levels' errors is at least 2.5; next to a strongly contrasting interface the thin-wire error (see *Validation of the 3-D model*) | axisymmetric: raise `FemOptions.refinement`; 3-D: a smaller `source_radius` or `growth` with a larger `max_nodes_3d` (`refinement` multiplies its nodes by eight: the AP1 station would need about 11.5 million), or one of the integral engines as the second method |
+| Mesh size | `FemOptions.max_nodes` (axisymmetric), `max_nodes_3d` and `max_ports_3d` (3-D) | `ResourceLimitError` |
 | Frequency | quasi-static soil; conductor branches per frequency | — |
 
 ## Validation
@@ -222,31 +267,37 @@ Every number is checked against a second method that shares no code with
 `fem` (references in `tests/benchmarks/references.py`, tests in
 `tests/test_fem.py`): Weber's disc, the thin ring in closed form, a
 Hankel-transform thin ring for any number of layers, the exact 2-D
-proximity correction of a wire next to an interface, and a finite-volume
+proximity correction of a wire next to an interface, a finite-volume
 model of the solid rod (cell-centred, its own grid, adapted from audit
-A3). The integral engines follow within their documented biases: the
-uniform current of the image family lies about 1 % above a rod's
-equipotential solution, the point kernel of `mom` 0.2 … 2 % below.
+A3) and auditor W4A's axisymmetric boundary elements of the solid rods
+and tori (audit W4A-11). The integral engines follow within their
+documented biases: the uniform current of the image family lies about
+1 % above a rod's equipotential solution, the point kernel of `mom`
+0.2 … 2 % below.
 
 | World | `fem` | second method: fem / reference − 1 | integral engines: engine / fem − 1 |
 |---|---|---|---|
 | Weber's disc $b$ = 1 m, 100 Ω·m | 24.9923 Ω | $\rho/(4b)$ = 25 Ω: −3.1e-4 | — |
-| rod 0 … 3 m, $a$ = 8 mm, 100 Ω·m (B2) | 33.1933 Ω | thin-wire Galerkin limit 33.1957 Ω: −7.3e-5 | `image` (line) +0.93 %, `mom` (0.25 m) −1.1 % |
-| rod 0.5 … 3.5 m / 0.5 … 5 m | 31.7170 / 22.7906 Ω | solid-rod FV: −1.4e-5 / −1.4e-5 | `image` +1.1 / +0.91 %, `mom` −0.59 / −0.91 % |
-| rings $r$ = 2, 5, 10 m (B3) | 12.4809 … 3.4417 Ω | closed form: −2.7e-5 … −5.7e-5 | `image` +3.0e-5 … +5.0e-5, `mom` −0.85 … −1.2 % |
-| ring with a central rod, bonded, 100 Ω·m | 11.5338 Ω | — (port matrix symmetric) | `image` +0.41 %, `mom` −0.87 % |
-| rings in two layers (8 soils, 30 / 10 000 … 10 000 / 30 Ω·m) | | Hankel ring: −2.6e-5 … −7.3e-5 | `image_2layer` +3.0e-5 … +5.9e-5 (+3.4e-4 for 10 000 / 30, −1.0 % for 30 / 10 000 Ω·m, whose series it truncates), `mom` −0.43 … −1.8 % |
+| rod 0 … 3 m, $a$ = 8 mm, 100 Ω·m (B2) | 33.1933 Ω | solid-rod boundary elements: −1.07e-5; thin-wire Galerkin limit 33.1957 Ω: −7.3e-5 | `image` (line) +0.92 %, `mom` (0.25 m) −1.1 % |
+| rod 0.5 … 3.5 m / 0.5 … 5 m | 31.7170 / 22.7906 Ω | solid-rod FV: −1.4e-5 / −1.4e-5 | `image` +1.1 / +0.90 %, `mom` −0.59 / −0.91 % |
+| rings $r$ = 2 m at 0.8 m ($a$ = 8 mm, B3), 5 m at 0.5 m and 10 m at 0.8 m ($a$ = 5 mm) | 12.4809 / 6.4182 / 3.4417 Ω | solid-torus boundary elements: −3.00e-5 / −2.63e-5 / −2.56e-5; thin ring in closed form: −5.7e-5 / −3.1e-5 / −2.7e-5 | `image` +2.5e-5 … +3.3e-5, `mom` −0.85 … −1.2 % |
+| ring with a central rod, bonded, 100 Ω·m | 11.5338 Ω | boundary elements: −2.26e-5 ($R_{12}$ −1.26e-5); the port matrix symmetric | `image` +0.40 %, `mom` −0.87 % |
+| rings in two layers (8 soils, 30 / 10 000 … 10 000 / 30 Ω·m) | | Hankel ring: −2.6e-5 … −7.3e-5 | `image_2layer` +2.3e-5 … +3.8e-5 (+3.1e-4 for 10 000 / 30, −0.99 % for 30 / 10 000 Ω·m, whose series it truncates), `mom` −0.43 … −1.8 % |
 | rings in three layers (5 stacks, also below $h_1$) | | Hankel ring: −3.4e-5 … −9.1e-5 | `mom_sommerfeld` −0.45 … −2.1 % (top layer only) |
-| rods in two layers (6 cases, through and within a layer) | | solid-rod FV: −1.4e-5 … +2.0e-4 | `image_2layer` +0.07 … +1.4 %, `mom` −1.2 … +0.5 % |
-| ring 1 cm above an interface, $r$ = 2 / 5 m at $t = r \ldots D$ (12 cases) | | Hankel ring + 2-D proximity: −1.3e-5 … −7.0e-5 | `image_2layer` +5.2 … +5.4 % (1000 / 30 Ω·m), +0.07 … +0.10 % (30 / 1000) |
-| the same rings 10 cm above the interface (12 cases) | | −1.9e-5 … −6.3e-5 | `image_2layer` −0.004 … +0.07 % |
+| rods in two layers (6 cases, through and within a layer) | | solid-rod FV: −1.4e-5 … +2.0e-4 | `image_2layer` +0.08 … +1.4 %, `mom` −1.2 … +0.5 % |
+| ring 1 cm above an interface, $r$ = 2 / 5 m at $t = r \ldots D$, $a$ = 5 mm (12 cases) | | Hankel ring + 2-D proximity: −1.3e-5 … −7.0e-5 | `image_2layer` +3.46 … +3.57 % (1000 / 30 Ω·m), +0.17 … +0.23 % (30 / 1000): the thin-wire error next to an interface (`InterfaceContactWarning` for 1000 / 30); it matches its exact thin ring (Hankel) to 4e-5 |
+| the same rings 10 cm above the interface (12 cases) | | −1.9e-5 … −6.3e-5 | `image_2layer` +0.003 … +0.019 % |
 | 3 m rod with its head 1 mm below … 8 cm into a 30 Ω·m top layer (14 cases) | | solid-rod FV: within ±1.3e-4 | `image_2layer` jumps by a factor 3.8 when its first segment enters the layer (30 / 10 000 Ω·m) |
-| ring exactly on an interface (4 soils) | | Hankel ring: −1.1e-4 … +4.7e-5 | `image_2layer` jumps by 0.03 … 0.38 % between the two sides |
+| ring exactly on an interface, $r$ = 2 m, $a$ = 5 mm (4 soils) | | solid-torus boundary elements: −1.1e-5 … −1.2e-5; Hankel ring: −9.1e-5 … +5.8e-5 | `image_2layer` jumps by 0.001 … 0.012 % between 1 µm above and on the interface |
 | rod tip 16 mm above … 16 mm below an interface (1000 / 30 Ω·m) | | solid-rod FV: −4.1e-5 … +1.3e-5 | thin wire (`image_2layer`) +22 % with the tip on the interface, +7.2 % 1 mm above, −4.4 % 1 mm below |
 | encased ring $r$ = 2 m at 0.5 / 0.8 / 3 m ($r_b$ = 55 mm, $C$ = 38.16 Ω·m) | rise 1.0057 / 1.0040 / 1.0021 $C/(2\pi r)$ | the bound $\ge C/(2\pi r)$ | the image family adds exactly $C/(2\pi r)$ |
 | encased 3 m rod, head at 0 / 0.5 m | rise 1.0086 / 1.0005 $C/L$ | Sunde's decomposition with Dwight's rod (uniform current): −0.96 % / −5.2 % | `image` +1.1 / +1.6 %, `mom` −0.84 / −0.21 % |
 
-(Evidence of stream w4axi, `e01`–`e04`.)
+(Evidence of stream w4axi, `e01`–`e04`; the boundary elements: evidence
+`e07` of stream fw4axi and `e03`, `e05` of stream fw4int; the rows next to
+and on an interface and the `image_2layer` columns re-measured after the
+wave-3 changes of the image family and the refined ring block of audit
+W4A-01, evidence `e02`, `e04`, `e05`, `e07` of stream fw4int.)
 
 The generated table below compares `fem` with the benchmark references of
 the suite; in B6 and B7 the reference is `mom` on the same segments, so
@@ -262,17 +313,22 @@ Generated from the benchmark run measured on 2026-11-14 with groundfield 2026.11
 | B3 Ring, homogeneous soil | abs(Z/Z_ref - 1) | 5e-4 | 5.7e-5 | 3 | pass | solid torus (user decision Q37) |
 | B6 Top-layer electrodes, two-layer soil | abs(Z/Z_ref - 1) | 3 % | 1.3 % | 10 | pass | conforming model (user decision Q37): the deficit of mom's point kernel (10.28) |
 | B7 Rod through the layer interface | abs(Z/Z_ref - 1) | 3 % | 1.1 % | 2 | pass | conforming model (user decision Q37; up to 2026.11 it raised, v0.15.0: +1092 %, silent): the deficit of mom's point kernel |
-| B8 Two-port reciprocity | abs(Z_AB/Z_BA - 1) | excluded | — | — | excluded | refused; excluded: rod and ring on different axes, which the axisymmetric model refuses (user decision Q37); the port matrix of coaxial electrodes is symmetric to round-off |
+| B8 Two-port reciprocity | abs(Z_AB/Z_BA - 1) | excluded | — | — | excluded | 3-D model, run once outside the suite (stream fw4int): 0 in all three soils, its port matrix symmetric to 2.2e-16; Z_BA 0.67 / 0.96 % below the floating-port mom (h₁ = 5 / 2 m); excluded from the benchmark run for its cost: rod and ring on different axes are not axisymmetric, so fem solves them with its 3-D model (the fem3d extra; user decision Q37), 0.5 … 1.2 minutes and up to 2 GB per solve, two solves per soil |
 | B9 Limits of the layered kernels (`equal_rho_fem`) | abs(Z/Z_ref - 1) | 1e-12 | 0 | 3 | pass | the conforming model meshes the canonical stack (user decision Q37) |
 | B9 Limits of the layered kernels (`layer_limit_fem`) | abs(Z/Z_ref - 1) | 0.1 % | 5.0e-4 | 2 | pass | physical limit (user decision Q37) |
-| B10 Ring with three bonded rods | abs(Z/Z_ref - 1) | excluded | — | — | excluded | refused; excluded: rods off the ring's axis, which the axisymmetric model refuses (user decision Q37; up to 2026.11 -35 % / -45 %, radii summed) |
+| B10 Ring with three bonded rods | abs(Z/Z_ref - 1) | excluded | — | — | excluded | 3-D model, run once outside the suite (stream fw4int): +0.62 % / +0.84 % against mom (error estimate 3.9e-3 / 4.3e-3; image / image_2layer +0.81 / +1.97 % above fem); excluded from the benchmark run for its cost: rods off the ring's axis are not axisymmetric, so fem solves the world with its 3-D model (the fem3d extra; user decision Q37), 2 … 3.5 minutes and up to 3.8 GB per soil (up to 2026.11 -35 % / -45 %, radii summed) |
 <!-- generated:end fem -->
 
-B8 and B10 exclude `fem` because the generated rows were measured when only
-the axisymmetric model existed, which refuses rods and rings off one axis.
-The 3-D model solves both (B8: the port matrix of two clusters is symmetric
-to $1.1\cdot10^{-16}$; B10 is the shape of the AP1 station below); the rows
-are re-measured with the validation page at the release.
+B8 and B10 exclude `fem` from the benchmark run for its cost: neither world
+is axisymmetric, so `fem` solves it with its 3-D model, 0.5 … 3.5 minutes
+and 2 … 4 GB per solve. Run once outside the suite (evidence `e01` of
+stream fw4int): in B8 the transfer impedances agree to round-off
+($Z_{AB} = Z_{BA}$ in all three soils, the port matrix symmetric to
+$2.2\cdot10^{-16}$) and $Z_{BA}$ lies 0.67 / 0.96 % below the floating-port
+`mom` reference ($h_1$ = 5 / 2 m); in B10 (the shape of the AP1 station
+below) `fem` lies +0.62 / +0.84 % above `mom` on the same segments, within
+the pattern of the station, `image` / `image_2layer` +0.81 / +1.97 % above
+`fem`.
 
 ## The three-dimensional model
 
@@ -413,16 +469,28 @@ are in GiB.
   such as a rod through a 1 / 1000 Ω·m interface), naming the contrast,
   the axisymmetric model and the integral engines.
 - `ResourceLimitError` before anything is meshed: the display segments
-  above `Engine.max_segments` (a unit error of `segment_length`), more than
-  100 ports — every electrode and every leaking piece of a galvanic
-  distributed conductor is a port and costs one conjugate-gradient solve per
-  level, about 0.9 s per port and level at 600 000 nodes, so the message
-  names the estimated time (coarsen the conductor's
-  `discretize_segment_length`) — and the predicted finer mesh above
+  above `Engine.max_segments` (a unit error of `segment_length`), more
+  ports than `FemOptions.max_ports_3d` (100) — every electrode and every
+  leaking piece of a galvanic distributed conductor is a port and costs
+  one conjugate-gradient solve per level, about 0.9 s per port and level
+  at 600 000 nodes, so the message names the estimated time (coarsen the
+  conductor's `discretize_segment_length`, or raise the limit to solve the
+  world on purpose) — and the predicted finer mesh above
   `FemOptions.max_nodes_3d`; after the coarser mesh, its exact refinement
   above that limit.
 - `ValueError`: a `source_radius` that does not reach beyond the bare
   wire (it must be at least 2.2 wire radii).
+- `InterfaceContactWarning` (the solve goes on): a horizontal wire whose
+  axis lies within the reach of a contrasting layer interface (3.5 wire
+  radii at a contrast of 33; the table of the reach is under the
+  [warning](../../reference/warnings.md#interfacecontactwarning)). The
+  smoothed line source shares the thin-wire error of the integral engines
+  there (+9.2e-3 against the solid torus 3 radii above a 1000 / 30 Ω·m
+  interface, beyond the error estimate; audit W4B-02), so the dispatch
+  warns before the 3-D model runs, as the integral engines do (audit
+  W4A-07); the axisymmetric model solves the wire as a solid torus and
+  does not warn. A bare wire closer than about 2.8 radii to an interface
+  is refused (its disc would not lie in one layer).
 
 ### Validation of the 3-D model
 
@@ -472,10 +540,11 @@ interface, against the solid torus (evidence `f10` of stream fw4fem3d):
 
 At 1.5 cm (1.9 million nodes) the model lies between the thin ring and the
 torus, above its estimate, its two levels on either side of the torus: the
-estimate does not see the thin-wire error (audit W4B-02). Over a more
-resistive layer (30 / 1000 Ω·m) the same ring reads −6.5e-4 at 1.5 cm,
-within its estimate of 2.3e-3; rods through a 10 / 1000 or 1000 / 10 Ω·m
-interface read −7.1e-4 / +5.3e-4 (evidence `f13`).
+estimate does not see the thin-wire error (audit W4B-02); the solve warns
+there (`InterfaceContactWarning`, see *Guards of the 3-D model*). Over a
+more resistive layer (30 / 1000 Ω·m) the same ring reads −6.5e-4 at
+1.5 cm, within its estimate of 2.3e-3; rods through a 10 / 1000 or
+1000 / 10 Ω·m interface read −7.1e-4 / +5.3e-4 (evidence `f13`).
 
 **AP1 station** in the seven corner soils of the AP1 grid: square ring
 4 m × 4 m at 0.6 m (5 mm wire), three 4 m rods (8 mm) from three corners,
