@@ -454,13 +454,18 @@ def test_z_in_of_a_100_house_network_drops_against_the_old_routing() -> None:
     (+0.95 %; 1 m segments 0.202101 ohm): the PEN is 62 % shorter (3.37 km
     against 8.86 km), but the houses share their main instead of having a
     drop of their own (bonded by ideal conductors instead, the two sets of
-    electrodes differ by -0.09 %; evidence q22/z100_ideal_pen.py)."""
+    electrodes differ by -0.09 %; evidence q22/z100_ideal_pen.py). Since
+    audit W1B-01 a cabinet that would stand farther than 20 m from its
+    houses on the ray through its group's centroid stands on the ray through
+    the group's far-end building instead (two of the five here): 0.202053 ohm
+    (-0.023 %; 1 m segments 0.202054 ohm), PEN 3.78 km (far-end rule for every
+    group: 0.202204 ohm)."""
     world = _build(building_types=[_RING_HOUSE], building_counts={"residential": 100})
     engine = gf.create_engine(backend="image", segment_length=2.0, frequencies=[50.0])
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         z = complex(np.asarray(engine.solve(world).input_impedance())[0]).real
-    assert z == pytest.approx(0.202100, rel=1e-5)
+    assert z == pytest.approx(0.202053, rel=1e-5)
     assert z < 0.202724
 
 
@@ -720,8 +725,12 @@ def test_random_networks_build_and_route_as_documented(
 ) -> None:
     """100 random networks per case (default catalogue for 60 houses, ring
     houses for 200 to keep the run short). Base: 1 of 100 (60 houses) and 2
-    of 60 (200 houses) star networks failed with a ValidationError."""
+    of 60 (200 houses) star networks failed with a ValidationError. Since
+    audit W1B-02 a star layout whose cabinet cannot keep its clearance from
+    a house of another group raises with the names of both (3 of the 100
+    layouts of 200 houses, 12 m apart)."""
     rng = np.random.default_rng(20261108 + n_houses)
+    blocked = []
     for seed in range(100):
         kw: dict[str, object] = dict(
             soil=HomogeneousSoilSpec(rho=100.0),
@@ -734,7 +743,18 @@ def test_random_networks_build_and_route_as_documented(
             kw["pen_topology"] = RadialTrunkTopology()
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            plan = TnNetworkGenerator(TnNetworkConfig(**kw), seed=seed).plan()
+            try:
+                plan = TnNetworkGenerator(TnNetworkConfig(**kw), seed=seed).plan()
+            except ValueError as exc:
+                # audit W1B-02: a cabinet whose electrodes cannot keep
+                # CabinetConfig.end_clearance_m from a site beyond its group
+                # raises and names both.
+                assert re.search(
+                    r"cable cabinet 'kvs_\d+' .*end_clearance_m.* 'residential_\d+'",
+                    str(exc),
+                ), exc
+                blocked.append(seed)
+                continue
             world = plan.to_world()
         _check_routing(world, "trafo_ring_0")
         pen = _pen(world)
@@ -778,11 +798,45 @@ def test_random_networks_build_and_route_as_documented(
             if d.start_electrode == "trafo_ring_0":
                 # A drop from the substation leaves its ring at the point
                 # nearest to the building (user decision Q43), not on the
-                # cable, which leaves it at its point nearest to the cabinet.
+                # cable, which leaves it at its point nearest to the cabinet:
+                # it is the closest pair of the ring circle and the
+                # building's horizontal wires (2 mm sampling of the ring;
+                # audit W1B-08, up to then only the radius was checked).
                 assert math.hypot(*d.start[:2]) == pytest.approx(4.0, abs=1e-12)
+                gap, point = _ring_closest_pair(world, _root(d.end_electrode))
+                plan = math.dist(d.start[:2], d.end[:2])
+                assert plan == pytest.approx(gap, abs=2e-3), d.name
+                assert math.dist(d.start[:2], point) <= 2e-2, d.name
                 continue
             foot = _nearest_on(cable, d.end[:2])
             assert math.dist(d.start[:2], foot) <= MIN_DROP_LENGTH_M * (1 + 1e-6)
+    # audit W1B-02: 3 of the 100 dense star layouts of 200 houses put a
+    # cabinet next to (or into) a house of the neighbouring group and raise.
+    assert blocked == ([29, 56, 91] if (topology, n_houses) == ("star", 200) else [])
+
+
+def _ring_closest_pair(world: gf.World, building: str) -> tuple[float, tuple]:
+    """Plan distance between the default substation ring (4 m around the
+    origin, sampled every 2 mm) and the horizontal wires of ``building``,
+    and the ring sample where it is attained."""
+    n = math.ceil(2.0 * math.pi * 4.0 / 0.002)
+    t = np.linspace(0.0, 2.0 * math.pi, n, endpoint=False)
+    ring = np.column_stack([4.0 * np.cos(t), 4.0 * np.sin(t)])
+    best, point = math.inf, None
+    for e in world.electrodes:
+        if _root(e.name) != building or e.kind == "rod":
+            continue
+        for run in e.wire_polylines():
+            xy = np.asarray(run, dtype=float)[:, :2]
+            for a, b in zip(xy[:-1], xy[1:], strict=True):
+                d = b - a
+                u = np.clip((ring - a) @ d / float(d @ d), 0.0, 1.0)
+                dist = np.hypot(*(ring - (a + u[:, None] * d)).T)
+                k = int(np.argmin(dist))
+                if dist[k] < best:
+                    best, point = float(dist[k]), tuple(ring[k])
+    assert point is not None
+    return best, point
 
 
 def test_overlap_helper_is_symmetric_for_collinear_pieces() -> None:

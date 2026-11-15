@@ -30,8 +30,9 @@ Rules of :class:`~groundfield.generators.tn_network.TnNetworkGenerator`
    the cable of its cabinet (star) or the trunk from the substation to its
    tap source (radial) — at the point of that path nearest to the
    building: the closest pair in plan between the sections of the path and
-   the wires of the building's foundation, or the point nearest to the
-   connection point of a building without a foundation. An interior point
+   the building's horizontal electrode wires (foundation, ring, strip; rule
+   0), or the point nearest to the connection point of a building with rods
+   only. An interior point
    becomes a T-joint: a leakage-free tap junction ``pen_tap_<k>``
    (:class:`~groundfield.generators.plan.PlannedJunction`) that splits
    the cable section; the parts after the split are named
@@ -64,25 +65,25 @@ Rules of :class:`~groundfield.generators.tn_network.TnNetworkGenerator`
    conductor).
 4. **A building that a cable crosses is joined to it and fed by it** — a
    cable of the building's feeding path passes its connection point, or a
-   wire of its foundation, closer than :attr:`PenRouter.min_length` in
-   plan, away from the path's nodes (it crosses or touches the
-   foundation): the path is split there, the cable is joined to the
-   anchor (a building without a foundation) or to the wire it crosses or
-   touches, and the building gets no drop. For this rule every trunk of
+   wire of its horizontal electrodes (foundation, ring, strip), closer than
+   :attr:`PenRouter.min_length` in plan, away from the path's nodes (it
+   crosses or touches the electrode): the path is split there, the cable is
+   joined to the anchor (a building with rods only) or to the wire it
+   crosses or touches, and the building gets no drop. For this rule every trunk of
    the radial topology counts as a cable of the feeding path (a building
    in a substation slot has none of its own; a trunk beyond the
    building's tap source runs on past it), and the star topology feeds a
    building that a main crosses from that main's cabinet (the nearest of
    the cabinets whose mains cross it, ties to the lower cabinet index)
-   instead of its nearest cabinet (audit R4A-02). A main that crosses a
-   building it does not feed stays unjoined (no cross-tie between two
-   cabinets through a house). Where the foundation touches the path at a
+   instead of its group's (or nearest) cabinet (audit R4A-02). A main that
+   crosses a building it does not feed stays unjoined (no cross-tie between
+   two cabinets through a house). Where the electrode touches the path at a
    node (a cabinet on or next to a wire), a crossing of the path through
-   the foundation away from its nodes is the joint (audit R5A-03: the
+   the electrode away from its nodes is the joint (audit R5A-03: the
    node won the tie of the two zero distances and the house got a 1 cm
    drop); without one the joint moves along the path to
    :attr:`PenRouter.min_length` from the node, if the path is still that
-   close to the foundation there. Two nodes closer than
+   close to the electrode there. Two nodes closer than
    :attr:`PenRouter.min_length` cannot be joined by a cable: the router
    raises :class:`ValueError` naming both (a site on top of another).
 

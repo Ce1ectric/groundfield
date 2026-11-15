@@ -335,12 +335,15 @@ Findings 10.05, 10.12–10.14, 10.17, 10.38, 10.39, 10.53–10.55, 10.69 and
    (R4B-01; "along": both ends of a section within 1 cm of the drop's
    line, R5A-01), and the layout builder keeps its taps on the layout
    polyline, clipped at the projection of a site's foundation contact, so
-   none lies inside a site foundation (R4A-03, R5A-02); the cable is built
-   from where its polyline leaves the start site's closed electrodes for
-   the last time to where it first enters the end site's, the corners in
-   between are part of the sites (audit R6A-01: a router corner inside a
-   2 m cabinet ring was a node that houses tapped, 82 of 2 540 drops of
-   200 random layouts); ties go to the lowest wire index, then to the
+   none lies inside a site foundation (R4A-03, R5A-02); the leading run of
+   waypoints inside the start site's closed electrodes and the trailing
+   run inside the end site's are part of those sites (audit R6A-01: a
+   router corner inside a 2 m cabinet ring was a node that houses tapped,
+   82 of 2 540 drops of 200 random layouts), and every other passage of the
+   cable through the substation's or a cabinet's closed electrodes joins
+   the cable to that site where it enters and where it leaves it (audits
+   W1B-03, W1B-04: a tap inside a passed cabinet's ring; a leg that came
+   back through its start site lost its taps); ties go to the lowest wire index, then to the
    smallest arc position along the wire. Since user decision Q43 the
    same nearest-point rule holds for every horizontal earth electrode of a
    site — a `RingElectrodeSpec` circle (the default substations, met at the
@@ -366,8 +369,14 @@ Findings 10.05, 10.12–10.14, 10.17, 10.38, 10.39, 10.53–10.55, 10.69 and
    bearings around the substation (from the widest angular gap, sizes
    differing by at most one, `StarCabinetTopology.group_buildings`), and
    each cabinet stands on the ray through its group's centroid,
-   `CabinetConfig.end_clearance_m` (1 m) beyond the group's farthest point —
-   instead of on a fixed strip along the substation row (both cabinets of
+   `CabinetConfig.end_clearance_m` (1 m) beyond the group's electrodes,
+   rods included, plus the plan extent of its own grounding — or, when it
+   would stand there farther than `CabinetConfig.max_far_end_gap_m` (20 m)
+   from its houses (a wide group), on the ray through the group's far-end
+   building, 1 m beyond it — and raises when it would come closer than
+   `end_clearance_m` to another site (audits W1B-01, W1B-02: the centroid
+   ray of a group of about 180° led 50.4 m past its houses) — instead of
+   on a fixed strip along the substation row (both cabinets of
    the default 30-house grid stood west of the substation, the eastern
    houses got drops of 3.5 … 106.5 m from it); a given
    `CabinetConfig.placement` keeps the former positions and the

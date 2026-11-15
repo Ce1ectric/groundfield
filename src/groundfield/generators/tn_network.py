@@ -63,10 +63,17 @@ Geometric layout
   substation, starting after the widest angular gap, of sizes that differ
   by at most one
   (:meth:`~groundfield.generators.pen_topology.StarCabinetTopology.group_buildings`)
-  — and each group's cabinet stands at its far end, on the ray from the
-  substation through the group's centroid, :attr:`CabinetConfig.end_clearance_m`
-  (1 m) beyond the farthest point of the group's buildings along that
-  ray; in the default grid of 30 houses at (-118.5, 0) and (118.5, 0) m.
+  — and each group's cabinet stands at its far end: on the ray from the
+  substation through the group's centroid,
+  :attr:`CabinetConfig.end_clearance_m` (1 m) beyond the group's earth
+  electrodes along that ray (horizontal wires and rods) plus the plan
+  extent of the cabinet's own grounding, when it stands there within
+  :attr:`CabinetConfig.max_far_end_gap_m` (20 m) of its houses, otherwise
+  on the ray through the group's far-end building, 1 m beyond that
+  building (audits W1B-01, W1B-02); in the default grid of 30 houses at
+  (-118.5, 0) and (118.5, 0) m. A cabinet
+  whose electrodes would come closer than ``end_clearance_m`` to those of
+  another site raises a :class:`ValueError` that names both.
   A :attr:`CabinetConfig.placement` places them as before (the former
   default was a Manhattan strip along the substation row, which put both
   cabinets of the 30-house grid west of the substation). Their grounding
@@ -103,7 +110,7 @@ from __future__ import annotations
 
 import math
 import warnings
-from typing import ClassVar, Literal, Optional, Union
+from typing import Annotated, ClassVar, Literal, NamedTuple, Optional, Union
 
 import numpy as np
 from pydantic import Field, model_validator
@@ -125,6 +132,7 @@ from groundfield.generators.electrode_specs import (
     rod_circle,
 )
 from groundfield.generators.grounding import GroundingSystemSpec
+from groundfield.generators._contact import Outline, inside_outlines
 from groundfield.generators._pen_routing import PenRouter
 from groundfield.generators.materialise import (
     SiteGeometry,
@@ -276,6 +284,12 @@ def _default_cabinet_placement() -> PlacementSpec:
     )
 
 
+_PositiveDistance = Annotated[float, Field(gt=0.0, allow_inf_nan=False)]
+"""A positive, finite distance in m (``CabinetConfig.end_clearance_m``, audit
+W1B-05: a negative clearance put the cabinets inside the outer houses, 0 on a
+foundation wire, NaN failed late in the rod constructor)."""
+
+
 class SubstationConfig(GeneratorConfig):
     """Substation block — position + grounding system."""
 
@@ -303,9 +317,18 @@ class CabinetConfig(GeneratorConfig):
         (consecutive bearings around the substation, sizes differing by at
         most one), and the cabinet of a group stands on the ray from the
         substation through the group's centroid, ``end_clearance_m`` beyond
-        the farthest point of the group's buildings along that ray (their
-        horizontal earth electrodes, or the anchor of a building with rods
-        only); it feeds its group. A placement places the cabinets as up to
+        the largest projection on that ray of the group's earth electrodes
+        (horizontal wires and, since audit W1B-02, rods) plus the plan extent
+        of the cabinet's own grounding — when it stands there within
+        ``max_far_end_gap_m`` of the nearest electrode of its group; otherwise
+        (a wide group, whose centroid ray leads past its houses) on the ray
+        through the group's far-end building, the largest projection of its
+        position on the direction of the centroid, ``end_clearance_m`` beyond
+        that building's electrodes (audit W1B-01). It feeds its group. A
+        cabinet whose electrodes would come closer than
+        ``end_clearance_m`` to those of another site (a building of its or
+        another group, the substation, another cabinet) raises a
+        :class:`ValueError` naming both. A placement places the cabinets as up to
         2026.11 (the strip along the substation row of the former default,
         ``ManhattanGridPlacement(spacing_x_m=40, spacing_y_m=1,
         n_per_row=10)``, reproduces that world bit for bit), and every
@@ -322,8 +345,20 @@ class CabinetConfig(GeneratorConfig):
     grounding
         Grounding system of every cabinet.
     end_clearance_m
-        Distance in m from the far end of a building group to its cabinet
-        (building groups only).
+        Smallest plan distance in m between the earth electrodes of a
+        cabinet and those of any other site (building groups only),
+        positive and finite; a distribution is checked where it is drawn
+        (audit W1B-05).
+    max_far_end_gap_m
+        Largest plan distance in m (default 20, positive and finite) between
+        a cabinet on the ray through its group's centroid and the nearest
+        electrode of its group; a cabinet farther from the houses it feeds
+        stands on the ray through the group's far-end building instead
+        (building groups only). The default separates the groups of the
+        default grid of 50 houses (8.8 … 12.8 m on the centroid ray) from
+        the wide groups of the AP1 mixes (23.7 … 50.4 m, e.g. 10 houses and
+        one small commercial building: 50.4 m on the centroid ray, 1.6 m on
+        the far-end ray).
     """
 
     placement: Optional[PlacementSpec] = Field(
@@ -354,11 +389,22 @@ class CabinetConfig(GeneratorConfig):
         default_factory=_default_cabinet_grounding,
         description="Per-cabinet grounding system.",
     )
-    end_clearance_m: Union[float, AnyDistribution] = Field(
+    end_clearance_m: Union[_PositiveDistance, AnyDistribution] = Field(
         default=1.0,
         description=(
-            "Distance in m beyond the far end of its building group at which "
-            "a cabinet stands (placement=None only)."
+            "Distance in m (positive, finite) beyond the far end of its "
+            "building group at which a cabinet's earth electrodes stand "
+            "(placement=None only); a distribution is checked where it is drawn."
+        ),
+    )
+    max_far_end_gap_m: Union[_PositiveDistance, AnyDistribution] = Field(
+        default=20.0,
+        description=(
+            "Largest distance in m (positive, finite) between a cabinet on the "
+            "ray through its group's centroid and the nearest electrode of its "
+            "group; farther, the cabinet stands on the ray through the group's "
+            "far-end building instead (placement=None only; a distribution is "
+            "checked where it is drawn)."
         ),
     )
 
@@ -642,21 +688,66 @@ class TnNetworkConfig(GeneratorConfig):
 # ---------------------------------------------------------------------
 
 
-def _far_end(
-    substation_xy: tuple[float, float],
-    group: list[PlannedSite],
-    geometry: dict[str, SiteGeometry],
-    clearance_m: float,
-) -> tuple[float, float]:
-    """Position in m of the cabinet of a building group (Q22, Q35).
+def _rod_points(site: PlannedSite) -> list[tuple[float, float]]:
+    """Plan positions in m of the vertical electrodes (rods) of ``site``.
 
-    On the ray from the substation through the centroid of the group's
-    building positions (through the group's building farthest from the
-    substation when the centroid is the substation, ties to the first of
-    the group; :math:`+x` when every building stands on it),
-    ``clearance_m`` beyond the farthest point of the group's buildings along
-    the ray: the vertices of their horizontal wires (a circle by its centre
-    and radius), or the anchor of a building with rods only.
+    A rod stands at the site position plus its ``offset_xy_m``, the point
+    :func:`~groundfield.generators.materialise.materialise_electrode` builds
+    it at.
+    """
+    cx, cy = site.position_xy
+    return [
+        (cx + planned.spec.offset_xy_m[0], cy + planned.spec.offset_xy_m[1])
+        for planned in site.electrodes
+        if isinstance(planned.spec, RodElectrodeSpec)
+    ]
+
+
+def _plan_extent(
+    site: PlannedSite, geometry: SiteGeometry
+) -> tuple[list[tuple[float, float]], list[tuple[float, float, float]]]:
+    """Points and circles in m that bound the electrodes of ``site`` in plan.
+
+    The vertices of its straight horizontal wires and the heads of its rods
+    (points), and its ``RingElectrodeSpec`` circles ``(x, y, r)``. Every
+    linear function (a projection) and every distance from a point takes its
+    largest value over the electrodes at one of them.
+    """
+    points: list[tuple[float, float]] = []
+    circles: list[tuple[float, float, float]] = []
+    for wire in geometry.wires:
+        if wire.circle is not None:
+            circles.append(wire.circle)
+        else:
+            points.extend(wire.xy)
+    points.extend(_rod_points(site))
+    if not points and not circles and geometry.point is not None:
+        points.append((geometry.point[0], geometry.point[1]))
+    return points, circles
+
+
+def _plan_radius(site: PlannedSite, geometry: SiteGeometry) -> float:
+    """Largest plan distance in m of the electrodes of ``site`` from its
+    position (0 for one rod at the position, the default cabinet)."""
+    px, py = site.position_xy
+    points, circles = _plan_extent(site, geometry)
+    radius = 0.0
+    for x, y in points:
+        radius = max(radius, math.hypot(x - px, y - py))
+    for x, y, r in circles:
+        radius = max(radius, math.hypot(x - px, y - py) + r)
+    return radius
+
+
+def _group_direction(
+    substation_xy: tuple[float, float], group: list[PlannedSite]
+) -> tuple[float, float]:
+    """Unit vector from the substation towards a building group.
+
+    Through the centroid of the group's building positions; through the
+    group's building farthest from the substation when the centroid is the
+    substation (ties to the first of the group); :math:`+x` when every
+    building stands on it.
     """
     sx, sy = substation_xy
     n = len(group)
@@ -679,22 +770,282 @@ def _far_end(
         norm = math.hypot(ux, uy)
         if norm == 0.0:
             ux, uy, norm = 1.0, 0.0, 1.0
-    ux, uy = ux / norm, uy / norm
+    return ux / norm, uy / norm
+
+
+def _far_end(
+    substation_xy: tuple[float, float],
+    group: list[PlannedSite],
+    geometry: dict[str, SiteGeometry],
+    clearance_m: float,
+    radius_m: float = 0.0,
+) -> tuple[tuple[float, float], PlannedSite]:
+    """Position in m of the cabinet of a building group, and its far-end building.
+
+    User decisions Q22 and Q35, audits W1B-01 and W1B-02. The group's
+    direction :math:`u` is that of its centroid (:func:`_group_direction`).
+    The far-end building has the largest projection of its position on
+    :math:`u` (ties within :math:`10^{-9}` of the group's extent: the one
+    nearest to the ray along :math:`u`, then the first of the group). The
+    cabinet stands on the ray from the substation through the far-end
+    building (along :math:`u` itself when that building lies on it),
+    ``clearance_m + radius_m`` beyond the largest projection on the ray of
+    the far-end building's electrodes — horizontal wires (a circle by its
+    centre and radius) and rods. ``radius_m`` is the plan extent of the
+    cabinet's own grounding around its position (:func:`_plan_radius`), so
+    no electrode of the cabinet comes closer than ``clearance_m`` to one of
+    the far-end building: their projections on the ray differ by at least
+    that much. The clearance from every other electrode is checked by
+    :func:`_check_cabinet_clearance`. Used for a group whose cabinet would
+    stand too far from its houses on the ray through the centroid
+    (:func:`_cabinet_position`): for a group of about 180 degrees that ray
+    leads past its houses (audit W1B-01). Up to then the reach counted the
+    horizontal wires only, so a cabinet rod could stand on a house rod
+    (audit W1B-02).
+    """
+    sx, sy = substation_xy
+    ux, uy = _group_direction(substation_xy, group)
+    rel = [(float(b.position_xy[0]) - sx, float(b.position_xy[1]) - sy) for b in group]
+    proj = [x * ux + y * uy for x, y in rel]
+    spread = max(1.0, max(math.hypot(x, y) for x, y in rel))
+    tol = 1e-9 * spread
+    top = max(proj)
+    k_far = min(
+        (k for k in range(len(group)) if proj[k] >= top - tol),
+        key=lambda k: (abs(rel[k][1] * ux - rel[k][0] * uy), k),
+    )
+    fx, fy = rel[k_far]
+    off_ray = abs(fy * ux - fx * uy)
+    norm = math.hypot(fx, fy)
+    if off_ray > tol and norm > 0.0:
+        ux, uy = fx / norm, fy / norm
+    far = group[k_far]
+    points, circles = _plan_extent(far, geometry[far.name])
     reach = -math.inf
+    for cx, cy, r in circles:
+        reach = max(reach, (cx - sx) * ux + (cy - sy) * uy + r)
+    for x, y in points:
+        reach = max(reach, (x - sx) * ux + (y - sy) * uy)
+    distance = reach + float(clearance_m) + float(radius_m)
+    return (sx + distance * ux, sy + distance * uy), far
+
+
+def _centroid_end(
+    substation_xy: tuple[float, float],
+    group: list[PlannedSite],
+    geometry: dict[str, SiteGeometry],
+    clearance_m: float,
+    radius_m: float = 0.0,
+) -> tuple[tuple[float, float], PlannedSite]:
+    """Cabinet position in m on the ray through the group's centroid (Q22, Q35).
+
+    On the ray from the substation along the group's direction :math:`u`
+    (:func:`_group_direction`), ``clearance_m + radius_m`` beyond the largest
+    projection on :math:`u` of every electrode of the group — horizontal
+    wires (a circle by its centre and radius) and, since audit W1B-02, rods —
+    so no electrode of the cabinet comes closer than ``clearance_m`` to one
+    of the group. Returns the building that holds that electrode as well.
+    """
+    sx, sy = substation_xy
+    ux, uy = _group_direction(substation_xy, group)
+    reach, holder = -math.inf, group[0]
     for b in group:
-        site = geometry[b.name]
-        for wire in site.wires:
-            if wire.circle is not None:
-                cx, cy, r = wire.circle
-                reach = max(reach, (cx - sx) * ux + (cy - sy) * uy + r)
-            else:
-                for x, y in wire.xy:
-                    reach = max(reach, (x - sx) * ux + (y - sy) * uy)
-        if not site.wires and site.point is not None:
-            px, py = site.point[0], site.point[1]
-            reach = max(reach, (px - sx) * ux + (py - sy) * uy)
-    distance = reach + float(clearance_m)
-    return (sx + distance * ux, sy + distance * uy)
+        points, circles = _plan_extent(b, geometry[b.name])
+        for cx, cy, r in circles:
+            value = (cx - sx) * ux + (cy - sy) * uy + r
+            if value > reach:
+                reach, holder = value, b
+        for x, y in points:
+            value = (x - sx) * ux + (y - sy) * uy
+            if value > reach:
+                reach, holder = value, b
+    distance = reach + float(clearance_m) + float(radius_m)
+    return (sx + distance * ux, sy + distance * uy), holder
+
+
+def _group_gap(
+    xy: tuple[float, float],
+    group: list[PlannedSite],
+    geometry: dict[str, SiteGeometry],
+    radius_m: float = 0.0,
+) -> float:
+    """Plan distance in m from a cabinet at ``xy`` (electrodes within
+    ``radius_m`` of it) to the nearest electrode of its group, at least 0."""
+    gap = math.inf
+    for b in group:
+        shapes = _plan_shapes(b, geometry[b.name])
+        if shapes is not None:
+            gap = min(gap, _gap_to(xy, shapes))
+    return max(0.0, gap - float(radius_m))
+
+
+def _cabinet_position(
+    substation_xy: tuple[float, float],
+    group: list[PlannedSite],
+    geometry: dict[str, SiteGeometry],
+    clearance_m: float,
+    radius_m: float,
+    max_gap_m: float,
+) -> tuple[tuple[float, float], PlannedSite]:
+    """Where the cabinet of a building group stands (Q22, Q35; W1B-01, W1B-02).
+
+    On the ray through the group's centroid (:func:`_centroid_end`, the rule
+    of user decisions Q22 and Q35) when that cabinet stands within
+    ``max_gap_m`` (:attr:`CabinetConfig.max_far_end_gap_m`) of the nearest
+    electrode of its group — a cabinet stands next to the houses it feeds —
+    otherwise on the ray through the group's far-end building
+    (:func:`_far_end`, audit W1B-01). The centroid ray of a group of about
+    180 degrees passes the houses next to the substation but its cabinet
+    lands far from every house (AP1: 10 houses and one small commercial
+    building, 50.4 m); the groups of the default 50-house grid stand 8.8 …
+    12.8 m from their houses on it and keep it (with the far-end building,
+    six houses of the southern group were fed straight from the
+    substation). Returns the position and the building named in a
+    clearance error.
+    """
+    xy, holder = _centroid_end(substation_xy, group, geometry, clearance_m, radius_m)
+    if _group_gap(xy, group, geometry, radius_m) <= max_gap_m:
+        return xy, holder
+    return _far_end(substation_xy, group, geometry, clearance_m, radius_m)
+
+
+class _PlanShapes(NamedTuple):
+    """Electrodes of one site in plan, for the clearance check (audit W1B-02)."""
+
+    name: str
+    segments: np.ndarray
+    """Straight wire pieces, shape ``(n, 2, 2)`` in m."""
+    circles: list[tuple[float, float, float]]
+    """``RingElectrodeSpec`` circles ``(x, y, r)`` in m."""
+    points: np.ndarray
+    """Rod heads, shape ``(n, 2)`` in m."""
+    outlines: list[Outline]
+    """Areas enclosed by its closed horizontal electrodes."""
+    box: tuple[float, float, float, float]
+    """Bounding box ``(x_min, y_min, x_max, y_max)`` in m."""
+
+
+def _plan_shapes(site: PlannedSite, geometry: SiteGeometry) -> Optional[_PlanShapes]:
+    """The electrodes of ``site`` in plan (``None`` without electrodes)."""
+    if not site.electrodes:
+        return None
+    pieces = [
+        (a, b)
+        for wire in geometry.wires
+        if wire.circle is None
+        for a, b in zip(wire.xy[:-1], wire.xy[1:], strict=True)
+    ]
+    circles = [wire.circle for wire in geometry.wires if wire.circle is not None]
+    rods = _rod_points(site)
+    points, _ = _plan_extent(site, geometry)
+    xs = [x for x, _ in points] + [x - r for x, _, r in circles]
+    xs += [x + r for x, _, r in circles]
+    ys = [y for _, y in points] + [y - r for _, y, r in circles]
+    ys += [y + r for _, y, r in circles]
+    return _PlanShapes(
+        site.name,
+        np.asarray(pieces, dtype=float).reshape(-1, 2, 2),
+        circles,
+        np.asarray(rods, dtype=float).reshape(-1, 2),
+        list(geometry.outlines),
+        (min(xs), min(ys), max(xs), max(ys)),
+    )
+
+
+def _gap_to(point: tuple[float, float], shapes: _PlanShapes) -> float:
+    """Plan distance in m from ``point`` to the electrodes of a site (0 when
+    it stands inside one of their closed outlines)."""
+    if inside_outlines(point, shapes.outlines):
+        return 0.0
+    p = np.asarray(point, dtype=float)
+    gap = math.inf
+    if len(shapes.segments):
+        a, b = shapes.segments[:, 0], shapes.segments[:, 1]
+        d = b - a
+        dd = np.einsum("ij,ij->i", d, d)
+        t = np.einsum("ij,ij->i", p - a, d) / np.where(dd > 0.0, dd, 1.0)
+        foot = a + np.clip(t, 0.0, 1.0)[:, None] * d
+        gap = float(np.min(np.hypot(*(p - foot).T)))
+    if len(shapes.points):
+        gap = min(gap, float(np.min(np.hypot(*(p - shapes.points).T))))
+    for x, y, r in shapes.circles:
+        gap = min(gap, abs(math.hypot(p[0] - x, p[1] - y) - r))
+    return gap
+
+
+def _check_cabinet_clearance(
+    cabinets: list[PlannedSite],
+    radii: list[float],
+    far_ends: list[PlannedSite],
+    others: list[PlannedSite],
+    geometry: dict[str, SiteGeometry],
+    clearance_m: float,
+) -> None:
+    """Raise when a cabinet's electrodes come closer than ``clearance_m`` to
+    those of another site (audit W1B-02).
+
+    A cabinet's electrodes lie within its plan radius of its position; they
+    keep the clearance from its far-end building by construction
+    (:func:`_far_end`), but another building (of its group or of another
+    one), the substation or another cabinet may stand near the ray beyond
+    it. The check counts every electrode of those sites — horizontal wires,
+    circles, rods — and a cabinet that stands inside one of their closed
+    outlines.
+    """
+    shapes = [
+        s
+        for s in (
+            _plan_shapes(site, geometry[site.name])
+            for site in [*others, *cabinets]
+            if site.name in geometry
+        )
+        if s is not None
+    ]
+    if not shapes:
+        return
+    boxes = np.asarray([s.box for s in shapes], dtype=float)
+    for cab, radius, far in zip(cabinets, radii, far_ends, strict=True):
+        if not cab.electrodes:
+            continue
+        cx, cy = cab.position_xy
+        need = clearance_m + radius
+        tol = 1e-9 * max(1.0, abs(cx), abs(cy), need)
+        gx = np.maximum.reduce(
+            [boxes[:, 0] - cx, np.zeros(len(boxes)), cx - boxes[:, 2]]
+        )
+        gy = np.maximum.reduce(
+            [boxes[:, 1] - cy, np.zeros(len(boxes)), cy - boxes[:, 3]]
+        )
+        near = np.flatnonzero(np.hypot(gx, gy) < need - tol)
+        blocked = []
+        for k in near:
+            other = shapes[int(k)]
+            if other.name == cab.name:
+                continue
+            gap = _gap_to((cx, cy), other)
+            if gap < need - tol:
+                blocked.append(
+                    f"{other.name!r} (inside its electrodes)"
+                    if gap == 0.0
+                    else f"{other.name!r} ({max(0.0, gap - radius):.3g} m)"
+                )
+        if blocked:
+            raise ValueError(
+                f"TnNetworkGenerator: the cable cabinet {cab.name!r} of the "
+                f"building group of {far.name!r} (the building it stands beyond) "
+                "stands at "
+                f"({cx:.3f}, {cy:.3f}) m, CabinetConfig.end_clearance_m = "
+                f"{clearance_m:g} m beyond that building, but "
+                + (
+                    f"its earth electrodes (within {radius:g} m of that point) come"
+                    if radius > 0.0
+                    else "its earth electrode there comes"
+                )
+                + f" closer than {clearance_m:g} m to those of "
+                f"{', '.join(blocked)}. Give the "
+                "cabinets a CabinetConfig.placement, or change end_clearance_m "
+                "or the cabinet count (audit W1B-02)."
+            )
 
 
 def _router(
@@ -903,23 +1254,25 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
             n_cabinets = self._resolve_cabinet_count(cfg, n_buildings, rng)
             groups: Optional[list[list[PlannedSite]]] = None
             geometry: dict[str, SiteGeometry] = {}
+            cabinets: list[PlannedSite]
             if cfg.cabinets.placement is not None:
-                cabinet_positions = cfg.cabinets.placement.generate(n_cabinets, rng)
+                cabinets = [
+                    cfg.cabinets.grounding.plan_site(
+                        f"kvs_{k}", role="cabinet", position_xy=site_xy, rng=rng
+                    )
+                    for k, site_xy in enumerate(
+                        cfg.cabinets.placement.generate(n_cabinets, rng)
+                    )
+                ]
             else:
                 # One cabinet per building group, at the far end of the
                 # houses it feeds (user decisions Q22, Q35).
                 geometry = {
                     site.name: _site_geometry(site) for site in [substation, *buildings]
                 }
-                groups, cabinet_positions = self._group_cabinets(
+                groups, cabinets = self._group_cabinets(
                     cfg, substation, buildings, n_cabinets, geometry, rng
                 )
-            cabinets = [
-                cfg.cabinets.grounding.plan_site(
-                    f"kvs_{k}", role="cabinet", position_xy=site_xy, rng=rng
-                )
-                for k, site_xy in enumerate(cabinet_positions)
-            ]
             sites.extend(cabinets)
             if not any(c.anchor is not None for c in cabinets):
                 raise ValueError(
@@ -1168,15 +1521,24 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         n_cabinets: int,
         geometry: dict[str, SiteGeometry],
         rng: np.random.Generator,
-    ) -> tuple[list[list[PlannedSite]], list[tuple[float, float]]]:
-        """Building groups and the positions of their cabinets (Q22, Q35).
+    ) -> tuple[list[list[PlannedSite]], list[PlannedSite]]:
+        """Building groups and their cabinets (Q22, Q35; audits W1B-01, W1B-02).
 
         The wired buildings are grouped by
         :meth:`~groundfield.generators.pen_topology.StarCabinetTopology.group_buildings`;
-        group ``k`` is fed by cabinet ``kvs_<k>``, which stands at
-        :func:`_far_end` of the group. With more cabinets than buildings
-        every building is a group of its own and the remaining cabinets are
-        not placed (a :class:`UserWarning`).
+        group ``k`` is fed by cabinet ``kvs_<k>``, which stands where
+        :func:`_cabinet_position` puts it, its own grounding's plan extent
+        included. With more cabinets than buildings every building is a
+        group of its own and the remaining cabinets are not placed (a
+        :class:`UserWarning`). The plan geometry of every cabinet is added to
+        ``geometry``.
+
+        Raises
+        ------
+        ValueError
+            If the drawn ``end_clearance_m`` is not positive and finite, or
+            if a cabinet's electrodes come closer than ``end_clearance_m``
+            to those of another site (:func:`_check_cabinet_clearance`).
         """
         wired = [b for b in buildings if b.anchor is not None]
         if n_cabinets > len(wired):
@@ -1192,9 +1554,41 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
             origin, [b.position_xy for b in wired], n_cabinets
         )
         clearance = _to_float(cfg.cabinets.end_clearance_m, rng)
+        if not (math.isfinite(clearance) and clearance > 0.0):
+            raise ValueError(
+                "TnNetworkGenerator: CabinetConfig.end_clearance_m must be a "
+                f"positive, finite distance in m; drew {clearance!r} (audit W1B-05)."
+            )
+        max_gap = _to_float(cfg.cabinets.max_far_end_gap_m, rng)
+        if not (math.isfinite(max_gap) and max_gap > 0.0):
+            raise ValueError(
+                "TnNetworkGenerator: CabinetConfig.max_far_end_gap_m must be a "
+                f"positive, finite distance in m; drew {max_gap!r}."
+            )
         groups = [[wired[i] for i in group] for group in index_groups]
-        positions = [_far_end(origin, group, geometry, clearance) for group in groups]
-        return groups, positions
+        cabinets: list[PlannedSite] = []
+        radii: list[float] = []
+        far_ends: list[PlannedSite] = []
+        for k, group in enumerate(groups):
+            # The cabinet's electrodes are drawn first (in the order of the
+            # former placement), at its position relative to itself, so the
+            # plan extent of its grounding is known before it is placed.
+            local = cfg.cabinets.grounding.plan_site(
+                f"kvs_{k}", role="cabinet", position_xy=(0.0, 0.0), rng=rng
+            )
+            radius = _plan_radius(local, _site_geometry(local))
+            xy, far = _cabinet_position(
+                origin, group, geometry, clearance, radius, max_gap
+            )
+            cabinet = local.model_copy(update={"position_xy": xy})
+            geometry[cabinet.name] = _site_geometry(cabinet)
+            cabinets.append(cabinet)
+            radii.append(radius)
+            far_ends.append(far)
+        _check_cabinet_clearance(
+            cabinets, radii, far_ends, [substation, *buildings], geometry, clearance
+        )
+        return groups, cabinets
 
     def _plan_star_backbone(
         self,

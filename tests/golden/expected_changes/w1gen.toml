@@ -12,6 +12,15 @@
 # harness compares with v0.15.0, where this share cannot be told apart from the
 # earlier ones (gen2, fix2gen, d3gen, f4gen), hence no min_rel_change; the bounds
 # add to theirs.
+#
+# Audit W1B-06 (stream fw1gen): one bound per kind of quantity, each just above
+# this stream's share measured against a golden snapshot of e6124cd
+# (deliver/evidence/fw1gen/golden/): the cabinet rod and the point sources move
+# by up to 0.63, the substation and house currents by up to 4.7e-2, the probe
+# potential by 1.17 and its round-off current by 10.8. Up to then one bound of
+# 0.8 covered every current and the probe potential shared the bound of 20 meant
+# for the round-off probe current. The fixes of fw1gen (audits W1B-01 ... W1B-05)
+# move neither case (GF_GOLDEN_STRICT against a snapshot of 6f63deb).
 
 [[change]]
 cases = ["gen_tn_default"]
@@ -23,20 +32,36 @@ cabinet strip to the far end of the group, 1 m beyond the westmost house, (-118.
 and the main leaves the substation ring at (-4, 0) m instead of (4, 0) m (Q43). The
 cabinet rod, 62.5 m from the houses before, now stands next to them and adds little
 earthing: the substation potential for 1 A rises from 1.158650 to 1.172281 V (+1.18 %;
-Q43 alone -0.115 %). Measured against the base: potentials <= 1.36e-2, surface potential
+Q43 alone -0.115 %). Measured against e6124cd: potentials <= 1.36e-2, surface potential
 1.29e-2 (norm-wise)."""
-max_rel_change = 2.0e-2
+max_rel_change = 1.5e-2
 
 [[change]]
 cases = ["gen_tn_default"]
-quantities = ["I/*", "ps/*"]
+quantities = ["I/kvs_*", "ps/I"]
 findings = ["10.38"]
 reason = """User decisions Q22 / Q35 and Q43: the leakage current of the cabinet rod falls
-from 16.90 to 6.30 mA (-62.7 %) when the cabinet moves from 62.5 m beyond the houses to
-1 m beyond them; the houses' currents move by <= 4.7e-2, the point-source currents by the
-cabinet's 0.627, the point-source positions by the cabinet's 61.5 m (0.342 of the
-largest coordinate)."""
-max_rel_change = 0.8
+from 16.90 to 6.30 mA (-62.7 %, 0.627 against e6124cd) when the cabinet moves from 62.5 m
+beyond the houses to 1 m beyond them; the point-source currents move by the cabinet's
+0.627 (audit W1B-06: bound of this kind alone)."""
+max_rel_change = 0.7
+
+[[change]]
+cases = ["gen_tn_default"]
+quantities = ["ps/pos"]
+findings = ["10.38"]
+reason = """User decisions Q22 / Q35: the point-source positions move with the cabinet,
+61.5 m, 0.342 of the largest coordinate (audit W1B-06: bound of its own)."""
+max_rel_change = 0.4
+
+[[change]]
+cases = ["gen_tn_default"]
+quantities = ["I/trafo_*", "I/residential_*"]
+findings = ["10.38"]
+reason = """User decisions Q22 / Q35 and Q43: the currents of the substation electrodes
+and the houses move by <= 4.71e-2 against e6124cd when the cabinet moves next to the
+houses (audit W1B-06: up to then they shared the cabinet rod's bound of 0.8)."""
+max_rel_change = 6.0e-2
 
 [[change]]
 cases = ["gen_tn_default"]
@@ -48,31 +73,58 @@ allow_shape_change = true
 
 [[change]]
 cases = ["gen_tn_measurement_overhead_leads"]
-quantities = ["phi/trafo_*", "phi/residential_*", "phi/kvs_*", "phi/aux_rod_0"]
+quantities = ["phi/trafo_*", "phi/residential_*", "phi/kvs_*"]
 findings = ["10.38"]
 reason = """User decisions Q22 / Q35 and Q43: the three default houses stand west of the
 substation; their cabinet moves from (-180, 0) m to (-118.5, 0) m, 1 m beyond the
 westmost house, and the main leaves the substation ring at (-4, 0) m: the substation
 potential rises from 1.445709 to 1.471134 V (+1.76 %; Q43 alone -0.073 %). Measured
-against the base: potentials <= 1.91e-2."""
+against e6124cd: potentials <= 1.91e-2."""
 max_rel_change = 2.5e-2
 
 [[change]]
 cases = ["gen_tn_measurement_overhead_leads"]
-quantities = ["I/trafo_*", "I/residential_*", "I/kvs_*"]
+quantities = ["phi/aux_rod_0"]
 findings = ["10.38"]
-reason = """User decisions Q22 / Q35: the cabinet rod's leakage current falls from 22.27 to
-8.52 mA (-61.7 %) next to the houses; the houses' currents move by <= 4.3e-2."""
-max_rel_change = 0.8
+reason = """User decisions Q22 / Q35 and Q43: the auxiliary current electrode 150 m east
+reads the moved network by 9.1e-6 against e6124cd (audit W1B-06: up to then it shared
+the bound of 2.5e-2 of the network's potentials)."""
+max_rel_change = 1.0e-4
 
 [[change]]
 cases = ["gen_tn_measurement_overhead_leads"]
-quantities = ["phi/probe_rod_0", "I/probe_rod_0"]
+quantities = ["I/kvs_*"]
+findings = ["10.38"]
+reason = """User decisions Q22 / Q35: the cabinet rod's leakage current falls from 22.27 to
+8.52 mA (-61.7 %, 0.618 against e6124cd) next to the houses (audit W1B-06: bound of this
+kind alone)."""
+max_rel_change = 0.7
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["I/trafo_*", "I/residential_*"]
+findings = ["10.38"]
+reason = """User decisions Q22 / Q35: the currents of the substation electrodes and the
+houses move by <= 4.26e-2 against e6124cd (audit W1B-06: up to then they shared the cabinet
+rod's bound of 0.8)."""
+max_rel_change = 6.0e-2
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["phi/probe_rod_0"]
 findings = ["10.38"]
 reason = """User decisions Q22 / Q35 and Q43: the floating probe rod 50 m east reads the field
-of the moved network, 1.4896e-3 -> 3.2284e-3 V (+117 %; Q43 alone -2.3 %); its current
-is round-off around
-zero (1.6e-19 A on the base, 1.7e-18 A changed), whose relative change means nothing."""
+of the moved network, 1.4896e-3 -> 3.2284e-3 V (+117 %, 1.17 against e6124cd; Q43 alone
+-2.3 %). Audit W1B-06: up to then it shared the bound of 20 of the probe current."""
+max_rel_change = 1.5
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["I/probe_rod_0"]
+findings = ["10.38"]
+reason = """User decisions Q22 / Q35 and Q43: the current of the floating probe rod is
+round-off around zero (1.6e-19 A on the base, 1.7e-18 A changed; 10.8 against e6124cd),
+whose relative change means nothing."""
 max_rel_change = 20.0
 
 [[change]]
