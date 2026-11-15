@@ -336,6 +336,17 @@ class PlannedBranch(BaseModel):
         :class:`PlannedContact` (only at a site): the branch ends at that
         point of a foundation wire of the site, at the wire's depth (or at
         ``axis_z_m``), and is attached to that wire (user decision Q41).
+    axis_offset_m
+        Horizontal offset in m of the conductor from the straight line
+        between the plan positions of its two end points, perpendicular to
+        it: both ends move by ``axis_offset_m`` along the normal
+        $(-d_y, d_x)/|d|$ of the plan direction $d$ from start to end
+        (rotated by +90° from x towards y). The conductor stays attached to
+        its two end nodes. ``0`` (default): on the line. The TN generator
+        lays service drops that leave one tap in one direction side by side
+        at the touching distance (decision D9 of 2026.11,
+        :mod:`groundfield.generators._pen_routing`); plans written before
+        have no such entry and keep their geometry.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -349,6 +360,15 @@ class PlannedBranch(BaseModel):
     axis_z_m: Optional[float] = None
     start_contact: Optional[PlannedContact] = None
     end_contact: Optional[PlannedContact] = None
+    axis_offset_m: float = Field(
+        default=0.0,
+        allow_inf_nan=False,
+        description=(
+            "Horizontal offset in m of the conductor from the line between "
+            "its end points, along the normal (-d_y, d_x)/|d| of its plan "
+            "direction (decision D9: drops in a row)."
+        ),
+    )
 
 
 class PlannedMeasurement(BaseModel):

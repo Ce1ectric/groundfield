@@ -87,6 +87,32 @@ Rules of :class:`~groundfield.generators.tn_network.TnNetworkGenerator`
    :attr:`PenRouter.min_length` cannot be joined by a cable: the router
    raises :class:`ValueError` naming both (a site on top of another).
 
+5. **Drops that leave one tap in one direction lie in a row** (decision D9
+   of 2026.11): drops that start at one node at one point and run on one
+   axis in one direction (the drops of houses behind each other: the five
+   drops of the 5-house radial network all leave the substation ring along
+   −x) are laid side by side at the touching distance $d_t = 2r$ of the
+   PEN, so that only neighbours touch. The row is sorted by drop length,
+   shortest first (equal lengths keep their plan order), and drop $k$ of
+   $n$ lies at $(k - (n - 1)/2)\,d_t$ from the common axis along the normal
+   $(-d_y, d_x)/|d|$ of the drop direction $d$
+   (:attr:`~groundfield.generators.plan.PlannedBranch.axis_offset_m`; both
+   ends move, the drop stays attached to its tap and its building): the
+   row is centred on the axis, a row of an odd number of drops keeps its
+   middle drop on it. "On one axis" means: the start points and the end of
+   the shorter drop lie within $10^{-9}\,d_t$ of the line of the longer one
+   (the tolerance of the overlap check of
+   :func:`~groundfield.diagnostics.diagnose`, audit W3B-03; in the default
+   grids of 5 … 200 houses two drops of one node are collinear to
+   round-off, 3e-14 m, or diverge by at least 1.6e-2 rad, 0.28 m at the end
+   of the shorter one). Up to
+   then they were drawn on one axis and the inductance matrix read them as
+   a bundle in which every pair touches, which no cross-section of four or
+   more equal wires realises; :func:`~groundfield.diagnostics.diagnose`
+   reported every pair (audit W3B-05). A drop that leaves its tap alone in
+   its direction keeps its axis (offset 0), so a placement without shared
+   directions builds the world it built.
+
 What follows: no drop runs along a cable farther than one minimum section
 (:attr:`PenRouter.min_length`, 1 cm for the default PEN; "along" as in
 rule 2) — it leaves an interior tap perpendicularly, an end node at an
@@ -123,7 +149,8 @@ impedance by at most 0.006 % with an insulated PEN (nothing in the star
 −0.40 % with a bare one (default grids of 30 and 150 houses, 50 Hz and
 1 kHz, ``carson_series`` and ``sommerfeld``). Overlapping conductors lie in one
 trench; the inductive coupling evaluates them as touching wires (finite
-mutual inductance, passive network).
+mutual inductance, passive network); the drops of one tap and direction lie
+side by side at the touching distance instead (rule 5).
 
 Coordinates are horizontal positions: the points where the materialised
 conductors end (they run at the PEN depth, ``axis_z_m``).
@@ -151,6 +178,12 @@ from groundfield.generators.plan import (
 )
 
 __all__ = ["MIN_DROP_LENGTH_M", "PenRouter", "min_section_length"]
+
+# Rule 5 (decision D9): two drops lie on one axis when their start points and
+# the end of the shorter one lie within this fraction of the touching
+# distance of the line of the longer one (the relative tolerance of the
+# overlap check of diagnose(), diagnostics._OVERLAP_TOUCH_TOL, audit W3B-03).
+_ROW_TOLERANCE = 1e-9
 
 MIN_DROP_LENGTH_M = 0.01
 """Shortest cable section or service drop in m (for thin conductors).
@@ -488,8 +521,10 @@ class PenRouter:
 
     def branches(self) -> list[PlannedBranch]:
         """The cable sections (cable by cable, in order along each cable)
-        and then the service drops, as plan branches."""
+        and then the service drops, as plan branches; the drops of one tap
+        and direction in a row (rule 5, decision D9)."""
         sections = [s for cable in self._cables.values() for s in cable]
+        offsets = [0.0] * len(sections) + self._row_offsets()
         return [
             PlannedBranch(
                 name=s.name,
@@ -500,9 +535,41 @@ class PenRouter:
                 axis_z_m=self.depth_m,
                 start_contact=_contact(s.start),
                 end_contact=_contact(s.end),
+                axis_offset_m=offset,
             )
-            for s in [*sections, *self._drops]
+            for s, offset in zip([*sections, *self._drops], offsets, strict=True)
         ]
+
+    def _row_offsets(self) -> list[float]:
+        """Offset in m of every drop from its axis (rule 5, decision D9).
+
+        Drops that leave one node at one point on one axis in one direction
+        form a row; it is sorted by drop length (shortest first, ties in
+        plan order) and centred on the axis, one touching distance between
+        neighbours. Any other drop gets 0.
+        """
+        touch = 2.0 * float(self.conductor.wire_radius_m)
+        tol = _ROW_TOLERANCE * touch
+        offsets = [0.0] * len(self._drops)
+        by_node: dict[str, list[int]] = {}
+        for k, drop in enumerate(self._drops):
+            by_node.setdefault(drop.start.node, []).append(k)
+        for members in by_node.values():
+            rows: list[list[int]] = []
+            for k in members:
+                for row in rows:
+                    if all(_one_axis(self._drops[k], self._drops[m], tol) for m in row):
+                        row.append(k)
+                        break
+                else:
+                    rows.append([k])
+            for row in rows:
+                if len(row) < 2:
+                    continue
+                row.sort(key=lambda k: (_length(self._drops[k]), k))
+                for i, k in enumerate(row):
+                    offsets[k] = (i - 0.5 * (len(row) - 1)) * touch
+        return offsets
 
     # ------------------------------------------------------------------
     # Geometry helpers
@@ -856,6 +923,30 @@ def _segment_box_gap(
         to_box(b[0], b[1]),
         *(to_segment(x, y) for x in (x0, x1) for y in (y0, y1)),
     )
+
+
+def _length(section: _Section) -> float:
+    """Plan length in m of a section or drop."""
+    (ax, ay), (bx, by) = section.start.xy, section.end.xy
+    return math.hypot(bx - ax, by - ay)
+
+
+def _one_axis(a: _Section, b: _Section, tol: float) -> bool:
+    """Whether two drops of one node leave it on one axis in one direction.
+
+    Their start points lie within ``tol`` of each other, and the end of the
+    shorter drop within ``tol`` of the line of the longer one, on its side
+    of the start (rule 5).
+    """
+    (ax, ay), (bx, by) = a.start.xy, b.start.xy
+    if math.hypot(ax - bx, ay - by) > tol:
+        return False
+    short, long_ = (a, b) if _length(a) <= _length(b) else (b, a)
+    (sx, sy), (ex, ey) = long_.start.xy, long_.end.xy
+    length = _length(long_)
+    ux, uy = (ex - sx) / length, (ey - sy) / length
+    px, py = short.end.xy[0] - sx, short.end.xy[1] - sy
+    return ux * px + uy * py > 0.0 and abs(ux * py - uy * px) <= tol
 
 
 def _contact(end: _End) -> PlannedContact | None:

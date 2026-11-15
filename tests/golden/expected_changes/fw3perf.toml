@@ -1,0 +1,9 @@
+# Fix stream fw3perf (audit W3B, base release/calver 098bbbc). Decision D9 of
+# 2026-11-15: service drops that leave one tap in one direction lie side by
+# side at the touching distance (PlannedBranch.axis_offset_m). Measured with
+# GF_GOLDEN_STRICT=1 against a snapshot of 098bbbc generated on the same
+# machine (macOS arm64): no golden case moves. The generator cases have no
+# such drops (gen_tn_default: the 5-house star joins every house to a main;
+# gen_tn_measurement_overhead_leads: 3 houses; gen_layout_builder: the
+# LvNetworkLayout path draws no rows), so their worlds are bit-identical.
+# The W3B-01 declaration of this stream is appended to w3perf.toml.

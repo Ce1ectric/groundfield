@@ -5,9 +5,10 @@ other closer than touching (two cables drawn on one axis, a service drop drawn
 on its PEN main) as touching wires; ``diagnose()`` reports such pairs as
 ``overlap`` warnings when the stretch exceeds 10 touching distances and 5 % of
 the shorter conductor. Branches, crossings, T-contacts and a core inside its
-cable shield are not overlaps. In the generated radial networks every drop of
-a row of houses leaves the same tap on one axis: those overlaps are real
-(spread 5 cm apart, Z_in of 5 houses moves by 3.5 % at 1 kHz, X by -15 %).
+cable shield are not overlaps. Up to 098bbbc the drops of a row of houses in
+the generated radial and star networks left one tap on one axis and were
+reported (5 houses radial: 10 pairs); since decision D9 they lie side by side
+at the touching distance and are not (with the tolerance of audit W3B-03).
 """
 
 from __future__ import annotations
@@ -197,25 +198,22 @@ def _generated(n: int, topology) -> gf.World:
         return TnNetworkGenerator(cfg, seed=0).build()
 
 
+# user decision D9, audit W3B-03
 @pytest.mark.parametrize(
-    ("n", "topology", "expected"),
+    ("n", "topology"),
     [
-        (30, StarCabinetTopology(), 0),
-        (200, StarCabinetTopology(), 0),
-        (5, RadialTrunkTopology(), 10),
-        (30, RadialTrunkTopology(), 2),
+        (30, StarCabinetTopology()),
+        (200, StarCabinetTopology()),
+        (5, RadialTrunkTopology()),
+        (30, RadialTrunkTopology()),
     ],
     ids=["star30", "star200", "radial5", "radial30"],
 )
-def test_generated_networks_report_only_their_drops_on_one_axis(
-    n, topology, expected
-) -> None:
+def test_generated_networks_report_no_overlap(n, topology) -> None:
     """Measured on the generated networks (stream w3perf, item 4): the star
-    networks of 30 and 200 houses have none; in the radial ones the drops of
-    houses behind each other leave one tap on one axis (5 houses: all five
-    drops from the substation ring along -x, 10 pairs)."""
-    found = _overlaps(_generated(n, topology))
-    assert len(found) == expected
-    for d in found:
-        assert all(name.startswith("pen_service_") for name in d.subjects)
-        assert d.data["distance_m"] < 1e-9
+    networks of 30 and 200 houses had none; in the radial ones the drops of
+    houses behind each other left one tap on one axis (5 houses: all five
+    drops from the substation ring along -x, 10 pairs; 30 houses: 2). Since
+    decision D9 they lie in a row at the touching distance and none is
+    reported (tests/test_service_drop_rows.py covers more networks)."""
+    assert _overlaps(_generated(n, topology)) == []

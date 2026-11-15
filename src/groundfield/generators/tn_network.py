@@ -100,7 +100,11 @@ Geometric layout
   topology every trunk counts for the crossing rule, and a building in a
   substation slot taps its feeder's trunk (Q22, Q35). No drop runs along a
   cable farther than one minimum section (1 cm); a drop may pass over
-  other buildings' foundations, 0.2 m above their wires.
+  other buildings' foundations, 0.2 m above their wires. Drops that leave
+  one tap in one direction (houses behind each other) lie side by side at
+  the touching distance of the PEN, sorted by length and centred on their
+  common axis, so that only neighbours touch (decision D9 of 2026.11,
+  :attr:`~groundfield.generators.plan.PlannedBranch.axis_offset_m`).
 
 Validity envelope
 -----------------
