@@ -129,8 +129,10 @@ _SHELL_DESCRIPTION = (
     "electrode in parallel, $L$: total wire length). ``wire_radius`` is the "
     "outer shell radius "
     "$r_b$ (the soil sees the shell surface). ``0.0`` (default): no shell. "
-    "Honoured by the image family and ``solve_mutual_*``; the other "
-    "backends reject a non-zero value."
+    "Honoured by the image family, ``solve_mutual_*`` and, since 2026.11, "
+    "``mom`` and ``mom_sommerfeld`` (one current per segment: the current "
+    "redistributes, so the shell adds at least ``C/L``); ``fem`` rejects a "
+    "non-zero value."
 )
 
 

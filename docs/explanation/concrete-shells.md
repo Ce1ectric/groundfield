@@ -38,8 +38,9 @@ electrodes work at all.
 
 Every electrode kind (rod, ring, strip, polyline, star, mesh, grid mesh)
 has the field `concrete_shell_coefficient_ohm_m` — the coefficient $C$
-above. The image family (and `solve_mutual_matrix` /
-`solve_mutual_field`) consumes it per segment: a segment of length
+above. The image family, `solve_mutual_matrix` / `solve_mutual_field` and,
+since 2026.11, `mom` and `mom_sommerfeld` consume it per segment: a
+segment of length
 $\Delta s$ adds $C/\Delta s$ to its own diagonal entry of the reaction
 matrix — the voltage drop of its share of the leakage current across its
 piece of shell — and nothing to the off-diagonal entries, because shells
@@ -56,9 +57,86 @@ $$
 
 for every electrode kind, homogeneous or layered soil, in `Engine.solve`
 and in `solve_mutual_matrix` alike
-(`tests/test_concrete_shell_coefficient.py`). Backends outside the image
-family reject electrodes with a non-zero coefficient
-(`BackendCapabilityError`).
+(`tests/test_concrete_shell_coefficient.py`). `fem` rejects electrodes
+with a non-zero coefficient (`BackendCapabilityError`); so did `mom` and
+`mom_sommerfeld` up to 2026.11 (see
+[In the moment method](#in-the-moment-method)).
+
+### In the moment method
+
+`mom` and `mom_sommerfeld` solve one pulse current $I_k$ per segment, all
+segments of a node at one potential (point matching). A segment of length
+$\Delta s_k$ drops $C I_k/\Delta s_k$ across its piece of shell, so the
+segment system reads
+
+$$
+\bigl(K + \operatorname{diag}(C_k/\Delta s_k)\bigr)\,\mathbf I
+= \varphi\,\mathbf 1, \qquad \sum_k I_k = I,
+$$
+
+with $K$ the soil reaction matrix of the wire of outer radius $r_b$; the
+reported segment potentials, and with them the node potential, are those
+of the metal, and the field in the soil is that of the leakage currents.
+Unlike the uniform current of an owner, the current redistributes. The
+equipotential solution minimises $\mathbf I^\mathsf{T}(K + S)\mathbf I$
+over $\sum_k I_k = I$, so the shell raises $Z$ by at least $C/L$ — the
+shell term alone is smallest for a current uniform per length — and by at
+most $C/L$ plus the excess of the uniform current over the equipotential
+one; a dry shell evens the current out ($Z - C/L$ is within $5\cdot10^{-6}$
+of the uniform-current value of the bare wire at $C = 3.8\cdot10^{5}$ Ω·m
+for a 3 m rod, an 8 m × 6 m grid and a three-arm star). Two methods check
+the implementation (evidence of stream w2mom,
+`tests/test_concrete_shells_mom_family.py`):
+
+* **Same matrix physics.** The image family with one owner per segment
+  (point kernel, every segment its own uniform-current owner, all bonded)
+  solves the same system: it agrees with `mom` to $7\cdot10^{-16}$ for
+  rods, a rod through the layer interface, rings, strips, grids, outlines
+  and stars in 100 Ω·m and in 30 / 200 Ω·m ($h_1$ = 4 m), 5 cm of
+  100 Ω·m concrete; `mom_sommerfeld` reproduces `mom` on the two-layer soil
+  to $4\cdot10^{-9}$.
+* **Closed forms.** The segments of a ring are equivalent (its matrix is
+  circulant), so its current stays uniform and the shell adds exactly
+  $C/(2\pi r)$: `mom` and `mom_sommerfeld` give it to $10^{-14}$ in
+  homogeneous, two-layer and three-layer soil for $C$ = 11 … 382 Ω·m. For
+  a 3 m rod from the surface, Sunde's decomposition with Dwight's rod
+  formula, $R = C/L + \frac{\rho}{2\pi L}\bigl(\ln\frac{4L}{r_b} -
+  1\bigr)$, the image family's uniform current (line kernel) lies
+  0.14 … 0.20 % above the formula and rises by exactly $C/L$; `mom` rises
+  by 1.014 … 1.041 $C/L$ and lies 0.8 … 2.7 % below the formula (5 cm of
+  30 or 100 Ω·m concrete, 0.25 m and 0.125 m segments), less than the bare
+  rod (2.4 … 3.5 %, the point kernel's deficit).
+
+`mom` is therefore the per-segment reference against which the owner
+model of the image family (one uniform current per straight wire) is
+measured, also for encased electrodes. With 5 cm of 30 Ω·m (wet) concrete
+around a 5 mm wire, 1 m segments (the outline 0.5 m), grids and stars
+0.5 m deep and the outline 0.8 m, the owner model lies above one current
+per segment by:
+
+| Geometry, soil | line kernel against one owner per segment (line kernel), bare / encased | point kernel against `mom`, bare / encased |
+|---|---|---|
+| grids 10 m 2 × 2 … 40 m 8 × 8, 100 Ω·m | +0.36 … +0.70 % / +0.43 … +0.68 % | +0.29 … +0.66 % / +0.35 … +0.63 % |
+| the same grids, 1 000 / 100 Ω·m, $h_1$ = 5 m | +0.43 … +0.64 % / +0.64 … +0.89 % | +0.33 … +0.50 % / +0.50 … +0.69 % |
+| stars of 3 … 8 arms of 10 m, 100 Ω·m | +1.8 … +10.5 % / +2.7 … +13.6 % | +1.6 … +10.0 % / +2.4 … +13.0 % |
+| the same stars, 1 000 / 100 Ω·m | +1.6 … +12.6 % / +3.1 … +19.7 % | +1.4 … +11.8 % / +2.7 … +18.8 % |
+| outline 16 m × 1 m, 100 Ω·m | +0.38 % / +0.48 % | +0.39 % / +0.49 % |
+
+The line-kernel column repeats the numbers quoted so far, which were
+measured against the image family's per-segment owners (confirmed to the
+printed digit); the `mom` column is the comparison with the point kernel,
+the kernel of `mom`, which isolates the current model. For the generated
+meshes of the next section (0.5 m segments) the owner model lies
++0.42 / +0.36 / +0.31 / +0.057 / +0.004 % (line kernel) and
++0.38 / +0.33 / +0.28 / +0.052 / +0.004 % (point kernel against `mom`)
+above one current per segment for the house in 100 Ω·m at
+$\rho_c$ = 50 / 100 / 150 / 1 000 / 5 000 Ω·m, at most +0.57 % and
++0.54 % for `medium_industry` (50 Ω·m); for the rectangles without
+cross-braces of the table further down `mom` gives one owner per side
++0.230 % (80 m × 20 m) and +1.353 % (150 m × 3 m) above one current per
+segment, bare and in 5 cm of 30 Ω·m (30 / 200 Ω·m, $h_1$ = 5 m, 1 m
+segments), against +0.230 / +0.231 % and +1.336 / +1.339 % with the line
+kernel.
 
 ### Why one mechanism (findings 10.12–10.14)
 
@@ -177,7 +255,11 @@ assembly and the boundary-element solution agree on this to 0.02 points.
 The owner model is 1.6 / 2.8 % high for the mesh with bare braces and at
 most 0.6 % high for the encased mesh (0.43 % at 50 Ω·m, 0.004 % at
 5 000 Ω·m for the house in 100 Ω·m), whose shell evens out the current
-over the wires.
+over the wires. These per-segment numbers come from groundfield's
+per-segment assembly with the line kernel at 0.25 m segments; at 0.5 m
+segments it gives 0.42 %, and `mom` with its point kernel puts the image
+family's point kernel 0.38 % above it (see
+[In the moment method](#in-the-moment-method)).
 
 ### Against 0.15.0
 
@@ -361,7 +443,7 @@ encased wire.
 | Current | radial through the shell; the series decomposition holds below 1 kHz for foundation sizes |
 | Concrete | homogeneous $\rho_c$ per electrode; moisture states span about 30 Ω·m (wet) to tens of kΩ·m (dry), see ADR-0012 |
 | Field quantities | the surface potential is that of the bare wire of radius $r_b$ fed through the shell; the shell resistance itself is a series element |
-| Backends | `image`, `image_2layer`, `solve_mutual_*`; others raise `BackendCapabilityError` |
+| Backends | `image`, `image_2layer`, `solve_mutual_*`, `mom`, `mom_sommerfeld` (since 2026.11); `fem` raises `BackendCapabilityError` |
 
 ## Literature
 

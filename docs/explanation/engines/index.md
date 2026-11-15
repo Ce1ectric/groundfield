@@ -163,9 +163,9 @@ provenance) into every result. The table is generated from the registry:
 | `image_2layer` | current | Two-layer soil, Tagg / Sunde image series | 2 | `line`, `point` | yes, yes, yes | yes | distributed, inductive, lumped, skin | — |
 | `image_nlayer` | deprecated name of `image` | Layered soil routed to image (n = 1) or image_2layer (n = 2) | 1, 2 | `line`, `point` | yes, yes, yes | yes | distributed, inductive, lumped, skin | — |
 | `cim` | deprecated name of `image` | Deprecated name of the image auto-dispatch (10.76) | 1, 2 | `line`, `point` | yes, yes, yes | yes | distributed, inductive, lumped, skin | — |
-| `mom` | current | Method of moments, point-matching collocation | 1, 2 | `point` | yes, yes, yes | no | distributed, inductive, lumped, skin | — |
-| `mom_sommerfeld` | current | Method of moments with Sommerfeld quadrature, any n | 1, 2, ≥ 3 | `point` | yes, yes, yes | no | distributed, inductive, lumped, skin | `MomSommerfeldOptions` |
-| `bem` | deprecated name of `mom` | Deprecated name of 'mom' (10.76) | 1, 2 | `point` | yes, yes, yes | no | distributed, inductive, lumped, skin | — |
+| `mom` | current | Method of moments, point-matching collocation | 1, 2 | `point` | yes, yes, yes | yes | distributed, inductive, lumped, skin | — |
+| `mom_sommerfeld` | current | Method of moments with Sommerfeld quadrature, any n | 1, 2, ≥ 3 | `point` | yes, yes, yes | yes | distributed, inductive, lumped, skin | `MomSommerfeldOptions` |
+| `bem` | deprecated name of `mom` | Deprecated name of 'mom' (10.76) | 1, 2 | `point` | yes, yes, yes | yes | distributed, inductive, lumped, skin | — |
 | `fem` | experimental | Axisymmetric finite elements of an equivalent hemisphere | 1, 2, ≥ 3 | none (volume mesh) | no, no, no | no | lumped | `FemOptions` |
 <!-- generated:end registry -->
 

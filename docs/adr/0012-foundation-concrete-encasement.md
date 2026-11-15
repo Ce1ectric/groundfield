@@ -403,7 +403,14 @@ Decision:
    `concrete_shell_coefficient`, `shell_coefficient_from_resistance`,
    `shell_resistance_from_coefficient`.
 5. **Capability.** Backends outside the image family reject electrodes
-   with a shell (`BackendCapabilityError`).
+   with a shell (`BackendCapabilityError`). Since the release scope of
+   2026-11-14 `mom` and `mom_sommerfeld` add the same term per segment to
+   their point-matching systems, $C/\Delta s$ on the diagonal and the
+   shell drop on the segment potential; with one owner per segment the
+   image family solves the same system (agreement $7\cdot10^{-16}$), and
+   an encased ring rises by exactly $C/(2\pi r)$ in every soil. `fem` is
+   the backend left that rejects shells
+   ([concrete shells](../explanation/concrete-shells.md#in-the-moment-method)).
 
 The *API additions* and *Variant 1* sections above describe the
 mechanism of 0.15.0 and are superseded by this amendment.

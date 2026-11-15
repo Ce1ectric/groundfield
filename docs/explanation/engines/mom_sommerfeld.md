@@ -19,7 +19,10 @@ quadrature for every pair of segments. That makes it the reference for the
 [`mom`](mom.md) on the same discretisation, and for three and more layers
 it is the only kernel there is. The discretisation and the current model
 are those of `mom`, so it is not an independent check of the
-point-matching scheme.
+point-matching scheme. Concrete-encased wires carry the per-segment shell
+term of `mom` (ADR-0012, since 2026.11): on two-layer soil the two engines
+agree to $4\cdot10^{-9}$ with shells, and an encased ring in three layers
+rises by exactly $C/(2\pi r)$ over the bare ring of the outer radius.
 
 ## Mathematical and physical context
 
@@ -113,7 +116,8 @@ $10^{-6}$ (generated table below); the measured speed-up is on the
 | Electrodes, $n = 2$ | anywhere (cross-layer path delegated to `layered_green`) | — |
 | Quadrature | convergence within `epsrel` / `epsabs` (defaults $10^{-7}$ / $10^{-9}$) | `SommerfeldConvergenceWarning`, `metadata["converged"] = False` |
 | Interface distance | segment midpoints more than about 1 mm from an interface | interface term saturated by the 1 mm floor |
-| Concrete shells, line kernel | not supported | `BackendCapabilityError` |
+| Line kernel | not supported | `BackendCapabilityError` |
+| Concrete shells | thin shell per segment, as in [`mom`](mom.md) (since 2026.11) | — |
 | Size | dense matrix, one quadrature per distinct pair argument | seconds to minutes, see [performance](../performance.md) |
 | Frequency | quasi-static, $f < 1$ kHz | — |
 
