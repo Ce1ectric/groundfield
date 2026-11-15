@@ -81,7 +81,8 @@ limits a result, the reference documentation states the limit.
   (applied to it, homogeneous house grids would move by +3.9e-7 at 0.8 m,
   +8.8e-7 at 0.5 m and +1.7e-5 at 0.1 m).
 - **A finer 3-D `fem` for groups.** The 3-D model refuses the house mesh at
-  its defaults (`max_nodes_3d`) and needs about 3 GB per million nodes; a
+  its defaults (`max_nodes_3d`) and the solve adds about 2.9 GB per million
+  nodes; a
   third level with the observed order of convergence (instead of the assumed
   second order) would tighten its 2e-3, and per-feature grading or a
   matrix-free multigrid would reach foundations and groups at the defaults.
@@ -97,6 +98,17 @@ limits a result, the reference documentation states the limit.
 - **Reciprocity of cross-layer worlds.** `solve_mutual_matrix(symmetrize=False)`
   shows an asymmetry of 2.3e-8 on a cross-layer world (a strip below h₁, a
   rod through it, a grid above), in both far-image forms.
+- **A 3-D `fem` preconditioner for high layer contrast.** The multigrid of
+  the stiffness stalls above a contrast of about 300 (the coupling diagonal
+  does not help, stream fw4fem3d); such worlds are refused.
+- **Converged Q40 junction numbers.** A third level of the prism faces (more
+  than 3 million nodes) would settle the sign of the junction effect, today a
+  few cm of wire at most (audit W4B-05).
+- **A proximity correction for horizontal wires next to an interface** in
+  the image family: the exact 2-D equipotential-cylinder correction
+  (`tests/benchmarks/references.wire_proximity_correction`) brings the thin
+  ring to 5e-4 of the torus down to 1.1 radii (a decision; today the solve
+  warns, audit W4A-07).
 
 ## Status of the roadmap items carried in the changelog
 

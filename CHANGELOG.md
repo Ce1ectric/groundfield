@@ -128,6 +128,7 @@ reproduces 0.15.0, it is named.
 | W3A-02 (wave 3, stream `fw3xl`) | image pairs at the transverse distance, no radius term on far images, symmetric image corrections | rings and wires within 1 cm … 0.5 m of an interface up to −1.6 % (the ring 1 cm above 1000/30); 0.4 … 0.7 m above −1.2e-6 … −4.7e-6; ≥ 1 m above < 2e-7; homogeneous soil and `kernel="point"` unchanged; golden `line_img2_ring_rods_within_layer` 3.2e-7, `defaults_two_layer_ring_auto` 9.4e-8, `line_mutual_two_layer` 1.7e-8, `line_img2_rod_crosslayer` 1.0e-8 | line-kernel results in two-layer soil (the default) |
 | W3R2A-01, W3R2A-03 (wave 3, stream `fw3r2a`) | `image_far_field="point"` on the cross-layer path keeps the near pairs of every image; the image blend near the interface over a/10 | point form, long segments below the interface: the 75 m strip −58 % → −3e-7 against its exact value (37.5 m pieces), −1.0e-3 → −1.3e-6 (2.5 m); networks with long pieces −1.1 %; TN40 1000/30 (transformer rods below h₁) +2.3e-4; wires 0 < g < a/2 from the interface up to −18 % (the ring 1.75 mm above 1000/30, 7.319 → 5.985 Ω); the default form beyond a/2 and the series path unchanged | point-form results with a wire at or below h₁; line-kernel results with a wire within half a radius of the interface |
 | Q37, Q40 (wave 4, streams `w4axi`, `w4fem3d`) | `fem` conforming (axisymmetric and 3-D) instead of the equivalent hemisphere | every `fem` result: the stored 3 m rods −4.65 % / −4.57 %, the B2 rod / B3 ring −0.70 % / −0.35 %, a ring with a bonded central rod +20 %, a ring 1 cm above a conductive layer −67 %, a rod 2 cm into a conductive top layer +164 %; worlds refused before (strips, grids, meshes, the AP1 station, several clusters, galvanic conductors) are solved; golden `fem_rod_hom`, `fem_rod_two_layer_deep` | anyone using `fem` as a check |
+| W4A-01, W4B-01 (wave 4, streams `fw4axi`, `fw4fem3d`) | `fem`: the mesh block of a ring at an interface refined; the 3-D radius correction counts only the near parts of other wires | rings within 1.05 radii of an interface up to 6.0e-3 (towards the reference; a ring 0.01 a from a 30 Ω·m layer under 1000 Ω·m +1.83e-3 → −2.7e-5); 3-D: rods and rings 0.5 … 0.8 m deep ≤ 3e-5, the AP1 station −0.9e-4 … −1.1e-4, a ring 6 cm deep −1.9e-3, two rings 10 cm apart −5.8e-3, the house mesh with bare braces −3.4e-4 / −5.8e-4 (brace effect +49.14 / +318.23 %), a galvanic chain −2.5e-4; no golden case | users of `fem` |
 | roadmap *Vectorise the ADR-0007 path* (wave 3) | spectral amplitudes in closed form | round-off: ≤ 2.5e-16 (golden), ≤ 4.3e-16 (station Z) | cross-layer worlds, `two_layer_probe_matrix`, every backend through `layered_green` |
 | Q34 (wave 3, stream `w3perf`) | `sommerfeld` self terms and close pairs | lumped 1 km PEN 4.9e-7; segments of 5–20 m 1e-9 … 2e-8; a lumped 2 km conductor 1e-4 of the earth-return part; golden `cond_lumped_long_pen_sommerfeld`, `cond_isolated_pen_sommerfeld_two_layer`, `cond_overhead_lead_over_pen_carson_series`, `cond_galvanic_neumann_sommerfeld`, `defaults_mixed_cluster_inductive` 8e-10 … 4.9e-7 | every world with `sommerfeld` or the Sommerfeld fallback of `carson_series` |
 | audit W1R3-07 (wave 3, stream `w3perf`) | `carson_series`: tilted pairs that come close tiled per stretch | up to 5e-2 of X for a core crossing its shield at 4e-2 rad; generated networks up to 3e-7 (the 10-house star with sites 2.8e-7, the 80-house radial 3.4e-8; audit W3B-07) | worlds with tilted near-parallel pairs that touch or cross, under `carson_series` |
@@ -550,7 +551,8 @@ reproduces 0.15.0, it is named.
   correction in an isotropic tetrahedral mesh refined towards them, partially
   penalised immersed layer interfaces, conjugate gradients with an algebraic
   multigrid, two nested levels extrapolated; within 2e-3 of the axisymmetric
-  model for rods and rings in one to three layers; the AP1 station in the
+  model for rods and rings in one to three layers away from interfaces and
+  other wires (audits W4B-01, W4B-02); the AP1 station in the
   corner soils of the AP1 grid lies between `image_2layer` (+0.7 … +3.0 %) and
   `mom` (−0.4 … −0.9 %), at 1.5 … 3 minutes and 3.6 … 4.4 GB per solve. It
   needs the optional extra `fem3d` (scikit-fem, BSD-3; pyamg, MIT;
@@ -563,16 +565,28 @@ reproduces 0.15.0, it is named.
   `max_nodes`, `source_radius`, `growth`, `concrete_resistivity`,
   `max_nodes_3d`; metadata `fem_port_resistance`, `fem_ports`,
   `fem_error_estimate`, `fem_mesh`, `fem_model` and more. Against the
-  concrete resolved as a volume (Q40) every junction of encased wires acts
-  like at most about $r_b$ of wire (a corner −1.5 cm, a crossing −3 … −6 cm,
-  a T-joint within ±5 cm); the generators' house mesh changes by less than
-  0.6 %, so no correction rule is applied. Tests: `tests/test_fem.py`,
+  concrete resolved as a volume (Q40) a junction of encased wires acts like a
+  few cm of wire, at most about $2\,r_b$, sign not settled (not converged;
+  audit W4B-05); the generators' house mesh changes by about 1 % or less, so
+  no correction rule is applied. Tests: `tests/test_fem.py`,
   `tests/test_fem_3d.py`.
 
 - `PlannedBranch.axis_offset_normal_xy`: the unit plan vector along which
   `axis_offset_m` moves a branch; the TN generator records the common normal
   of a row of drops that are not exactly parallel (placement jitter; audit
   W3R2B-01). Plans without it keep their geometry.
+
+- `InterfaceContactWarning` (and the `diagnose()` category
+  `interface_contact`) also for horizontal wires next to a contrasting layer
+  interface (audits W4A-07, W4B-02): every electrode but a rod and the
+  leaking pieces of galvanic distributed conductors, within the reach where
+  the thin wire deviates from the solid wire by more than about 1 % — 3.5
+  wire radii over a layer 33 times more conductive (+3.6 % at 2 radii,
+  +8.6 % at 1.5, +89 % when the interface cuts the wire), 1.2 … 1.25 radii
+  over a much more resistive one, nothing below a contrast of 2. Emitted by
+  the image family, `mom`, `mom_sommerfeld`, `solve_mutual_*` and the 3-D
+  `fem`; the axisymmetric `fem` resolves the wire. No generated network and
+  no world of the AP1 soils is reported. Test: `tests/test_wire_interface_contact.py`.
 
 ### Changed
 
@@ -1154,6 +1168,15 @@ reproduces 0.15.0, it is named.
   1000), `far_field="dirichlet"` grounds the box; `fem`'s point sources count
   against `Engine.max_segments`. Benchmark B1 checks `fem` against Weber's
   disc (was the hemisphere).
+
+- `FemOptions.max_nodes` defaults to 2 million (was 4 million, about
+  16 GB; the axisymmetric model needs about 4 GB per million nodes, audit
+  W4A-05); `fem` with `extrapolate=False` reports `fem_error_estimate =
+  NaN` (was 0.0, W4A-02); the common axis of the axisymmetric `fem` has a
+  tolerance of 1e-3 of the smallest wire radius or gap (was 1e-9 of the
+  world size, so a rod 1 µm off a ring's axis went to the 3-D model,
+  W4A-08); `metadata["fem_peak_memory_gb"]` of the 3-D model is what the
+  solve added (new `fem_process_peak_memory_gb`: the process peak; W4B-09).
 
 ### Deprecated
 
@@ -1754,8 +1777,9 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
   conductive top layer (−44 … −78 %, warning), a ring exactly on an interface
   (−21 … +30 %), rods through an interface, clusters with several electrodes
   (radii summed, −35 %) and several clusters (no coupling) are solved within
-  1e-4 (axisymmetric) or 2e-3 (3-D) of independent references (user decision
-  Q37). Tests: `tests/test_fem.py`, `tests/test_fem_3d.py`.
+  1e-4 (axisymmetric; 3.3e-4 for a ring wire at an interface, audit W4A-01)
+  or 2e-3 (3-D, away from interfaces and other wires, audit W4B-02) of
+  independent references (user decision Q37). Tests: `tests/test_fem.py`, `tests/test_fem_3d.py`.
 
 - The D9 rows held only to 1e-11 m: any placement jitter put the drops back
   on one axis (the 10-house radial network reported 19 overlaps at 1 nm and
@@ -1804,6 +1828,35 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
   over a tenth of the radius: wiggles of at most 0.17 % through ±a for
   strips and rings in 1000/30 and 30/1000 Ω·m. Test:
   `tests/test_line_kernel_image_pairs.py`.
+
+- `fem`: a ring wire within 1.05 radii of an interface to a more conductive
+  layer was off by up to 6.0e-3, its estimate below the error in 7 of 14
+  cases; its mesh block is refined, now within 3.3e-4 of an independent
+  boundary-element model, the estimate above the error (audit W4A-01). With
+  `model="auto"` a ring without room for its mesh block (diagonal to a rod's
+  end edge) ended in a bare `ValueError`; it is solved by the 3-D model, and
+  `model="axisymmetric"` refuses with `BackendCapabilityError` (W4A-03).
+  The node guard estimate was 1.5 … 2.3 % low for a ring; it now bounds the
+  mesh (W4A-10). Test: `tests/test_fem.py`.
+- `fem`, 3-D model: the radius correction counted the surface images and
+  every wire within 20 R with the observer's own current, where the mesh
+  already gives the exact field (shallow wires up to +1.9e-3 high, two rings
+  10 cm apart +4.6e-3, above the estimate); it counts the observer's own
+  wire whole and of every other wire and surface image only the part within
+  1.5 R (audit W4B-01). A conjugate-gradient solve that does not converge
+  (layer contrast above the tested 300) raises `BackendCapabilityError`
+  naming the contrast, the axisymmetric model and the integral engines, not
+  a bare `RuntimeError` after about a minute (W4B-03). The face terms of the
+  immersed elements paired faces by a key that aliased above 2²¹ nodes and
+  coupled unrelated elements (W4B-06). Results depended on numpy's global
+  random state (pyamg's set-up; 1e-14 … 2e-6 apart) and every solve advanced
+  the user's stream (W4B-07). `Engine.max_segments` was checked only after
+  both levels were solved; it is checked before meshing, and more than
+  `FemOptions.max_ports_3d` ports (100) are refused before meshing (W4B-08).
+  Test: `tests/test_fem_3d.py`.
+- Stale descriptions of the equivalent-hemisphere `fem` in docstrings, the
+  JSON schema text of `concrete_shell_coefficient_ohm_m`, the reference pages
+  and tutorial T09 (audits W4A-04, W4B-10). Test: `tests/test_fem.py`.
 
 ### Corrections to the 0.15.0 release notes
 

@@ -291,12 +291,13 @@ kernel puts the image family's point kernel 0.38 % above it (see
 
 The three-dimensional model of `fem` (each wire its own shell, the soil
 meshed as a volume; 1.5 million nodes; evidence of stream w4fem3d) gives
-+49.1 / +318.0 % for encasing the braces of the house mesh at
++49.1 / +318.2 % for encasing the braces of the house mesh at
 $\rho_c$ = 1 000 / 5 000 Ω·m — `mom` +49.6 / +321.3 % and the owner model
 +46.9 / +307.0 % on the same world — and confirms the per-segment value
-(+49.2 / +318.5 %) to 0.1 / 0.5 points. Against it the owner model is
-+1.6 / +2.7 % high with bare braces and +0.14 / +0.03 % with encased ones;
-`mom` lies 0.6 / 0.8 % and 0.2 / 0.06 % below it.
+(+49.2 / +318.5 %) to 0.1 / 0.3 points. Against it the owner model is
++1.6 / +2.8 % high with bare braces and +0.14 / +0.03 % with encased ones;
+`mom` lies 0.5 / 0.8 % and 0.2 / 0.06 % below it (re-measured after audit
+W4B-01, evidence of stream fw4fem3d).
 
 ### Overlapping shells at junctions
 
@@ -305,9 +306,12 @@ overlap within about $r_b$ of the junction and each wire counts the shared
 concrete as its own. The three-dimensional model of `fem` can resolve the
 concrete instead (`FemOptions.concrete_resistivity`): a square prism of
 conformal radius $r_b$ around every straight encased wire, their union the
-concrete, on the same mesh as the per-wire shells. The resolved concrete
-converges at first order in its faces and edges (it reads the conductance
-per metre 2.8 … 4.6 % high at the default levels), so the junctions are
+concrete, on the same mesh as the per-wire shells. The square keeps the
+shell's resistance to the soil, but in the shell-dominated limit its
+concrete is 3.8 % less resistive (its inner conformal radius is
+0.914 $r_b$; audit W4B-04), and its faces and edges converge at first
+order: it reads the conductance per metre 2.8 … 4.6 % high at the default
+levels. So the junctions are
 read from differences between configurations of the same length and the
 same free ends — a straight 4 m bar against an L of two 2 m arms (the
 corner), straight 4 m and 8 m bars against a T and a crossing (user
@@ -316,19 +320,21 @@ decision Q40). A 5 mm bar with 5 cm cover, 0.8 m deep in 100 Ω·m
 wire (negative where the shared concrete leaks less than the overlapping
 shells):
 
-| Junction | $\rho_c$ = 1 000 Ω·m | 5 000 Ω·m |
+| Junction (not converged) | $\rho_c$ = 1 000 Ω·m | 5 000 Ω·m |
 |---|---|---|
 | corner | −1.5 cm | −1.4 cm |
 | crossing | −6.0 cm | −2.8 cm |
 | T-joint | +0.2 cm | +3.2 cm |
 
-(The corner with the prism faces refined twice; the crossing and the
-T-joint once, at which the corner still read +3.4 / +5.7 cm, so the
-T-joint's sign is not resolved.) Every junction acts like at most about
-$r_b$ of wire. With each wire's own shell an L of 4 m reads 0.35 % low, and
-the house mesh (60 m: 4 corners, 4 T-joints, 1 crossing) is within 0.6 % of
-the resolved concrete. The image family, `mom` and the 3-D model agree on
-the per-wire shell of these configurations to 0.01 … 0.3 %. No correction
+These numbers are not converged (audit W4B-05): one refinement of the prism
+faces moved the corner by about 5 cm (+3.4 / +5.7 cm before), the crossing
+and the T-joint were refined once only, and the impedance form of the same
+runs gives −4 … −6 cm for every junction. A junction acts like a few cm of
+wire, at most about $2\,r_b$, sign not settled. With each wire's own shell
+an L of 4 m reads 0.35 % low, and the house mesh (60 m: 4 corners,
+4 T-joints, 1 crossing) changes by about 1 % or less (0.35 … 0.85 % with
+every sign aligned, re-measured after audit W4B-01). The image family, `mom`
+and the 3-D model agree on the per-wire shell of these configurations to 0.01 … 0.3 %. No correction
 is applied: the effect lies below the uncertainty of the concrete
 resistivity and of the resolved model.
 

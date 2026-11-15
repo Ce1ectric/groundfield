@@ -203,13 +203,31 @@ shows what agrees with independent references and how well.
   it (+3.3 % / +2.1 % 16 mm above / below). A rod head or tip within one wire
   radius of an interface warns with `InterfaceContactWarning` and is
   listed by `diagnose()` (`interface_contact`).
-- **A ring within a few wire radii of an interface.** The thin-wire engines
-  take the current on the wire axis; next to a strongly contrasting
-  interface the current crowds to the wire's near side. A ring (r = 2 m,
-  $a$ = 5 mm) 1 cm above a 30 Ω·m layer under 1000 Ω·m reads +3.6 % in
-  `image_2layer` against the conforming `fem` model (the solid torus), which
-  is the exact thin ring since audit W3A-02 (+5.2 … +5.4 % before); +0.18 %
-  over a more resistive layer, ≤ 0.02 % at 10 cm.
+- **A horizontal wire within a few wire radii of an interface.** The thin-wire
+  engines (the image family, `mom`, `mom_sommerfeld`) and the 3-D `fem` carry
+  the current on the wire axis; next to a more conductive layer the solid
+  wire's current crowds to its near side. Against the solid torus
+  (axisymmetric `fem`; a Hankel thin ring plus the exact 2-D proximity
+  correction agrees to 5e-4) a ring of $a$ = 5 mm over a layer 33 times more
+  conductive reads +0.59 % at 4 radii, +1.2 % at 3, +3.6 % at 2, +8.6 % at
+  1.5, +32 % at 1.1 and +89 % when the interface cuts the wire at 0.99 radii;
+  over a more resistive layer at most +1.4 %. The 3-D `fem` is a thin wire
+  too: a ring ($r$ = 1 m) with its axis 1.5 cm above 1000 / 30 Ω·m reads
+  +9.2e-3 against the solid torus, above its error estimate. Within the reach
+  below the solve warns (`InterfaceContactWarning`, `diagnose()` category
+  `interface_contact`; audits W4A-07, W4B-02); the reach is where the thin
+  wire is 1 % off, the largest of four geometries (rings of 1, 2, 5 m at 0.8
+  and 2 m, $a$ = 5 and 55 mm), rounded up:
+
+  | contrast | 2 | 3 | 10 | 33 | 100 | 1000 |
+  |---|---|---|---|---|---|---|
+  | more conductive beyond | 1.0 a | 1.5 a | 2.9 a | 3.5 a | 3.8 a | 3.9 a |
+  | more resistive beyond | 1.0 a | 1.0 a | 1.0 a | 1.2 a | 1.25 a | 1.25 a |
+
+  (1.0 a: only a wire the interface cuts; below a contrast of 2 nothing is
+  reported.) No generated network and no world of the AP1 soils is
+  reported. The axisymmetric `fem` solves rings as solid tori (to 3.3e-4 down
+  to contact).
 - **High layer contrast.** The Tagg/Sunde series converges like
   $\lvert K\rvert^n$; the default cap of 300 terms covers
   $\lvert K\rvert = 0.94$ and warns (`SeriesTruncationWarning`) beyond.
@@ -260,35 +278,49 @@ shows what agrees with independent references and how well.
   (user decision Q37). *Axisymmetric* — rods on one vertical axis and
   horizontal rings centred on it, solved as the solid bodies they are in any
   horizontally layered soil, bare or encased: port resistances agree with
-  independent references to about 1e-4 at the default; the reported error
-  estimate bounds the finer of the two meshes and overestimates the
-  extrapolated value about ten- to a hundredfold. A concrete shell enters as
+  independent references to about 1e-4 at the default (3.3e-4 for a ring
+  wire within 1.05 radii of an interface; audit W4A-01); the error estimate
+  is about the finer level's error and 10 … 130 times that of the
+  extrapolated value. A concrete shell enters as
   the surface conductance $1/(2\pi r_b C)$ (exact for a cylindrical shell). A
   ring wire must lie 5 % of its radius below the surface (the thin-wire
   engines accept $2z > a$). Eight rings with a central rod need about a
-  million nodes and 17 s; `FemOptions.max_nodes` (4 million) refuses larger
-  meshes. *Three-dimensional* — every other world, with the optional extra
+  million nodes and 17 s (1.2 million nodes and 26 s when one ring lies on an
+  interface); `FemOptions.max_nodes` (2 million, about 8 GB at about 4 GB per
+  million nodes) refuses larger meshes (audit W4A-05). *Three-dimensional* — every other world, with the optional extra
   `fem3d` (without it `ImportError`): the wires are thin wires like those of
   the integral engines (a smoothed line source with an analytic radius
   correction: uniform around the wire, no end faces), the soil an isotropic
-  tetrahedral mesh with immersed layer interfaces. It agrees with the
-  axisymmetric model to 2e-3 for rods and rings in one to three layers; its
-  two mesh levels are not asymptotic for every geometry (error ratios
-  3.0 … 5.2), so the reported error estimate (3 … 5e-3) bounds the error
-  rather than measuring it and differences below about 2e-3 are not
-  resolved. The AP1 station (28 m of wire) takes 1.5 … 3 minutes and
-  3.6 … 4.4 GB; `FemOptions.max_nodes_3d` (2 million nodes of the finer mesh,
-  about 3 GB per million) refuses larger meshes before they are built, the
+  tetrahedral mesh with immersed layer interfaces. Away from layer
+  interfaces and other wires (by about $R/0.8$, $R$ = `source_radius`) it
+  agrees with the axisymmetric model to 2e-3 for rods and rings in one to
+  three layers. Its two mesh levels are not asymptotic for every geometry
+  (error ratios 3.0 … 5.2): the reported error estimate (3 … 5e-3) bounds the
+  error while the ratio is at least 2.5 (for rings it is 2.1 … 2.7 times the
+  error) and differences below about 2e-3 are not resolved; next to a
+  strongly contrasting interface the thin-wire error applies (see *A
+  horizontal wire within a few wire radii of an interface*; audits W4B-01,
+  W4B-02). Its conjugate gradients are tested up to a layer contrast of
+  about 300; at 1000 they do not converge and the solve raises
+  `BackendCapabilityError` (audit W4B-03). The AP1 station (28 m of wire)
+  takes 1.5 … 3 minutes and 4.1 … 4.3 GB; `FemOptions.max_nodes_3d`
+  (2 million nodes of the finer mesh; the solve adds about 2.9 GB per
+  million) refuses larger meshes before they are built, the
   house mesh of the generators (60 m) at the defaults included (it solves at
   `source_radius = 0.1`, `growth = 0.6`: 1.5 million nodes, 1.5 minutes,
   4.6 GB). `fem` is a reference for single clusters and small groups, not for
-  networks. A horizontal wire within $R/0.8$ of the soil surface or a layer
+  networks; more than `FemOptions.max_ports_3d` ports (100; every leaking
+  piece of a galvanic distributed conductor is one) are refused before
+  meshing (`ResourceLimitError`, audit W4B-08). A horizontal wire within
+  $R/0.8$ of the soil surface or a layer
   interface ($R$ = `source_radius`, 6 cm) gets a smaller disc and a finer
-  mesh; one within about 2.8 wire radii is refused
-  (`BackendCapabilityError`). Resolved concrete (`concrete_resistivity`)
+  mesh; a bare one within about 2.8 wire radii is refused
+  (`BackendCapabilityError`; an encased one is solved). Resolved concrete (`concrete_resistivity`)
   needs straight axis-parallel encased wires and converges at first order
   (its per-metre shell conductance reads 2.8 … 4.6 % high at the default
-  levels); it serves differences on one mesh (user decision Q40), not the
+  levels: the square prism's concrete is 3.8 % less resistive than the
+  circular shell in the shell-dominated limit, and its faces converge at
+  first order; its error estimate is no bound; audit W4B-04); it serves differences on one mesh (user decision Q40), not the
   shell term itself. Like every backend, `FieldResult.potential` of a `fem`
   result supports homogeneous and two-layer soil only.
 - **Concrete shells** (`concrete_shell_coefficient_ohm_m`) are represented by the image
@@ -299,12 +331,12 @@ shows what agrees with independent references and how well.
   are encased since 2026.11 — the shells overlap within about $r_b$ of the junction and
   each wire counts the shared concrete as its own. Against the concrete resolved as a
   volume in the three-dimensional `fem` model (user decision Q40; 5 mm bar, 5 cm cover,
-  1 000 and 5 000 Ω·m concrete in 100 Ω·m soil) every junction acts like at most about
-  $r_b$ of wire, more or less: a corner like 1.5 cm less wire (an L of two 2 m arms
-  reads 0.35 % low), a crossing like 3 … 6 cm less, a T-joint within ±5 cm (sign not
-  resolved); the house mesh of the generators (60 m, nine junctions) changes by less
-  than 0.6 %. The resolved concrete converges at first order, so these numbers carry a
-  few centimetres; no correction is applied.
+  1 000 and 5 000 Ω·m concrete in 100 Ω·m soil) a junction acts like a few cm of wire,
+  at most about $2\,r_b$, sign not settled; the house mesh of the generators (60 m,
+  nine junctions) changes by about 1 % or less (0.35 … 0.85 % with every sign
+  aligned). The junction numbers are not converged — one refinement of the prism faces
+  moved the corner by about 5 cm, and two decompositions of the same runs differ in
+  sign (audit W4B-05) — so no correction is applied.
 - **Aliases.** `cim`, `bem` and `image_nlayer` run `image` and `mom`;
   comparing them with their targets adds no independent information.
 
