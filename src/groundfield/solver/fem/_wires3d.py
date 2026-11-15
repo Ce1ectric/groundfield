@@ -37,15 +37,33 @@ $$
 \\Phi_k(s; c) = \\int_{\\text{piece }k} \\frac{\\mathrm ds'}{\\sqrt{|x(s) - x(s')|^2 + c^2}},
 $$
 
-summed over the pieces within reach (the own piece, its neighbours at a
-corner or junction, and their images in the soil surface). Far inside a
+summed over what the mesh does not already resolve. The observer's own
+wire counts whole: its polyline through every corner (a ring's polygon, a
+strip, a closed loop) and every piece on the same axis line (the next piece
+of a galvanic conductor, the surface image of a rod whose head reaches the
+surface) — along its own axis the mesh sees the smoothed source, not the
+thin wire, and only the whole line integral reproduces the 2-D radial
+resistance. A piece of the own polyline that runs parallel beside the
+point (an arm folded back, the opposite side of a narrow loop) counts like
+another wire. Of every other piece, and of every other surface image, only
+the part within $1.5\\,R$ of the point counts (:data:`NEAR_FACTOR`): farther
+away the disc average of a smoothed line is its line field (the 2-D
+mean-value property of the radial bump), so the mesh gives the exact field
+and the reduced kernels would only add $\\frac{\\rho}{4\\pi}
+\\ln\\frac{D^2 + r_\\eta^2}{D^2 + a^2}$ per metre with the observer's current.
+For two parallel lines the exact correction is below $10^{-3}$ of the self
+term from $D = 1.5\\,R$ on (evidence ``f01`` of stream fw4fem3d); the
+surface image of a horizontal wire lies $2z \\ge 2.5\\,R$ away and never
+counts (audit W4B-01: up to 2026.11 the surface images and every wire within
+$20\\,R$ counted, +1.9e-3 for a ring 6 cm deep, +4.6e-3 for two rings 10 cm
+apart). Interface images are left out for the same reason. Far inside a
 straight wire this is Sunde's $\\frac{\\rho}{2\\pi}\\ln(r_\\eta/a)$; near a free
 end, a corner or a junction it carries the three-dimensional geometry.
 The smoothed source differs from the reduced kernel only in how its end
 region averages (the bump's pair distances instead of $r_\\eta$); that
-difference integrates to $0.086\\,R$ along the wire per free end
-(evidence of stream w4fem3d), about $10^{-4}$ of a 3 m rod at $R = 4$ cm,
-and is neglected.
+difference integrates to $0.084\\,R$ along the wire per free end
+(evidence ``e01`` of stream w4fem3d), about $10^{-4}$ of a 3 m rod at
+$R = 4$ cm, and is neglected.
 """
 
 from __future__ import annotations
@@ -70,6 +88,14 @@ BUMP_ENERGY_RADIUS = 0.5442413183379312
 #: radius (the polygon's length is then short of the circle by 1.6e-5).
 RING_CHORD_ANGLE = 2.0 * math.pi / 360.0
 
+#: The radius correction counts a piece of another wire, and a surface image
+#: that does not continue the observer's own axis, only where it lies within
+#: this many source radii $R$ of the observer (audit W4B-01). Beyond it the
+#: mesh gives the exact field: for two parallel lines the exact correction is
+#: below 1e-3 of the self term from $1.5\\,R$ on, while a cut at $2\\,R$ would
+#: still keep 2 % of it (evidence ``f01`` of stream fw4fem3d).
+NEAR_FACTOR = 1.5
+
 
 @dataclass(frozen=True)
 class WirePiece:
@@ -87,6 +113,10 @@ class WirePiece:
         encased electrode).
     shell
         Concrete-shell coefficient $C$ in Ω·m (``0`` for a bare wire).
+    chain
+        Index of the wire the piece belongs to (one polyline of one
+        electrode, a ring's polygon); ``None``: a wire of its own. The radius
+        correction counts the observer's own wire whole.
     """
 
     port: int
@@ -94,6 +124,7 @@ class WirePiece:
     end: np.ndarray
     radius: float
     shell: float
+    chain: int | None = None
 
     @property
     def length(self) -> float:
@@ -168,6 +199,7 @@ def world_pieces(world: "World", extra_segments=()) -> WireModel:
     """
     pieces: list[WirePiece] = []
     names = [e.name for e in world.electrodes]
+    chain = 0
     for k, e in enumerate(world.electrodes):
         shell = float(getattr(e, "concrete_shell_coefficient_ohm_m", 0.0) or 0.0)
         for line in _polylines(e):
@@ -176,15 +208,19 @@ def world_pieces(world: "World", extra_segments=()) -> WireModel:
                 if np.linalg.norm(b - a) <= 1e-12:
                     continue
                 pieces.append(
-                    WirePiece(k, a.copy(), b.copy(), float(e.wire_radius), shell)
+                    WirePiece(k, a.copy(), b.copy(), float(e.wire_radius), shell, chain)
                 )
+            chain += 1
     for seg in extra_segments:
         k = len(names)
         names.append(seg.electrode_name)
         mid = np.asarray(seg.midpoint, dtype=float)
         d = np.asarray(seg.direction, dtype=float)
         half = 0.5 * float(seg.length) * d / np.linalg.norm(d)
-        pieces.append(WirePiece(k, mid - half, mid + half, float(seg.wire_radius), 0.0))
+        pieces.append(
+            WirePiece(k, mid - half, mid + half, float(seg.wire_radius), 0.0, chain)
+        )
+        chain += 1
     return WireModel(names=tuple(names), pieces=pieces)
 
 
@@ -222,20 +258,30 @@ def frames(directions: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _line_integral(
-    x: np.ndarray, a: np.ndarray, b: np.ndarray, c: np.ndarray
+    x: np.ndarray,
+    a: np.ndarray,
+    b: np.ndarray,
+    c: np.ndarray,
+    lo: np.ndarray | float = 0.0,
+    hi: np.ndarray | float | None = None,
 ) -> np.ndarray:
-    """$\\int_a^b \\mathrm ds' / \\sqrt{|x - y(s')|^2 + c^2}$ for points ``x`` (n, 3)."""
+    """$\\int \\mathrm ds' / \\sqrt{|x - y(s')|^2 + c^2}$ over $s' \\in [lo, hi]$.
+
+    ``y(s') = a + s' (b - a)/|b - a|`` for points ``x`` (n, 3); ``lo`` and
+    ``hi`` in m along the piece (default: the whole piece).
+    """
     length = float(np.linalg.norm(b - a))
     e = (b - a) / length
     rel = x - a
     t = rel @ e
     p2 = np.maximum(np.einsum("ij,ij->i", rel, rel) - t * t, 0.0)
     s = np.sqrt(p2 + c * c)
-    return np.arcsinh((length - t) / s) + np.arcsinh(t / s)
+    top = length if hi is None else hi
+    return np.arcsinh((top - t) / s) - np.arcsinh((lo - t) / s)
 
 
 def radius_correction(
-    model: WireModel, r_eta: float, rho_local: np.ndarray, reach: float
+    model: WireModel, r_eta: float, rho_local: np.ndarray, near: float
 ) -> np.ndarray:
     """$\\Delta C$ in Ω·m at every axial point (see the module docstring).
 
@@ -247,32 +293,50 @@ def radius_correction(
         Energy radius in m of the smoothed source.
     rho_local
         Resistivity in Ω·m around every axial point.
-    reach
-        Pieces farther than this from a point (and surface images farther
-        than this) are left out; their two terms differ by
-        $O((r_\\eta/d)^2)$.
+    near
+        Distance in m (:data:`NEAR_FACTOR` times the source radius): of a
+        piece that is not the observer's own wire, and of a surface image
+        that does not continue the observer's axis, only the part within
+        ``near`` of the observer counts. The observer's own wire (its chain
+        and every piece on its axis line) counts whole, except a piece of
+        the chain parallel to the observer's piece and off its axis (an arm
+        folded back beside it, a loop's opposite side), which counts like
+        another wire.
     """
-    from scipy.spatial import cKDTree
-
     x = model.points
-    a_obs = np.array([p.radius for p in model.pieces])[model.piece]
-    tree = cKDTree(x)
-    total = np.zeros(x.shape[0])
+    n = x.shape[0]
+    pieces = model.pieces
+    a_obs = np.array([p.radius for p in pieces])[model.piece]
+    chains = np.array(
+        [-(k + 1) if p.chain is None else p.chain for k, p in enumerate(pieces)]
+    )
+    chain_obs = chains[model.piece]
+    d_obs = np.array([p.direction for p in pieces])[model.piece]
+    on_axis = 1e-6 * near  # m; collinear pieces share the axis to round-off
+    total = np.zeros(n)
     mirror = np.array([1.0, 1.0, -1.0])
-    for p in model.pieces:
-        ends = [(p.start, p.end)]
-        if min(p.start[2], p.end[2]) < reach:
-            ends.append((p.start * mirror, p.end * mirror))
-        for a, b in ends:
-            mid = 0.5 * (a + b)
-            near = tree.query_ball_point(
-                mid, 0.5 * float(np.linalg.norm(b - a)) + reach
-            )
-            if not near:
+    for k, p in enumerate(pieces):
+        for image in (False, True):
+            a, b = (p.start * mirror, p.end * mirror) if image else (p.start, p.end)
+            length = float(np.linalg.norm(b - a))
+            e = (b - a) / length
+            rel = x - a
+            t = rel @ e
+            p2 = np.maximum(np.einsum("ij,ij->i", rel, rel) - t * t, 0.0)
+            parallel = np.linalg.norm(np.cross(d_obs, e), axis=1) < 1e-6
+            collinear = parallel & (p2 < on_axis**2)
+            if image:
+                whole = collinear
+            else:  # own wire, but not an arm of it folded back beside the point
+                whole = collinear | ((chain_obs == chains[k]) & ~parallel)
+            half = np.sqrt(np.maximum(near * near - p2, 0.0))
+            lo = np.where(whole, 0.0, np.clip(t - half, 0.0, length))
+            hi = np.where(whole, length, np.clip(t + half, 0.0, length))
+            idx = np.nonzero(hi > lo)[0]
+            if idx.size == 0:
                 continue
-            idx = np.asarray(near, dtype=int)
             xi = x[idx]
-            total[idx] += _line_integral(xi, a, b, a_obs[idx]) - _line_integral(
-                xi, a, b, np.full(idx.size, r_eta)
-            )
+            total[idx] += _line_integral(
+                xi, a, b, a_obs[idx], lo[idx], hi[idx]
+            ) - _line_integral(xi, a, b, np.full(idx.size, r_eta), lo[idx], hi[idx])
     return rho_local / (4.0 * math.pi) * total

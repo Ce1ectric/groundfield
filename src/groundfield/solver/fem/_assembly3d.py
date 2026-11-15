@@ -28,9 +28,12 @@ potentials), symmetric positive definite.
   the size of the finer mesh's elements at the wire, so the finite
   elements never resolve the individual points.
 * **Solve.** One conjugate-gradient solve per port with a smoothed-
-  aggregation algebraic multigrid preconditioner (``pyamg``); $G$ is a
-  quadratic functional of the solution, so its error is the square of
-  the solver's energy error.
+  aggregation algebraic multigrid preconditioner (``pyamg``, set up under a
+  fixed seed of numpy's global random state, which is restored afterwards);
+  $G$ is a quadratic functional of the solution, so its error is the square
+  of the solver's energy error. The iterations grow with the layer
+  contrast (16 … 115 up to 33, about 1 260 at 333 at the finer level); at
+  1000 they do not converge (audit W4B-03).
 """
 
 from __future__ import annotations
@@ -48,8 +51,35 @@ __all__: list[str] = []
 #: Relative residual of the conjugate-gradient port solves.
 CG_TOLERANCE = 1e-8
 
-#: Iteration limit of the conjugate-gradient port solves.
+#: Iteration limit of the conjugate-gradient port solves. A rod through an
+#: interface of contrast 333 needs about 1 260 at the finer level; at 1000
+#: the solves do not converge (audit W4B-03).
 CG_MAX_ITERATIONS = 3000
+
+#: Seed of numpy's global random state while the multigrid hierarchy is set
+#: up: pyamg draws the start vectors of its spectral-radius estimates from
+#: ``np.random``. The user's state is saved and restored around it, so a
+#: result is the same whatever the user's seed and the user's stream is not
+#: advanced (audit W4B-07).
+AMG_SEED = 20261115
+
+
+class ConvergenceError(RuntimeError):
+    """The conjugate gradients of a port solve did not converge.
+
+    Attributes
+    ----------
+    port
+        Index of the port whose solve failed.
+    """
+
+    def __init__(self, port: int) -> None:
+        super().__init__(
+            f"fem: the conjugate gradients did not converge for port {port} in "
+            f"{CG_MAX_ITERATIONS} iterations (relative residual {CG_TOLERANCE:g})."
+        )
+        self.port = port
+
 
 #: An element that one interface cuts is an immersed element when its
 #: extent is at most this multiple of the thinner adjacent layer, a
@@ -186,11 +216,12 @@ def ife_face_terms(
     faces = np.concatenate(faces, axis=1)
     owner = np.concatenate(owner)
     opposite = np.concatenate(opposite)
-    big = np.int64(1) << 21
-    key = (faces[0].astype(np.int64) * big + faces[1]) * big + faces[2]
-    order = np.argsort(key, kind="stable")
-    key_s = key[order]
-    pair = np.nonzero(key_s[1:] == key_s[:-1])[0]
+    # Pair the faces by their sorted node triples (lexicographic, stable).
+    # A packed integer key of the three node numbers aliased above 2**21
+    # nodes and coupled unrelated elements (audit W4B-06).
+    order = np.lexsort((faces[2], faces[1], faces[0]))
+    sorted_faces = faces[:, order]
+    pair = np.nonzero(np.all(sorted_faces[:, 1:] == sorted_faces[:, :-1], axis=0))[0]
     e1, e2 = owner[order[pair]], owner[order[pair + 1]]
     f = faces[:, order[pair]]
     same = (axis[e1] == axis[e2]) & (value[e1] == value[e2])
@@ -695,6 +726,13 @@ def solve_ports_3d(
         Port index of every axial point.
     n_ports
         Number of ports.
+
+    Raises
+    ------
+    ConvergenceError
+        If a port solve does not reach the relative residual
+        :data:`CG_TOLERANCE` in :data:`CG_MAX_ITERATIONS` iterations (high
+        layer contrast; the caller turns it into a refusal).
     """
     import pyamg
     from scipy.sparse.linalg import LinearOperator, cg
@@ -707,9 +745,14 @@ def solve_ports_3d(
         return stiffness @ v + average_t @ (wc * (average @ v))
 
     operator = LinearOperator((n, n), matvec=apply, dtype=float)
-    hierarchy = pyamg.smoothed_aggregation_solver(
-        stiffness, symmetry="symmetric", max_coarse=2000
-    )
+    state = np.random.get_state()
+    np.random.seed(AMG_SEED)
+    try:
+        hierarchy = pyamg.smoothed_aggregation_solver(
+            stiffness, symmetry="symmetric", max_coarse=2000
+        )
+    finally:
+        np.random.set_state(state)
     preconditioner = hierarchy.aspreconditioner(cycle="V")
     g = np.zeros((n_ports, n_ports))
     current = np.zeros((weights.size, n_ports))
@@ -731,10 +774,7 @@ def solve_ports_3d(
             callback=tick,
         )
         if info != 0:
-            raise RuntimeError(
-                f"fem: the conjugate gradients did not converge for port {k} in "
-                f"{CG_MAX_ITERATIONS} iterations (relative residual {CG_TOLERANCE:g})."
-            )
+            raise ConvergenceError(k)
         iterations.append(count[0])
         pi = np.asarray(average @ x).ravel()
         current[:, k] = wc * (mask - pi)

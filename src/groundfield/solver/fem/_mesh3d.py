@@ -1,23 +1,26 @@
 """Tetrahedral mesh of the soil for the three-dimensional ``fem`` model (private).
 
 The mesh starts from a coarse **isotropic** grid: $8 \\times 8 \\times 4$
-cubes on the truncation box $[c_x - R, c_x + R] \\times [c_y - R, c_y + R]
-\\times [0, R]$, each split into six Kuhn tetrahedra (``scikit-fem``'s
+cubes on the truncation box $[c_x - r_\\mathrm{far}, c_x + r_\\mathrm{far}]
+\\times [c_y - r_\\mathrm{far}, c_y + r_\\mathrm{far}] \\times [0, r_\\mathrm{far}]$,
+each split into six Kuhn tetrahedra (``scikit-fem``'s
 ``MeshTet.init_tensor``). It is refined by a deterministic conforming
 **longest-edge bisection** (:class:`Bisector`, Rivara) until every
 tetrahedron is no longer than $1.5\\,h(x)$,
 
 $$
-h(x) = h_\\mathrm{w} + g\\,\\max\\bigl(0,\\ d(x) - R_\\eta\\bigr),
+h(x) = h_\\mathrm{w} + g\\,\\max\\bigl(0,\\ d(x) - R\\bigr),
 $$
 
-$d$ the distance from the nearest wire axis, $R_\\eta$ the radius of the
-smoothed line sources (:mod:`groundfield.solver.fem._wires3d`),
-$h_\\mathrm{w} = R_\\eta/2$ and the growth $g$; an element that a layer
-interface or a concrete prism face cuts is refined further near the
-electrodes. Longest-edge bisection of Kuhn tetrahedra keeps the shapes in a
-few similarity classes (aspect ratio at most 2 here), so the multigrid
-solver converges in a few dozen iterations; a graded *tensor* grid instead
+$d$ the distance of the element from the nearest wire axis (from its
+centroid, less half its longest edge), $R$ the radius of the smoothed line
+sources (``source_radius``, :mod:`groundfield.solver.fem._wires3d`; not
+their energy radius $r_\\eta = 0.544\\,R$), $h_\\mathrm{w} = R/2$ and the
+growth $g$; the target of an element that a layer interface cuts is at
+most $\\max(h_\\mathrm{w}, 0.3\\,d)$, of one that a concrete prism face cuts
+the prism side over 8. Longest-edge bisection of Kuhn tetrahedra keeps
+the shapes in a few similarity classes (aspect ratio at most 2 here), so
+the multigrid solver converges in a few dozen iterations; a graded *tensor* grid instead
 carries its fine lines (the layer interfaces, the electrode planes) to the
 box as slabs thousands of times wider than thick, on which it stalls (345
 conjugate-gradient iterations for a 5 m slab, no convergence for 0.3 m;
@@ -160,7 +163,8 @@ def background(center: np.ndarray, r_far: float, cells: int = 4):
     """Coarse isotropic grid of Kuhn tetrahedra on the truncation box.
 
     ``2 cells x 2 cells x cells`` cubes of side ``r_far / cells`` on
-    $[c_x - R, c_x + R] \\times [c_y - R, c_y + R] \\times [0, R]$, every cube
+    $[c_x - r_\\mathrm{far}, c_x + r_\\mathrm{far}] \\times [c_y - r_\\mathrm{far},
+    c_y + r_\\mathrm{far}] \\times [0, r_\\mathrm{far}]$, every cube
     split into six tetrahedra (``scikit-fem``'s ``MeshTet.init_tensor``).
     No interface is a mesh plane (layers enter as immersed elements,
     :mod:`~groundfield.solver.fem._assembly3d`), so the mesh stays isotropic: a
@@ -193,7 +197,7 @@ def refine_towards(
     growth: float,
     r_core: float,
     interfaces: list[float] = (),
-    interface_ratio: float = 0.1,
+    interface_ratio: float = 0.3,
     prisms: tuple["Prism", ...] = (),
     prism_size: float | None = None,
 ) -> Bisector:
@@ -211,12 +215,15 @@ def refine_towards(
         Growth $g$ of the target size per metre beyond ``r_core``.
     r_core
         Radius in m of the zone of size ``h_w`` (the source radius).
-    interfaces
+    interfaces, interface_ratio
         Layer interface depths in m: a tetrahedron that a layer interface
-        cuts is no larger than ``interface_ratio`` times its distance from
-        the nearest wire (and not below ``h_w``), so the laminate
-        conductivity of the cut elements (:func:`layer_fractions`) is
-        confined to a thin band around the interface near the electrodes.
+        cuts is no larger than ``interface_ratio`` (the 3-D model uses 0.3,
+        :data:`~groundfield.solver.fem._solid.INTERFACE_RATIO`) times its
+        distance from the nearest wire, and not below ``h_w``. The cut
+        elements are immersed elements; only those more than four times
+        larger than the thinner layer they cut, far from the electrodes,
+        take the laminate conductivity
+        (:func:`~groundfield.solver.fem._assembly3d.classify_elements`).
     prisms, prism_size
         Concrete prisms (user decision Q40): a tetrahedron that a prism
         face cuts is no larger than ``prism_size``.
