@@ -149,7 +149,11 @@ def test_in_layer_solve_still_reports_its_series() -> None:
     assert res.metadata["series_used"] is True
     assert res.metadata["n_terms_used"] == 277
     assert res.metadata["converged"] is True
-    assert res.metadata["series"] == {"max_terms": 300, "tol": 1e-6}
+    assert res.metadata["series"] == {
+        "max_terms": 300,
+        "tol": 1e-6,
+        "far_field": "quadrupole",
+    }
 
 
 @pytest.mark.finding("10.74")

@@ -22,6 +22,7 @@ Covers:
 
 from __future__ import annotations
 
+import warnings
 
 import numpy as np
 import pytest
@@ -115,16 +116,42 @@ def test_no_segment_straddles_interface() -> None:
 
 
 def test_interface_margin_warning() -> None:
-    """Deepest segment ending just above h_1 triggers the advisory."""
+    """Deepest segment ending just above h_1 triggers the advisory.
+
+    For the point kernel only, whose nearest image is a point source (audit
+    W3A-06; the test ran with the default line kernel before).
+    """
     w = gf.create_world(soil=SOIL)
     # Rod from 0.5 to 4.7 m — 0.3 m above h_1 = 5 with ds = 0.5.
     gf.create_electrode(
         w, "rod", name="g1", position=(0.0, 0.0, 0.5), length=4.2, wire_radius=0.005
     )
     gf.create_source(w, attached_to="g1", magnitude=1.0)
-    eng = gf.create_engine(backend="image_2layer", segment_length=0.5)
+    eng = gf.create_engine(backend="image_2layer", segment_length=0.5, kernel="point")
     with pytest.warns(UserWarning, match="interface"):
         eng.solve(w)
+
+
+# audit W3A-06
+@pytest.mark.finding("10.28")
+def test_w3a_06_no_near_interface_discretisation_warning_for_the_line_kernel() -> None:
+    """The warning ("self-terms near the interface carry an elevated
+    discretisation error", WP-D2) is about the point form of the nearest
+    image; the line kernel integrates it (a strip 0.1 m above the interface
+    is within 4e-6 of its image sum at every segment length, a ring 5 mm
+    above within 4.1e-5), yet every house at 0.8 m with h_1 < 1.8 m and
+    0.5 m segments warned (auditor W3A)."""
+    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=1.5))
+    gf.create_electrode(
+        w, "grid_mesh", name="e", corner=(0, 0, 0.8), size=(10.0, 10.0), n_x=2, n_y=2
+    )
+    gf.create_source(w, attached_to="e", magnitude=1.0)
+    with warnings.catch_warnings(record=True) as rec:
+        warnings.simplefilter("always")
+        gf.create_engine(segment_length=0.5).solve(w)
+    assert not [r for r in rec if "elevated discretisation error" in str(r.message)]
+    with pytest.warns(UserWarning, match="elevated discretisation error"):
+        gf.create_engine(segment_length=0.5, kernel="point").solve(w)
 
 
 # ---------------------------------------------------------------------

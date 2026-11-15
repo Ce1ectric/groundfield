@@ -58,7 +58,8 @@ what ran.
 | `max_segments` | `None` | resource limit of this engine: the largest number of leakage segments and of nodal unknowns it solves, `ResourceLimitError` above it before anything is allocated; `None` takes `groundfield.diagnostics.HARD_LIMIT` (20 000); recorded in `metadata["max_segments"]` |
 | `warn_segments` | `None` | size of the soft notice of this engine, counted like `max_segments`: at or above it the solve warns that it may take minutes (an *info* finding of `diagnose`); `None` takes `groundfield.diagnostics.SOFT_LIMIT` (5 000); not checked against `max_segments` (a notice above the hard limit never appears) |
 | `image_max_terms`, `image_series_tol` | 300, 10⁻⁶ | cap and stop tolerance of the Tagg/Sunde series (tail bound $\lvert K\rvert^{n+1}/(1-\lvert K\rvert)$) |
-| `options` | `{}` | backend-specific settings, e.g. `{"mom_sommerfeld": {"epsrel": 1e-9}}`, `{"fem": {"n_radial": 120}}` |
+| `image_far_field` | `"quadrupole"` | form of the far images of the line kernel in two-layer soil (Tagg/Sunde images and images of the cross-layer correction): `"quadrupole"` (point value plus the quadrupole term of the segment average) or `"point"` (point sources, the treatment before wave 3 of the 2026.11 work, faster; networks move by 2 · 10⁻⁵ … 1.8 · 10⁻⁴); recorded in `metadata["series"]`, used by `FieldResult.potential` and `solve_mutual_*`; no effect with `kernel="point"` or in homogeneous soil (the author's decision of 2026-11-15) |
+| `options` | `{}` | backend-specific settings, e.g. `{"mom_sommerfeld": {"epsrel": 1e-9}}` (see the backend pages for the options of each backend) |
 
 `tolerance` and `max_iterations` have no effect and are deprecated
 (see [Deprecations](../deprecations.md)).

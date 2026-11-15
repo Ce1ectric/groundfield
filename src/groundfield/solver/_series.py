@@ -46,7 +46,12 @@ from typing import Any
 
 import numpy as np
 
-__all__ = ["ImageSeries", "SeriesTruncationWarning", "series_controls"]
+__all__ = [
+    "ImageSeries",
+    "SeriesTruncationWarning",
+    "series_controls",
+    "series_far_field",
+]
 
 
 class SeriesTruncationWarning(UserWarning):
@@ -94,6 +99,34 @@ def series_controls(metadata: Mapping[str, Any] | None) -> tuple[int, float]:
     max_terms = record.get("max_terms", DEFAULT_IMAGE_MAX_TERMS)
     tol = record.get("tol", DEFAULT_IMAGE_SERIES_TOL)
     return int(max_terms), float(tol)
+
+
+def series_far_field(metadata: Mapping[str, Any] | None) -> str:
+    """Form of the far images recorded with a solve (``Engine.image_far_field``).
+
+    :meth:`Engine.solve <groundfield.solver.engine.Engine.solve>` stores it
+    in ``FieldResult.metadata["series"]["far_field"]``; the post-solve field
+    evaluation of the line kernel uses the same form as the solve. Results
+    without the record (hand-built, or written before the option existed)
+    get ``"quadrupole"``, the default.
+
+    Parameters
+    ----------
+    metadata
+        ``FieldResult.metadata`` (or ``None``).
+
+    Returns
+    -------
+    str
+        ``"quadrupole"`` or ``"point"``.
+    """
+    record = (metadata or {}).get("series")
+    if isinstance(record, Mapping) and record.get("far_field") in (
+        "quadrupole",
+        "point",
+    ):
+        return str(record["far_field"])
+    return "quadrupole"
 
 
 def _series_tail_bound(abs_K: float, n: int) -> float:

@@ -73,3 +73,27 @@ quantities = ["*"]
 findings = ["10.28"]
 reason = "wave 3 item 2: layered correction of the cross-layer path in line form (image families, far quadrupole terms, Galerkin near pairs); items 1 and 5 on its images."
 max_rel_change = 6e-4
+
+# --- stream fw3xl, audit W3A-02: transverse distance of image pairs -----
+# Image pairs of the line kernel use the transverse distance max(rho_perp, a)
+# of a point from the image's axis instead of the reduced kernel
+# sqrt(rho_perp² + a²) (the 2-D mean value of the image line over the wire's
+# circumference; collinear images, rho_perp = 0, keep the reduced kernel),
+# and the far form of images has no radius term. Measured with
+# GF_GOLDEN_STRICT=1 against the stream's own baseline of release/calver
+# 098bbbc (the author's Mac): line_img2_ring_rods_within_layer 3.4e-7,
+# defaults_two_layer_ring_auto 9.4e-8, line_mutual_two_layer 1.7e-8,
+# line_img2_rod_crosslayer 1.0e-8; every other case bit-identical (the
+# W3A-01 cost changes of the stream are bit-identical in every stored case).
+
+[[change]]
+cases = [
+    "defaults_two_layer_ring_auto",
+    "line_img2_ring_rods_within_layer",
+    "line_img2_rod_crosslayer",
+    "line_mutual_two_layer",
+]
+quantities = ["*"]
+findings = ["10.28"]
+reason = "audit W3A-02 (stream fw3xl): image pairs of the line kernel use the transverse distance max(rho_perp, a) instead of the reduced kernel (collinear images keep it), and the far form of images has no radius term."
+max_rel_change = 5e-7

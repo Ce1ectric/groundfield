@@ -51,25 +51,17 @@ carry a lower-case unit suffix (`depth_m`, `concrete_rho_ohm_m`,
   `kernel="point"`), the effect of the rounding of its vertices; up to
   2026.11 an edge of a whole number of segments got one more there (a
   generated 10 m mesh foundation 508 instead of 440 segments, +2.6 · 10⁻⁴
-  in `mom`). With the default line kernel the results move wherever the
-  world stands: the kernel switches from its exact integral to its far
-  form at a midpoint distance of six segment lengths, where pairs six
-  segments apart on a straight wire sit exactly, so round-off decides
-  their form. For the direct pairs the spread reaches up to 8 · 10⁻⁷ in
-  the impedance and 1.3 · 10⁻⁶ in touch voltages when every switch pair is
-  forced to its near and to its far form (a 12 m strip in 100 Ω·m and at
-  41° in 100 / 30 Ω·m, $h_1$ = 2.2 m; audit W2R2-03); sampled offsets give
-  up to 5.9 · 10⁻⁷ and 1.2 · 10⁻⁶ (the 12 m strip between (0, 0) and
-  (62.79, 36.14) m; 40 local shifts of 0.1 m … 8.8 km and the UTM origin
-  gave 5.4 · 10⁻⁷ and 1.0 · 10⁻⁶ over strips, outlines, stars, grids and
-  the generated house mesh, audit W2B-01). In two-layer soil an image
-  distance of six segment lengths — $2nh_1$ for wires at one depth, or
-  $2(nh_1 - z)$ — puts every segment's own image pair on the switch, whose
-  far form there is the point form: the spread can reach
-  0.8 … 2.6 · 10⁻⁵ in the impedance and 5.5 · 10⁻⁵ in touch voltages
-  (the generated house mesh at its default 0.8 m depth with $h_1$ = 2.3 m
-  and 0.5 m segments: 9.6 · 10⁻⁶ and 1.5 · 10⁻⁵; a 12 m strip 0.6 m deep
-  with $h_1$ = 2.1 m: 1.4 · 10⁻⁵ between two positions 8.3 m apart)
+  in `mom`). With the default line kernel the results agree to the same
+  level: the kernel blends its exact integral into its far form between six
+  and 7.5 segment lengths (user decision D2), so no pair switches its form
+  with the round-off of the coordinates. Over 12 local shifts of 0.1 m …
+  8.8 km the impedance spreads by at most 8 · 10⁻¹⁴ (touch voltages
+  2 · 10⁻¹³), and the solve at the UTM origin lies within 5 · 10⁻¹¹ of the
+  local one (touch voltages 9.2 · 10⁻¹⁰), for strips, a mesh, a star and a
+  ring in homogeneous and two-layer soil and for two cross-layer worlds
+  (audits W2B-01 and W3A; with the one-step switch before, up to
+  5.4 · 10⁻⁷ for direct pairs and 2.6 · 10⁻⁵ in two-layer soil, where an
+  image distance equalled six segment lengths)
   ([known limitations](known-limitations.md#current-ansatz-and-source-kernels)).
   Worlds within 10 km of the origin are not shifted, and their electrodes
   are discretised as before. A distributed conductor whose length exceeds

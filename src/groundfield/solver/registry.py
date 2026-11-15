@@ -63,7 +63,10 @@ from which :meth:`FieldResult.potential` takes them for the post-solve
 field evaluation; the deprecated names ``cim`` and ``bem`` run
 ``image`` and ``mom``). Their single
 documented defaults are :data:`DEFAULT_IMAGE_MAX_TERMS` and
-:data:`DEFAULT_IMAGE_SERIES_TOL`.
+:data:`DEFAULT_IMAGE_SERIES_TOL`. ``image_far_field`` (the form of the far
+images of the line kernel, ``"quadrupole"`` or ``"point"``) is read by the
+image family in two-layer soil and ``solve_mutual_*`` and recorded in the
+same place.
 
 Deprecated aliases and experimental backends
 --------------------------------------------
@@ -1073,7 +1076,11 @@ def _solve_image_2layer(world: World, engine: Engine) -> FieldResult:
     from groundfield.solver import image_2layer
 
     return image_2layer.solve_image_2layer(
-        world, engine, max_terms=engine.image_max_terms, tol=engine.image_series_tol
+        world,
+        engine,
+        max_terms=engine.image_max_terms,
+        tol=engine.image_series_tol,
+        far_field=engine.image_far_field,
     )
 
 

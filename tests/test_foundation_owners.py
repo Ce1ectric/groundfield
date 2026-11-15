@@ -594,10 +594,12 @@ def _per_side_over_one_owner(
         # r2b_scope_scan.py, r2b_scope_refine.py; signed: d3gen
         # q38_signed_analyse.out, q38_change_cases_*.out). Remeasured with
         # the line kernel of wave 3 (stream w3xl: blended near/far switch,
-        # far images with the quadrupole term): moved by up to 1.7e-5.
-        ((4.0, 1.0), (1000.0, 30.0, 5.0), 30.0, 0.2, "4", -0.00687535),
+        # far images with the quadrupole term): moved by up to 1.7e-5; and
+        # with the transverse distance of image pairs (stream fw3xl, audit
+        # W3A-02; the 0.205 m shells): by up to 8.0e-8.
+        ((4.0, 1.0), (1000.0, 30.0, 5.0), 30.0, 0.2, "4", -0.00687543),
         ((16.0, 1.0), (1000.0, 30.0, 10.0), 30.0, 0.2, "50", -0.01527894),
-        ((80.0, 20.0), (30.0, 200.0, 5.0), 30.0, 0.05, "4-default", -0.00319690),
+        ((80.0, 20.0), (30.0, 200.0, 5.0), 30.0, 0.05, "4-default", -0.00319689),
         ((150.0, 7.75), (30.0, 200.0, 5.0), None, 0.05, "50-default", -0.00906735),
         ((7.0, 1.75), (100.0, 100.0, None), None, 0.05, "4-default", -0.00088626),
         ((25.0, 1.0), (100.0, 100.0, None), None, 0.05, "50-default", -0.00329719),
@@ -693,7 +695,7 @@ def _texts_with_the_scope() -> dict[str, str]:
 def test_every_text_quotes_the_size_of_the_change_with_the_short_side() -> None:
     """The aspect-ratio-4 clause named no shortest side, but the scan behind
     it started at 4 m x 1 m: narrower rectangles exceed the bound (2 m x
-    0.5 m: 1.0157 % as lumped / distributed - 1, -1.0055 % as the change
+    0.5 m: 1.0157 % as lumped / distributed - 1, -1.0056 % as the change
     one owner -> per side, with 0.2 m of wet concrete over 1000 / 30 ohm m).
     Every text quotes one bound, with a short side of at least 1 m in both
     clauses, and the short summaries give the same numbers. Since user
@@ -729,7 +731,7 @@ def test_every_text_quotes_the_size_of_the_change_with_the_short_side() -> None:
     narrow = _per_side_over_one_owner(
         (2.0, 0.5), gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=5.0), 30.0, 0.2
     )
-    assert narrow == pytest.approx(-0.01005527, abs=1e-8)
+    assert narrow == pytest.approx(-0.01005558, abs=1e-8)  # fw3xl: -0.01005527
     assert abs(narrow) > quoted["field description"][0] / 100.0
 
 

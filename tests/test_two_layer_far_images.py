@@ -77,20 +77,26 @@ def _solve(world, ds):
 
 @pytest.mark.finding("10.28")
 def test_a_straight_strip_in_two_layer_soil_is_exact_at_any_segment_length() -> None:
-    """Within 8e-7 of the closed form for 2 ... 0.125 m, monotone in ds.
+    """Within 4.5e-6 of the closed form on a fine grid of ds = 2 ... 0.125 m.
 
-    Measured: +6.8e-7, +1.2e-7, -4.1e-7, -5.4e-7, -7.7e-7 (2, 1, 0.5, 0.25,
-    0.125 m); before: +8.2e-5, -2.8e-6, +5.1e-4, +1.4e-4, -3.2e-5. The rest
-    is the quadrupole remainder of the far form, as in homogeneous soil.
+    Measured (stream fw3xl, after audit W3A-02): -1.8e-6, -1.7e-6, -2.4e-6,
+    -1.4e-6, -2.9e-6, -3.6e-6, -3.3e-6, -3.1e-6, -3.1e-6, -3.3e-6 at ds = 2,
+    1.5, 1, 0.75, 0.5, 0.4, 0.3, 0.25, 0.2, 0.125 m, not monotone (audit
+    W3A-03: the former check of monotonicity on five points did not hold on
+    this grid). The closed form takes the images axis to axis; about 2e-6 of
+    the rest is the reduced kernel the soil-surface image keeps, the rest
+    the quadrupole remainder of the far form. Before wave 3: +8.2e-5,
+    -2.8e-6, +5.1e-4, +1.4e-4, -3.2e-5 at 2, 1, 0.5, 0.25, 0.125 m; between
+    wave 3 and W3A-02 within 1.2e-6, the reduced kernel on the interface
+    images (+2.5e-6 here) offsetting the remainder.
     """
     ref = _resistance_reference()
     world = _strip_world()
     dev = [
         _solve(world, ds).cluster_impedance("s")[0].real / ref - 1.0
-        for ds in (2.0, 1.0, 0.5, 0.25, 0.125)
+        for ds in (2.0, 1.5, 1.0, 0.75, 0.5, 0.4, 0.3, 0.25, 0.2, 0.125)
     ]
-    assert max(abs(d) for d in dev) < 1.5e-6
-    assert all(b < a for a, b in zip(dev, dev[1:], strict=False))
+    assert max(abs(d) for d in dev) < 4.5e-6, dev
 
 
 def _line_potential(point, current: float) -> float:
@@ -251,3 +257,125 @@ def test_far_image_terms_below_the_tolerance_are_left_out(monkeypatch) -> None:
     z_all, n_none, _ = solve_and_count()
     assert (n_tol, n_none, n_all) == (26, 58, 63)
     assert abs(z_tol / z_all - 1.0) < 1e-10
+
+
+# ---------------------------------------------------------------------
+# audit W3A-01: the image work follows the pair, not the longest segment
+# ---------------------------------------------------------------------
+
+
+def _houses(soil, *, long_piece: bool = False) -> gf.World:
+    """16 house grids (10 x 10 m, 2 x 2 meshes) at 0.8 m, 25 m apart."""
+    w = gf.create_world(soil=soil)
+    names = []
+    for i in range(4):
+        for j in range(4):
+            name = f"h{i}{j}"
+            gf.create_electrode(
+                w,
+                "grid_mesh",
+                name=name,
+                corner=(25.0 * i, 25.0 * j, 0.8),
+                size=(10.0, 10.0),
+                n_x=2,
+                n_y=2,
+            )
+            names.append(name)
+    for k, name in enumerate(names[1:], start=1):
+        gf.create_conductor(
+            w,
+            name=f"c{k}",
+            start=names[k - 1],
+            end=name,
+            conductor_type="pen",
+            cross_section=50e-6,
+            coupling_to_soil="isolated",
+        )
+    if long_piece:
+        # one bare galvanic copper conductor between two houses, 10 m pieces
+        gf.create_conductor(
+            w,
+            name="bare",
+            start="h30",
+            end="h33",
+            conductor_type="bare_copper",
+            cross_section=50e-6,
+            coupling_to_soil="galvanic",
+            discretize_segment_length=10.0,
+        )
+    gf.create_source(w, attached_to="h00", magnitude=1.0)
+    return w
+
+
+def _image_work(world, monkeypatch, **engine) -> dict[str, int]:
+    """Far-image evaluations and Galerkin image pairs of one solve.
+
+    The spy of auditor W3A: every call of ``image_quadrupole_rows`` counts
+    ``rows × columns × images``, every Galerkin call its pairs, split by
+    whether both segments of the pair are short (at most 1 m). Keyword
+    arguments pass through (the kernel accumulates into ``out``); ``engine``
+    are further :class:`Engine` fields.
+    """
+    from groundfield.solver import _kernels as K
+    from groundfield.solver import _line_kernel as lk
+    from groundfield.solver import image_2layer as i2
+
+    work = {"far": 0, "galerkin_short": 0, "galerkin_long": 0}
+    far, gal = lk.image_quadrupole_rows, lk.galerkin_pairs
+    depth = [0]
+
+    def far_spy(obs_mid, obs_t, obs_len, segs, images, *args, **kwargs):
+        work["far"] += obs_mid.shape[0] * segs.mid.shape[0] * len(images)
+        return far(obs_mid, obs_t, obs_len, segs, images, *args, **kwargs)
+
+    def gal_spy(obs, i, src, j, *args, **kwargs):
+        # count the outer call only (the kernel calls itself for chunks)
+        if depth[0] == 0:
+            short = (obs.length[i] <= 1.0) & (src.length[j] <= 1.0)
+            work["galerkin_short"] += int(short.sum())
+            work["galerkin_long"] += int((~short).sum())
+        depth[0] += 1
+        try:
+            return gal(obs, i, src, j, *args, **kwargs)
+        finally:
+            depth[0] -= 1
+
+    with monkeypatch.context() as mp:
+        for mod in (lk, K, i2):
+            if hasattr(mod, "image_quadrupole_rows"):
+                mp.setattr(mod, "image_quadrupole_rows", far_spy)
+            if hasattr(mod, "galerkin_pairs"):
+                mp.setattr(mod, "galerkin_pairs", gal_spy)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            gf.Engine(segment_length=0.5, frequencies=[50.0], **engine).solve(world)
+    return work
+
+
+@pytest.mark.finding("10.28")
+@pytest.mark.parametrize("h_1", [5.0, 0.5], ids=["series", "cross_layer"])
+def test_w3a_01_a_few_long_pieces_do_not_multiply_the_image_work(
+    monkeypatch, h_1
+) -> None:
+    """Eight 9.4 m pieces among 1920 segments of 0.5 m (auditor W3A).
+
+    The reach of the far-image term (120 segment lengths) and the image
+    count followed the longest segment of the whole world: the far-image
+    work grew from 77.4 M to 431 M evaluations (h_1 = 5 m) and from 103 M to
+    152 M (h_1 = 0.5 m), and every far image of the long pieces added a
+    Galerkin self image of every short segment. Now the pairs of the short
+    segments keep their own reach: the far work grows by less than 50 %, and
+    the long pieces add no Galerkin pair between two short segments.
+
+    The auditor's second gate, "fewer than 1.5 times the Galerkin image
+    pairs", counts the near image pairs of the long pieces themselves: a pair
+    within 7.5 lengths of the longer segment is integrated exactly, which is
+    the near-pair criterion of every pair (the base 34ad269 grew from 59 k to
+    324 k pairs on the series path for the same reason).
+    """
+    soil = gf.TwoLayerSoil(rho_1=500.0, rho_2=100.0, h_1=h_1)
+    plain = _image_work(_houses(soil), monkeypatch)
+    extra = _image_work(_houses(soil, long_piece=True), monkeypatch)
+    assert extra["far"] < 1.5 * plain["far"], (plain, extra)
+    assert extra["galerkin_short"] == plain["galerkin_short"], (plain, extra)
+    assert plain["galerkin_long"] == 0

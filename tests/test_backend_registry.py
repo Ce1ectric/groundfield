@@ -501,7 +501,7 @@ def test_every_backend_reports_the_metadata_core(backend: str) -> None:
     expected = "line" if image_family or backend == "fem" else "point"
     assert md["kernel"] == expected
     assert isinstance(md["solve_time_s"], float) and md["solve_time_s"] >= 0.0
-    assert md["series"] == {"max_terms": 300, "tol": 1e-6}
+    assert md["series"] == {"max_terms": 300, "tol": 1e-6, "far_field": "quadrupole"}
 
 
 def test_core_metadata_keys_constant_lists_the_contract() -> None:
