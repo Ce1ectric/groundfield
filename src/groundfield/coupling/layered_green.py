@@ -35,11 +35,11 @@ related by reciprocity ($\\Phi_{ul} = \\Phi_{lu}$).
 
 Implementation
 --------------
-The 4×4 boundary-value system is solved numerically once per
-$(\\lambda, z_s)$ pair (4 unknowns: amplitudes in each layer for
-each direction). Per call the cost is dominated by $J_0$
-evaluation and the linear solve at each $\\lambda$ node — fully
-vectorisable with `numpy`.
+The boundary-value system is solved once per $(\\lambda, z_s)$ pair; in
+its stable form it has three unknowns, and since 2026.11 it is eliminated
+in closed form, vectorised over the $\\lambda$ nodes (one LAPACK solve per
+node before, half the time of a cross-layer solve). Per call the cost is
+then dominated by the $J_0$ evaluation.
 
 The implementation focuses on the 2-layer case
 (:class:`groundfield.soil.models.TwoLayerSoil`); the n-layer
@@ -1255,32 +1255,32 @@ def _spectral_amplitudes(
     sigma_1 = 1.0 / rho_1
     sigma_2 = 1.0 / rho_2
 
-    n = lambdas.size
-    A_mat = np.zeros((n, 3, 3), dtype=float)
-    rhs = np.zeros((n, 3), dtype=float)
+    # Right-hand sides of Eq 1 … Eq 3 at every λ.
+    r_0 = -dz_phi_p_0
+    r_1 = phi_p_layer2_h - phi_p_h
+    r_2 = sigma_2 * dz_phi_p_layer2_h - sigma_1 * dz_phi_p_h
 
-    # Eq 1
-    A_mat[:, 0, 0] = lambdas * e_mlh
-    A_mat[:, 0, 1] = -lambdas
-    A_mat[:, 0, 2] = 0.0
-    rhs[:, 0] = -dz_phi_p_0
-
-    # Eq 2
-    A_mat[:, 1, 0] = 1.0
-    A_mat[:, 1, 1] = e_mlh
-    A_mat[:, 1, 2] = -1.0
-    rhs[:, 1] = phi_p_layer2_h - phi_p_h
-
-    # Eq 3
-    A_mat[:, 2, 0] = sigma_1 * lambdas
-    A_mat[:, 2, 1] = -sigma_1 * lambdas * e_mlh
-    A_mat[:, 2, 2] = sigma_2 * lambdas
-    rhs[:, 2] = sigma_2 * dz_phi_p_layer2_h - sigma_1 * dz_phi_p_h
-
-    sol = np.linalg.solve(A_mat, rhs[..., None]).squeeze(-1)
-    A = sol[:, 0]
-    B = sol[:, 1]
-    C = sol[:, 2]
+    # Closed-form elimination, vectorised over λ (wave 3 of the 2026.11
+    # work, roadmap "Vectorise the ADR-0007 cross-layer Sommerfeld path").
+    # Eq 1 gives B = e·A − r_0/λ, Eq 2 then C = (1 + e²)·A − e·r_0/λ − r_1,
+    # and Eq 3
+    #
+    #    A = (r_2 + (σ_2 − σ_1)·e·r_0 + σ_2·λ·r_1) / (λ [σ_1 (1 − e²) + σ_2 (1 + e²)])
+    #
+    # with e = e^{−λh_1} ≤ 1: the denominator is at least σ_2·λ > 0, so
+    # the elimination is as well conditioned as the system. It replaces one
+    # LAPACK solve per node (the 3 × 3 systems took half the time of a
+    # cross-layer solve) and agrees with it to round-off: ≤ 1e-14 of the
+    # amplitude scale against a 50-digit reference over λ = 1e-7 … 2e3 1/m
+    # and contrasts up to 1e4, where LAPACK is 1.9e-12 and this form
+    # 5.3e-13 off (``tests/test_cross_layer_speed.py``).
+    e_sq = e_mlh * e_mlh
+    r_0_lam = r_0 / lambdas
+    A = (r_2 + (sigma_2 - sigma_1) * e_mlh * r_0 + sigma_2 * lambdas * r_1) / (
+        lambdas * (sigma_1 * (1.0 - e_sq) + sigma_2 * (1.0 + e_sq))
+    )
+    B = e_mlh * A - r_0_lam
+    C = (1.0 + e_sq) * A - e_mlh * r_0_lam - r_1
     # Return the **stable** amplitudes (A, B, C). Callers should
     # use _phi_from_stable_amplitudes() to evaluate Phi(z) at any
     # observer depth without intermediate overflows.
