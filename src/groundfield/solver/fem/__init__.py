@@ -173,6 +173,7 @@ def solve_fem(
     r_far_factor: float = 1000.0,
     far_field: str = "robin",
     max_nodes: int = 4_000_000,
+    max_nodes_3d: int = 2_000_000,
     model: str = "auto",
     source_radius: float | None = None,
     growth: float = 0.5,
@@ -213,8 +214,12 @@ def solve_fem(
         which biases the resistance low by about $\\rho_n/(2\\pi R)$ (for
         truncation studies).
     max_nodes
-        Resource limit: the node count of the finer mesh, predicted before
-        anything is assembled.
+        Resource limit of the axisymmetric model: the node count of the
+        finer mesh, predicted before anything is assembled.
+    max_nodes_3d
+        Resource limit of the three-dimensional model: the node count of
+        its finer mesh (about 3 GB per million nodes), predicted before
+        meshing and counted before the finer level is built.
     model
         ``"auto"`` (default): the axisymmetric model where it applies (rods
         on one axis, rings around it, no galvanic distributed conductor),
@@ -353,6 +358,7 @@ def solve_fem(
                 if concrete_resistivity is None
                 else float(concrete_resistivity),
                 "concrete_mesh": _concrete_mesh,
+                "max_nodes_3d": int(max_nodes_3d),
             },
         )
     return frame.to_user(result)
@@ -393,7 +399,12 @@ def _solve(
         disc, topo = port_topology(world)
         topology = (disc, topo)
         extra = disc.segments[len(world.electrodes) :]
-        earth = solid_earth(world, engine, extra_segments=extra, **options, **solid)
+        solid_options = dict(options)
+        solid_options["max_nodes"] = solid["max_nodes_3d"]
+        rest = {k: v for k, v in solid.items() if k != "max_nodes_3d"}
+        earth = solid_earth(
+            world, engine, extra_segments=extra, **solid_options, **rest
+        )
         approximation = (
             "thin wires as smoothed line sources with an analytic radius "
             "correction in three-dimensional finite elements"

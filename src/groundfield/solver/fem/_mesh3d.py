@@ -301,13 +301,10 @@ def snap_to_planes(
     ratio
         Snap distance in units of each node's shortest edge.
     """
+    if not planes:
+        return p
     p = p.copy()
-    n = p.shape[1]
-    shortest = np.full(n, np.inf)
-    for a, b in TET_EDGES:
-        length = np.linalg.norm(p[:, t[a]] - p[:, t[b]], axis=0)
-        np.minimum.at(shortest, t[a], length)
-        np.minimum.at(shortest, t[b], length)
+    shortest = shortest_edges_at_nodes(p, t)
     fixed = [f.copy() for f in fixed]
     for axis, value, reach in planes:
         gap = p[axis] - value
@@ -317,20 +314,21 @@ def snap_to_planes(
             fixed[axis] |= gap == 0.0
             continue
         old = p[axis].copy()
-        v_old = tet_volumes(p, t)
+        touched = t[:, np.any(move[t], axis=0)]
+        v_old = tet_volumes(p, touched)
         p[axis, move] = value
-        v_new = tet_volumes(p, t)
+        v_new = tet_volumes(p, touched)
         bad = (np.sign(v_new) != np.sign(v_old)) | (
             np.abs(v_new) < 1e-3 * np.abs(v_old)
         )
         while bad.any():
-            nodes = np.unique(t[:, bad].ravel())
+            nodes = np.unique(touched[:, bad].ravel())
             back = nodes[move[nodes]]
             if back.size == 0:  # pragma: no cover - only moved nodes change volumes
                 break
             p[axis, back] = old[back]
             move[back] = False
-            v_new = tet_volumes(p, t)
+            v_new = tet_volumes(p, touched)
             bad = (np.sign(v_new) != np.sign(v_old)) | (
                 np.abs(v_new) < 1e-3 * np.abs(v_old)
             )
@@ -407,6 +405,44 @@ def edge_count(t: np.ndarray, n_nodes: int) -> int:
     return int(np.unique(key).size)
 
 
+def near_elements(
+    p: np.ndarray,
+    t: np.ndarray,
+    samples: np.ndarray,
+    reach: float,
+    chunk: int = 1_000_000,
+) -> np.ndarray:
+    """Indices of the tetrahedra within ``reach`` (plus their size) of a wire.
+
+    Computed in chunks, so no array of the size of all elements times their
+    vertices is formed.
+    """
+    from scipy.spatial import cKDTree
+
+    tree = cKDTree(samples)
+    found = []
+    for s0 in range(0, t.shape[1], chunk):
+        tt = t[:, s0 : s0 + chunk]
+        centroid = (p[:, tt[0]] + p[:, tt[1]] + p[:, tt[2]] + p[:, tt[3]]).T / 4.0
+        d, _ = tree.query(centroid)
+        found.append(s0 + np.nonzero(d < reach + longest_edges(p, tt))[0])
+    return np.concatenate(found)
+
+
+def shortest_edges_at_nodes(
+    p: np.ndarray, t: np.ndarray, chunk: int = 1_000_000
+) -> np.ndarray:
+    """Length in m of the shortest edge at every node (chunked)."""
+    shortest = np.full(p.shape[1], np.inf)
+    for s0 in range(0, t.shape[1], chunk):
+        tt = t[:, s0 : s0 + chunk]
+        for a, b in TET_EDGES:
+            length = np.sqrt(np.sum((p[:, tt[a]] - p[:, tt[b]]) ** 2, axis=0))
+            np.minimum.at(shortest, tt[a], length)
+            np.minimum.at(shortest, tt[b], length)
+    return shortest
+
+
 def box_faces(
     p: np.ndarray, t: np.ndarray, planes: list[tuple[int, float]]
 ) -> np.ndarray:
@@ -428,14 +464,16 @@ def box_faces(
     return np.concatenate(found, axis=1)
 
 
-def predicted_nodes(
-    total_length: float, h_w: float, growth: float, r_core: float
-) -> int:
-    """Rough node count of the bisection mesh before it is built.
+def predicted_nodes(total_length: float, h_w: float, growth: float, r_core: float) -> int:
+    """Node count of the coarser 3-D mesh before it is built (resource guard).
 
-    $N \\approx 1.6\\,[\\pi r_c^2 / h_w^3 + 2\\pi/(g^2 h_w)]\\,L$ per wire length
-    $L$ (measured on rods, rings and grids, evidence of stream w4fem3d), for
-    the resource guard only.
+    $N \\approx 12\\,000 + 5\\,L\\,[\\pi r_c^2/h_\\mathrm{w}^3 + 2\\pi/(g^2 h_\\mathrm{w})]$ for
+    the wire length $L$: the background plus the tube of size $h_\\mathrm{w}$
+    within $r_c$ of the wires and the graded zone around it. Fitted to
+    measured meshes (a 3 m rod, a 12.6 m ring, a 28 m station: 3.3 … 5.4
+    times the bracket per metre over a background of about 10 000 nodes;
+    stream w4fem3d); the exact count is checked again before the finer
+    level is built.
     """
     per_length = math.pi * r_core**2 / h_w**3 + 2.0 * math.pi / (growth**2 * h_w)
-    return int(1.6 * per_length * total_length)
+    return int(12_000 + 5.0 * per_length * total_length)

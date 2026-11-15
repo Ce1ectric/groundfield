@@ -489,8 +489,8 @@ def test_the_3d_mesh_is_limited_before_it_is_built() -> None:
     # user decision Q37 (part B)
     from groundfield.diagnostics import ResourceLimitError
 
-    with pytest.raises(ResourceLimitError, match="max_nodes"):
-        _solve(_strip_world(), max_nodes=1000)
+    with pytest.raises(ResourceLimitError, match="max_nodes_3d"):
+        _solve(_strip_world(), max_nodes_3d=1000)
 
 
 def test_the_axisymmetric_model_refuses_a_strip_when_forced() -> None:

@@ -301,8 +301,8 @@ def classify_elements(
     out = {
         "kind": np.zeros(ne, dtype=np.int8),
         "sigma": np.zeros(ne),
-        "axis": np.full(ne, -1, dtype=np.int64),
-        "value": np.zeros(ne),
+        "axis": np.full(ne, -1, dtype=np.int8),
+        "value": np.zeros(ne, dtype=np.float64),
         "sigma_plus": np.zeros(ne),
         "sigma_minus": np.zeros(ne),
         "sigma_h": np.zeros(ne),
@@ -464,8 +464,10 @@ def stiffness_matrix(
     n = p.shape[1]
     model = classify_elements(p, t, interfaces, sigma_layers, prisms, sigma_concrete)
     kind = model["kind"]
-    off = csr_matrix((n, n))
     plain = np.nonzero(kind != 1)[0]
+    rows = np.empty(6 * plain.size, dtype=np.int32)
+    cols = np.empty(6 * plain.size, dtype=np.int32)
+    vals = np.empty(6 * plain.size)
     for s0 in range(0, plain.size, chunk):
         idx = plain[s0 : s0 + chunk]
         tt = t[:, idx]
@@ -474,22 +476,21 @@ def stiffness_matrix(
         tensor = np.repeat(model["sigma"][idx][:, None], 3, axis=1)
         tensor[lam, 0] = tensor[lam, 1] = model["sigma_h"][idx][lam]
         tensor[lam, 2] = model["sigma_v"][idx][lam]
-        rows, cols, vals = [], [], []
-        for a, b in TET_EDGES:
-            vals.append(vol * np.einsum("ij,ij,ij->i", grad[:, a], tensor, grad[:, b]))
-            rows.append(np.minimum(tt[a], tt[b]))
-            cols.append(np.maximum(tt[a], tt[b]))
-        upper = coo_matrix(
-            (np.concatenate(vals), (np.concatenate(rows), np.concatenate(cols))),
-            shape=(n, n),
-        ).tocsr()
-        off = off + upper + upper.T
+        for k, (a, b) in enumerate(TET_EDGES):
+            sl = slice(6 * s0 + k * idx.size, 6 * s0 + (k + 1) * idx.size)
+            vals[sl] = vol * np.einsum("ij,ij,ij->i", grad[:, a], tensor, grad[:, b])
+            rows[sl] = np.minimum(tt[a], tt[b])
+            cols[sl] = np.maximum(tt[a], tt[b])
+    upper = coo_matrix((vals, (rows, cols)), shape=(n, n)).tocsr()
+    del rows, cols, vals
+    off = upper + upper.T
+    del upper
     ife = np.nonzero(kind == 1)[0]
     if ife.size:
         tt = t[:, ife]
         x = np.moveaxis(p[:, tt], 0, 2)
         vol, _ = tet_gradients(p, tt)
-        ax, val = model["axis"][ife], model["value"][ife]
+        ax, val = model["axis"][ife].astype(np.int64), model["value"][ife]
         sp, sm = model["sigma_plus"][ife], model["sigma_minus"][ife]
         k_e, inverse = ife_matrices(x, ax, val, sp, sm, vol, return_maps=True)
         rows = np.broadcast_to(tt.T[:, :, None], k_e.shape).ravel()

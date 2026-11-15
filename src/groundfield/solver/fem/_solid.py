@@ -326,9 +326,9 @@ def solid_earth(
         raise ResourceLimitError(
             f"Backend 'fem': the three-dimensional mesh would have about "
             f"{predicted_fine} nodes at its finer level, above the limit "
-            f"max_nodes = {max_nodes} (FemOptions). Coarsen it "
+            f"max_nodes_3d = {max_nodes} (FemOptions). Coarsen it "
             "(FemOptions.source_radius, growth, extrapolate=False), or raise "
-            "max_nodes to solve it on purpose."
+            "max_nodes_3d to solve it on purpose."
         )
 
     # Coarse mesh: isotropic background refined towards the wire axes,
@@ -366,9 +366,9 @@ def solid_earth(
     if n_fine > max_nodes:
         raise ResourceLimitError(
             f"Backend 'fem': the three-dimensional mesh has {n_fine} nodes at its "
-            f"finer level, above the limit max_nodes = {max_nodes} (FemOptions). "
+            f"finer level, above the limit max_nodes_3d = {max_nodes} (FemOptions). "
             "Coarsen it (FemOptions.source_radius, growth, extrapolate=False), or "
-            "raise max_nodes to solve it on purpose."
+            "raise max_nodes_3d to solve it on purpose."
         )
     t_mesh = time.perf_counter() - t0
 
@@ -454,12 +454,7 @@ def solid_earth(
             stiff = stiff + asm3.robin(p, faces, sig_f, center)
         else:
             stiff = _ground(stiff, np.unique(faces))
-        from scipy.spatial import cKDTree
-
-        tree = cKDTree(samples)
-        dist, _ = tree.query(p[:, t].mean(axis=1).T)
-        hmax = mesh3.longest_edges(p, t)
-        candidates = np.nonzero(dist < r_src + hmax + h_w)[0]
+        candidates = mesh3.near_elements(p, t, samples, r_src + h_w)
         average = asm3.disc_average_matrix(
             p, t, model.points, e1, e2, disc, disc_w, candidates
         )

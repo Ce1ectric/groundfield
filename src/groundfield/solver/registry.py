@@ -438,6 +438,16 @@ class FemOptions(BackendOptions):
             "mesh above which the solve is refused (ResourceLimitError)."
         ),
     )
+    max_nodes_3d: int = Field(
+        default=2_000_000,
+        gt=0,
+        description=(
+            "Resource limit of the three-dimensional model (count): the node "
+            "count of its finer mesh, predicted before meshing and counted "
+            "before the finer level is built (ResourceLimitError above it). "
+            "The 3-D solve needs about 3 GB per million nodes."
+        ),
+    )
     model: Literal["auto", "axisymmetric", "3d"] = Field(
         default="auto",
         description=(
