@@ -147,10 +147,14 @@ What 2026.11 changed (ADR-0006 amendment):
   1000 Ω·m at 1 kHz). Both rest on the 256-node logarithmic region of the
   λ grid (audit W3B-01: with the 64 nodes of earlier builds short segments
   were 1e-5 … 7.4e-5 off at 0.01 skin depths and up to 3e-4 at 1 m, about
-  1e-8 of a solved impedance). Both rules cost at most linearly in the length: one lumped
-  conductor of 2 km from a rod to a junction, 50 Hz and 1 kHz, is solved
-  in 1.1 s within 0.21 GB, 100 km in 10.6 s within 0.24 GB (audit W2B-05:
-  28 s and 1.6 GB at 2 km, more than 7.8 GB at 100 km).
+  1e-8 of a solved impedance). Both rules cost at most linearly in the
+  length: one lumped conductor of 2 km from a rod to a junction, 50 Hz and
+  1 kHz, is solved in 1.1 s within 0.21 GB, 100 km in 10.6 s within
+  0.24 GB (audit W2B-05: 28 s and 1.6 GB at 2 km, more than 7.8 GB at
+  100 km) — but beyond about 33 km that conductor is not converged and the
+  solve warns (`SommerfeldResolutionWarning`; the resolved λ grid above
+  reaches $2^{17}\cdot 2\pi\,(z + z')/30$, 38 km for a conductor at
+  0.7 m; audit W3B-10).
 - **Tabulated assembly** (the default since 2026.11,
   `Engine.sommerfeld_assembly="tabulated"`; user decision Q16).
   Sub-segments are grouped by depth and one table of the spectral integral
@@ -234,12 +238,17 @@ earth, not a replacement of `sommerfeld` in general.
 **Networks of short cables.** Tiled over the pieces of service drops that
 are shorter than the skin depth (30 … 60 m against 159 m at 1 kHz in
 100 Ω·m), Carson's infinite-line correction overstates the earth return of
-an LV network. For the generated star (100 houses) and grid (100 and 50
-houses) networks with an insulated Neumann PEN, against `sommerfeld` with
-a refined discretisation (PEN in 2.5 m pieces, 1 m segments; the default
-`sommerfeld` agrees with it to 8e-5), `carson_series` reads the input
-reactance at 1 kHz 9.3 … 14.9 % and the resistance 5.5 … 10.9 % high, and
-that error changes with the geometry. A change of such a network is
+an LV network. For the generated star, radial and grid networks of
+5 … 100 houses with an insulated Neumann PEN (100 Ω·m and two-layer soils
+of 30 … 200 Ω·m), against `sommerfeld` with a refined discretisation (PEN
+in 2.5 m pieces, 1 m segments; the default `sommerfeld` agrees with it to
+4e-4), `carson_series` reads the input reactance 4 … 21 % and the
+resistance 2 … 11 % high at 1 kHz, and the reactance 21 … 44 % high at
+50 Hz (the 10-house radial network +20 % / +41 %, the 30-house star
++17 % / +44 % at 1 kHz / 50 Hz; audit W3B-02). At 50 Hz `carson_series` is
+then no closer than the diagnostic `perfect_mirror` (+40 % / +37 % there);
+the resistance at 50 Hz is within 0.4 %. The error changes with the
+geometry. A change of such a network is
 therefore reproduced by `carson_series` only within that error, possibly
 with the opposite sign: across the cabinet fix of audit W1B-01/02 the
 star's reactance moves by +1.18 % under `carson_series` and −3.54 % under

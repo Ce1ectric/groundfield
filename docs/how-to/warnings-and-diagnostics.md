@@ -89,10 +89,16 @@ or model a concentric cable with `conductor_type="cable_shield"` around
 its core, which is not an overlap. The stretch must exceed ten touching
 distances and 5 % of the shorter conductor, so a branch leaving its main
 at more than about half a degree, a crossing and a T-contact are not
-reported. In the generated radial networks the drops of houses behind
-each other leave one tap on one axis and are reported (5 houses: 10
-pairs); spread 5 cm apart, the input impedance of that network moves by
-3.5 % at 1 kHz.
+reported, and neither are cables drawn exactly at the touching distance
+(within 1e-9 of it: round-off, audit W3B-03). The generated networks
+report none: the service drops that leave one tap in one direction, the
+drops of houses behind each other in the radial networks and in star
+networks such as the 10-house star (five drops from the substation), lie
+side by side at the touching distance since decision D9, so that only
+neighbours touch. Up to then they lay on one axis and every pair was
+reported (radial networks of 5 / 10 / 80 / 200 houses: 10 / 20 / 31 /
+247 pairs, the 10-house star 10, the 80-house star with commercial sites
+2; audit W3B-05).
 
 ## The warnings you will meet most often
 

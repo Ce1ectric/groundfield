@@ -501,7 +501,11 @@ Findings 10.35, 10.36, 10.45, 10.46 (F50, F52) and 10.60.
    entries, and $J_0$ tables above $2^{21}$ entries are evaluated in row
    chunks (bit-identical below that size). The same conductor now solves in
    1.1 s within 0.21 GB (100 km: 10.6 s, 0.24 GB; the $J_0$ work grows
-   2.2-fold per doubling of the length instead of 7-fold). The input
+   2.2-fold per doubling of the length instead of 7-fold). The λ budget of
+   $2^{17}$ panels resolves $J_0$ up to $2^{17}\cdot 2\pi\,(z + z')/30$:
+   beyond 33 km this conductor (38 km for one at 0.7 m) warns
+   `SommerfeldResolutionWarning` and is not converged, so the 100 km solve
+   is a cost figure, not a result (audit W3B-10). The input
    impedance of that world is within 3.6e-7 (X) of a chain of 25 m pieces
    at 2 km, 1 kHz (2026.11.0: −2.0e-6, and its lumped value 2.9e-6 off in
    R). Five golden cases move by 8e-10 … 4.9e-7.

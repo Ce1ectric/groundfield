@@ -180,9 +180,29 @@ node; longer for PEN radii above 7.3 mm, so that every section stays a
 finite resistance). "Along" means both ends of a cable section within
 1 cm of the drop's line; the one overlap left is that 1 cm, where a
 foundation touches the end node of its cable from beyond and is tapped
-1 cm before the node. A drop may share its route with another drop, as
-cables in one trench do; the inductive coupling treats such overlapping
-conductors as touching wires. A drop may also pass over other buildings'
+1 cm before the node. Drops that leave one tap in one direction — the
+drops of houses behind each other, such as the five drops of the 5-house
+radial network from the substation ring along −x, or the five drops of the
+10-house star from the substation — lie side by side at the touching
+distance $2r$ of the PEN (decision D9 of 2026.11), so that only neighbours
+touch: sorted by length, shortest first (equal lengths in plan order), and
+centred on their common axis, drop $k$ of $n$ at $(k - (n - 1)/2)\,2r$
+along the normal $(-d_y, d_x)/|d|$ of the drop direction $d$. The plan
+records the offset as `PlannedBranch.axis_offset_m`; the materialiser
+moves both ends of the conductor by it, and the drop stays attached to
+its tap and its building. Up to then such drops lay on one axis and the
+inductance matrix read them as a bundle in which every pair touches,
+which no cross-section of four or more equal wires realises;
+`gf.diagnose()` reported every pair (audit W3B-05). With an inductive
+PEN (5 m pieces, 100 Ω·m) the input reactance moves at 1 kHz by
+−2.3 / −2.7 % (`carson_series` / `sommerfeld`) in the 5-house radial
+network, −2.3 / −2.8 % with 10 houses, −1.1 / −1.3 % in the 10-house
+star, and by at most 1.1e-6 (30 houses) and 5e-4 (80 and 200 houses,
+both frequencies) in the radial networks; the star networks of 5, 30, 80 and
+200 houses have no such drops and build the same world, and plans
+written before (no offsets) build the worlds they built. `LvNetworkLayout`
+draws no rows. Conductors that overlap otherwise (in a hand-made plan)
+are evaluated as touching wires. A drop may also pass over other buildings'
 foundations, 0.2 m above their wires (PEN at 0.6 m, foundations at
 0.8 m): the contact of a house lies at the corner of the side facing its
 cable (the tie rule below), so a drop to a house behind others of its

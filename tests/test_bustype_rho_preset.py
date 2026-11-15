@@ -243,6 +243,17 @@ def test_w3b_06_the_marker_follows_a_given_description(groundinsight) -> None:
         fit, name="b", system_type="TN", voltage_level=0.4, description="x"
     )
     assert given.description == "x"
+    # a stale preset line without a named preset is dropped, not kept as a
+    # claim the exporter was not given (own attack)
+    stale = to_bustype(
+        fit,
+        name="b",
+        system_type="TN",
+        voltage_level=0.4,
+        description=again.description,
+    )
+    assert stale.description == "AP1 station, 2 x 2 mesh"
+    assert gf.bustype_rho_preset(stale) is None
 
 
 # audit W3B-06
