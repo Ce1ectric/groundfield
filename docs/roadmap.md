@@ -90,6 +90,11 @@ limits a result, the reference documentation states the limit.
   the Carson pair plan 15 % of a 40-house sweep. Compiled Carson integrals
   were measured and not built (5 … 13 % of an inductive sweep after
   memoisation, below the 20 % threshold; 10.63).
+- **Spacing of service drops in a trench.** The drops of one tap and
+  direction lie side by side at the touching distance (user decision D9); a
+  spacing parameter of the generator would cover wider trenches (5 cm moves
+  the 5-house radial network's X at 1 kHz by −12.5 / −14.6 %,
+  `carson_series` / `sommerfeld`).
 
 ## Status of the roadmap items carried in the changelog
 

@@ -177,10 +177,13 @@ shows what agrees with independent references and how well.
   preset holds for its class only (the AP1 station with
   `"lv_group_4_p40"`: rms 39.9 %); even `"station"` leaves up to 15.7 % at
   $h_1$ = 5 m, where the station rods end 0.4 m above the interface. A
-  BusType records the preset you name (`rho_preset`, user decision Q39);
-  `evaluate_spec` and `bustype_from_spec` warn when the bus uses another
-  one, nothing checks `rho_at_fit` against it, and a document without a
-  recorded preset is not checked; check `max_relative` of a fit over
+  BusType records the preset you name (`rho_preset`, user decision Q39):
+  the JSON document in `metadata["rho_preset"]`, the live
+  `groundinsight.BusType` and the groundinsight database in the last line of
+  the description, `groundfield rho_preset: <name>` (`bustype_rho_preset`
+  reads it back; audit W3B-06); `evaluate_spec` and `bustype_from_spec` warn
+  when the bus uses another one, nothing checks `rho_at_fit` against it, and
+  a document without a recorded preset is not checked; check `max_relative` of a fit over
   $\rho_\text{eff}$ (see [Soil](api/soil.md#effective-resistivity)).
 - **Penetration depth of layered soil.** `penetration_depth` matches the
   layered earth return to second order in the horizontal wavenumber;
@@ -188,7 +191,10 @@ shows what agrees with independent references and how well.
   top layers, large separations) the earth-return correction of two wires is
   off by up to 28 % / 33 % (overhead / buried, AP1 soils, separations near
   $|p|$), on top of the complex-depth formula's own error (up to 13 % in
-  homogeneous soil).
+  homogeneous soil); beyond two layers more: three layers up to 46 %, four
+  layers up to 77 % at 1 km, 1 kHz (37 % at 50 Hz). The reference integral
+  `per_metre_mutual_impedance` is within 6e-8 of the earth-return correction
+  up to 300 m and 7e-7 at 1 km for buried pairs (audit W3B-08).
 
 ## Backends
 
@@ -263,19 +269,32 @@ shows what agrees with independent references and how well.
   0.7 m deep: 2.28 / 2.77 times the mutual reactance of `sommerfeld` at
   50 Hz / 1 kHz), and such a solve warns. Use the default `sommerfeld` for
   numbers. `carson_series` overstates the earth return of LV networks of
-  short service drops (shorter than the skin depth): the generated star and
-  grid networks read X 9 … 15 % and R 5 … 11 % high at 1 kHz against
-  `sommerfeld`, an error that changes with the geometry, so a geometry change
-  can move the two models in opposite directions (the 100-house star across
-  the cabinet fix: +1.2 % against −3.5 %).
+  short service drops (shorter than the skin depth): the generated star,
+  radial and grid networks of 5 … 100 houses read X 4 … 21 % and R 2 … 11 %
+  high at 1 kHz and X 21 … 44 % high at 50 Hz against `sommerfeld` (at 50 Hz
+  no closer than `perfect_mirror`; audit W3B-02), an error that changes with
+  the geometry, so a geometry change can move the two models in opposite
+  directions (the 100-house star across the cabinet fix: +1.2 % against
+  −3.5 %). Use `sommerfeld` for networks. Under `carson_series` the stretch
+  rule of tilted pairs (audit W1R3-07) moves generated networks by up to 3e-7
+  (the 10-house star with 5 small and 2 medium sites 2.8e-7, the 80-house
+  radial network 3.4e-8; the 30-house star and radial networks are
+  bit-identical; audit W3B-07).
 - **Sommerfeld segment rules.** Under `sommerfeld` the self term of every
   segment is integrated exactly in one dimension and close pairs along their
   line of closest approach (user decision Q34): within 1.1e-9 of a refined
-  rule from 0.01 skin depths to 3 km, continuous in the length. Pairs of
+  rule from 1 m and 0.01 skin depths to 3 km (and of an independent
+  reference, audit W3B-01), close pairs within about 4e-8 (3.5e-8 for 1 m
+  wires 1 mm apart in 30 over 1000 Ω·m at 1 kHz), continuous in the length.
+  Pairs of
   long segments that are not close keep a composite 16×16 rule (pieces of a
   quarter skin depth, at most 512 per segment, then a
   `SommerfeldResolutionWarning`). The spectral quadrature resolves the most
-  distant points of a conductor at 0.7 m up to about 38 km and warns beyond.
+  distant points of a conductor up to 2^17 · 2π (z + z′)/30 — 38 km for a
+  conductor at 0.7 m, 33 km from a rod head at 0.5 m to a junction at 0.7 m;
+  a longer conductor warns (`SommerfeldResolutionWarning`) and is not
+  converged (a lumped 100 km conductor solves in 10.6 s but warns; audit
+  W3B-10).
   Two long close conductors (two lumped cables 1 m apart) cost a few seconds
   (1.2 / 4.8 s at 1 / 5 km).
 - **Cost of the Sommerfeld assembly** grows with the number of segment
@@ -434,6 +453,14 @@ shows what agrees with independent references and how well.
   modelling choice, not a measured value.
 - **Overpass** answers are capped at 16 MiB; live queries need network
   access (tests and tutorials use stored answers).
+- **Service drops of one tap.** The service drops that leave one tap in one
+  direction lie side by side at the touching distance (user decision D9), as
+  cables in one trench; a wider spacing is not modelled (5 cm apart the
+  5-house radial network's X at 1 kHz is 12.5 / 14.6 % lower,
+  `carson_series` / `sommerfeld`). No generated network reports an overlap
+  in `diagnose()`; with a bare PEN `diagnose()` reports the drops of a row as
+  close wires (`proximity`, information with the default line kernel;
+  audit W3B-05).
 
 ## Diagnostics and problem size
 
