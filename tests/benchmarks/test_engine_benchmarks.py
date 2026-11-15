@@ -70,30 +70,29 @@ def _check(measured, benchmark, backend, case, deviation, tol=None):
 
 
 # ---------------------------------------------------------------------
-# B1 — hemisphere (fem discretisation alone)
+# B1 — surface disc (fem discretisation alone; user decision Q37)
 # ---------------------------------------------------------------------
 
 
-def test_b1_fem_hemisphere(measured) -> None:
-    from groundfield.solver.fem import (
-        _build_axisymmetric_mesh,
-        _solve_hemisphere_conductance,
-    )
+def test_b1_fem_surface_disc(measured) -> None:
+    from groundfield.solver.fem._assembly import solve_ports
+    from groundfield.solver.fem._mesh import MeshParameters, RodGeometry, build_mesh
 
-    r_exact = ref.hemisphere_resistance(100.0, 1.0)
+    r_exact = 100.0 / 4.0  # Weber: rho / (4 b), b = 1 m
 
-    def resistance(n_r: int, n_a: int) -> float:
-        mesh = _build_axisymmetric_mesh(1.0, [], n_radial=n_r, n_axial=n_a)
-        return 1.0 / _solve_hemisphere_conductance(mesh, np.array([0.01]), [])
+    def resistance(level: int) -> float:
+        coin = RodGeometry(radius=1.0, z_top=0.0, z_bottom=1e-5)
+        mesh = build_mesh([coin], [], [], 3000.0, MeshParameters(), level)
+        return 1.0 / solve_ports(mesh, np.array([100.0]), [0.0]).conductance[0, 0]
 
-    r_default = resistance(60, 40)
-    _check(measured, "B1", "fem", "60x40", abs(r_default / r_exact - 1.0))
-    ladder = [resistance(n_r, n_a) for n_r, n_a in [(30, 20), (59, 39), (117, 77)]]
+    ladder = [resistance(level) for level in (0, 1, 2)]
     d = np.diff(ladder)
     assert (d > 0).all(), ladder  # monotone from below
+    extrapolated = ladder[1] + d[0] / 3.0  # the default: levels 0 and 1
+    _check(measured, "B1", "fem", "levels 0/1", abs(extrapolated / r_exact - 1.0))
     order = math.log2(d[0] / d[1])
     measured("B1", "fem", "observed order", order, None)
-    assert 1.6 < order < 2.4, order
+    assert 1.4 < order < 2.4, order
 
 
 # ---------------------------------------------------------------------
@@ -250,11 +249,12 @@ def test_b7_rod_through_interface_mom_family(rho_1, rho_2, z_ref, measured) -> N
 
 
 @pytest.mark.parametrize(("rho_1", "rho_2"), [(1000.0, 30.0), (100.0, 1000.0)])
-def test_b7_rod_through_interface_image_2layer(rho_1, rho_2, measured) -> None:
+@pytest.mark.parametrize("backend", ["image_2layer", "fem"])
+def test_b7_rod_through_interface_image_2layer(backend, rho_1, rho_2, measured) -> None:
     soil = gf.TwoLayerSoil(rho_1=rho_1, rho_2=rho_2, h_1=2.0)
     z_mom = _z("mom", _rod(soil), 0.25)
-    z = _z("image_2layer", _rod(soil), 0.25)
-    _check(measured, "B7", "image_2layer", f"{rho_1:g}/{rho_2:g}", abs(z / z_mom - 1.0))
+    z = _z(backend, _rod(soil), 0.25)
+    _check(measured, "B7", backend, f"{rho_1:g}/{rho_2:g}", abs(z / z_mom - 1.0))
 
 
 # ---------------------------------------------------------------------

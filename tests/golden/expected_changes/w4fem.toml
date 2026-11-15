@@ -1,0 +1,21 @@
+# Stream w4fem, part A (stream w4axi): a conforming axisymmetric
+# finite-element model replaces the equivalent-hemisphere reduction of
+# `fem` (user decision Q37 of 2026-11-14). See ../README.md for the format.
+#
+# Every `fem` number moves: the reduction solved a hemisphere with the
+# closed-form resistance of the electrode (Dwight's rod formula, which
+# ignores the depth of the rod head), the conforming model solves the rod
+# as the solid cylinder it is. Both stored cases are a 3 m rod
+# (a = 5 mm) with its head 0.5 m deep; they move by -4.65 % (100 Ohm m)
+# and -4.57 % (100 over 400 Ohm m, h_1 = 30 m), measured with
+# GF_GOLDEN_STRICT=1 against the snapshot of the stream's base
+# (release/calver 1ffc96e, macOS arm64). Every other stored case is
+# bit-identical with that snapshot (47 of 49 cases).
+
+[[change]]
+cases = ["fem_rod_hom", "fem_rod_two_layer_deep"]
+quantities = ["Zc/*", "phi/*"]
+findings = ["10.23"]
+reason = "user decision Q37: fem solves the rod as a solid cylinder (conforming axisymmetric model) instead of an equivalent hemisphere with Dwight's resistance."
+min_rel_change = 0.03
+max_rel_change = 0.06

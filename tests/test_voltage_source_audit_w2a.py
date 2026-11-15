@@ -226,7 +226,12 @@ def test_w2a_06_same_node_current_source_keeps_its_message() -> None:
 
 # audit W2A-07
 def test_w2a_07_direct_fem_message_names_backends_that_solve_the_world() -> None:
-    """Base: names 'image_2layer' for a homogeneous world (Engine.solve does not)."""
+    """Base: names 'image_2layer' for a homogeneous world (Engine.solve does not).
+
+    fem solves voltage sources since its conforming model (user decision
+    Q37); it refuses the two rods side by side (not axisymmetric), and the
+    direct call and Engine.solve name the same backends.
+    """
     from groundfield.solver import BackendCapabilityError
     from groundfield.solver.fem import solve_fem
 
@@ -239,7 +244,8 @@ def test_w2a_07_direct_fem_message_names_backends_that_solve_the_world() -> None
         with pytest.raises(BackendCapabilityError) as engine:
             w.solve(_engine(backend="fem"))
     assert "'image_2layer'" not in str(direct.value)
-    for name in ("'image'", "'mom'", "'mom_sommerfeld'"):
+    assert "voltage" not in str(direct.value)
+    for name in ("'image'", "'mom'"):
         assert name in str(direct.value)
         assert name in str(engine.value)
 
@@ -318,8 +324,14 @@ def test_w2a_08_loop_message_names_the_ideal_bond_threshold(bond) -> None:
 
 # audit W2A-09
 def test_w2a_09_fem_shell_message_names_the_mom_family() -> None:
-    """Base: 'Use backend='image' / 'image_2layer'' although mom solves shells."""
+    """Base: 'Use backend='image' / 'image_2layer'' although mom solves shells.
+
+    fem solves the encased rod since its conforming model (user decision
+    Q37); the guard that refused it names the mom family for a backend
+    without the correction.
+    """
     from groundfield.solver import BackendCapabilityError
+    from groundfield.solver._pipeline import _reject_concrete_shells
     from groundfield.solver.fem import solve_fem
 
     w = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
@@ -334,8 +346,9 @@ def test_w2a_09_fem_shell_message_names_the_mom_family() -> None:
     gf.create_source(w, attached_to="g1", magnitude=1.0, name="i")
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        with pytest.raises(BackendCapabilityError) as excinfo:
-            solve_fem(w, _engine(backend="fem"))
+        assert solve_fem(w, _engine(backend="fem")).cluster_impedance("g1")[0].real > 0
+    with pytest.raises(BackendCapabilityError) as excinfo:
+        _reject_concrete_shells(w, "toy")
     message = str(excinfo.value)
     for name in ("'image'", "'mom'", "'mom_sommerfeld'"):
         assert name in message

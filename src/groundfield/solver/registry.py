@@ -42,9 +42,10 @@ A world that a backend **cannot represent** raises
 A world that a backend **solves with a documented simplification**
 emits :class:`BackendCapabilityWarning` and solves:
 
-* conductor models the backend reduces (``fem`` treats distributed
-  conductors as lumped branches and ignores inductance and the skin
-  effect of ``resistance_model="skin"``);
+* conductor models the backend reduces (no built-in backend since
+  2026.11; ``fem`` treated distributed conductors as lumped branches and
+  ignored inductance and the skin effect up to its conforming model, user
+  decision Q37);
 * sources with a ``return_to`` electrode on a backend that returns the
   current through remote earth instead.
 
@@ -381,47 +382,57 @@ class MomSommerfeldOptions(BackendOptions):
 
 
 class FemOptions(BackendOptions):
-    """Mesh and truncation controls of the ``fem`` backend.
+    """Mesh, extrapolation and truncation controls of the ``fem`` backend.
 
     Forwarded to :func:`groundfield.solver.fem.solve_fem`. The defaults
-    reproduce the backend's own signature defaults.
+    reproduce the backend's own signature defaults. Since 2026.11 ``fem``
+    is a conforming axisymmetric model (user decision Q37); the controls of
+    the equivalent-hemisphere mesh (``n_radial``, ``n_axial``,
+    ``z_far_factor``) are gone.
     """
 
-    n_radial: int = Field(
-        default=60,
-        ge=3,
+    refinement: int = Field(
+        default=0,
+        ge=0,
+        le=6,
         description=(
-            "Node lines in the radial direction of the spherical-shell mesh "
-            "(count). Refining n -> 2n - 1 nests the finite-element spaces."
+            "Refinement level of the coarser mesh (count): each level bisects "
+            "every interval of the graded mesh lines (about four times the "
+            "nodes). The finer mesh is one level above it."
         ),
     )
-    n_axial: int = Field(
-        default=40,
-        ge=3,
-        description="Node lines in the polar direction of the mesh (count).",
+    extrapolate: bool = Field(
+        default=True,
+        description=(
+            "Solve at refinement and refinement + 1 and extrapolate the port "
+            "conductance matrix to zero mesh size (Richardson, second order). "
+            "False solves the level refinement alone (a lower bound of the "
+            "resistance)."
+        ),
     )
     r_far_factor: float = Field(
-        default=30.0,
-        gt=0.0,
+        default=1000.0,
+        gt=1.0,
         description=(
-            "Radius of the truncation sphere as a multiple of the "
-            "characteristic length a_eq + sum(h_i) (dimensionless)."
-        ),
-    )
-    z_far_factor: float | None = Field(
-        default=None,
-        gt=0.0,
-        description=(
-            "Deprecated by the fem backend; leave at None. A number acts as "
-            "a lower bound on r_far_factor (dimensionless)."
+            "Size of the truncation box in characteristic lengths "
+            "(dimensionless): the electrodes' depth and radius, or the depth "
+            "of the deepest interface times the layer contrast if larger."
         ),
     )
     far_field: Literal["robin", "dirichlet"] = Field(
         default="robin",
         description=(
-            "Condition on the truncation sphere: 'robin' applies the exact "
-            "monopole Dirichlet-to-Neumann map, 'dirichlet' grounds the "
-            "sphere (biases R low by about a_eq / r_far)."
+            "Condition on the truncation box: 'robin' applies the exact "
+            "monopole Dirichlet-to-Neumann map, 'dirichlet' grounds the box "
+            "(biases R low by about rho_n / (2 pi R_box))."
+        ),
+    )
+    max_nodes: int = Field(
+        default=4_000_000,
+        gt=0,
+        description=(
+            "Resource limit (count): the predicted node count of the finer "
+            "mesh above which the solve is refused (ResourceLimitError)."
         ),
     )
 
@@ -1173,17 +1184,26 @@ def _register_builtins() -> None:
         deprecated_alias_of="mom",
         summary="Deprecated name of 'mom' (10.76).",
     )
+    # Conforming axisymmetric model (user decision Q37): the earth part is
+    # a port matrix, the network the shared pipeline's, so conductors,
+    # junctions, return_to and voltage sources are honoured. No source
+    # kernel: the engine's kernel only selects the form of the point
+    # sources for the post-solve field evaluation.
     register_backend(
         "fem",
         "groundfield.solver.fem:solve_fem",
         capabilities=BackendCapabilities(
             soils={"homogeneous", "two_layer", "multi_layer"},
-            conductors={"lumped"},
+            conductors=_ALL_CONDUCTORS,
+            concrete_shells=True,
+            two_terminal_sources=True,
             kernels=frozenset(),
+            junctions=True,
+            voltage_sources=True,
         ),
         options_model=FemOptions,
         experimental=True,
-        summary="Axisymmetric finite elements of an equivalent hemisphere.",
+        summary="Conforming axisymmetric finite elements (rods and rings on one axis).",
     )
 
 

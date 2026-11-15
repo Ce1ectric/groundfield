@@ -658,10 +658,22 @@ def test_generated_measurement_reading_is_independent_of_the_source_impedance() 
         assert _close(i_v, 1.0 / (_z_q(f, 10.0, 1e-3) + z_in[k]))
 
 
-def test_fem_keeps_refusing_voltage_sources() -> None:
-    from groundfield.solver import BackendCapabilityError
+def test_fem_solves_voltage_sources_with_an_internal_impedance() -> None:
+    """fem runs the network of the shared pipeline since its conforming
+    model (user decision Q37): I = U / (Z_q + Z_in) with its own Z_in."""
 
-    w = _two_rods()
-    _voltage(w, "g1", name="v1", internal_resistance_ohm=R_Q)
-    with pytest.raises(BackendCapabilityError, match="voltage source"):
-        _solve(w, backend="fem")
+    def rod() -> gf.World:
+        w = gf.create_world(soil=_soil())
+        gf.create_electrode(w, "rod", name="g1", position=(0.0, 0.0, 0.0), length=3.0)
+        return w
+
+    w = rod()
+    _voltage(w, "g1", name="v1", internal_resistance_ohm=R_Q, internal_inductance_h=L_Q)
+    res = _solve(w, backend="fem")
+    ref = rod()
+    gf.create_source(ref, attached_to="g1", magnitude=1.0)
+    z_in = _solve(ref, backend="fem").input_impedance()
+    for k, f in enumerate(res.frequencies):
+        assert _close(
+            res.sources[0].current[k], U_PHASOR / (_z_q(f, R_Q, L_Q) + z_in[k])
+        )

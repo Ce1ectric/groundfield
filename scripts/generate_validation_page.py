@@ -792,7 +792,7 @@ def render_page(data: dict[str, Any]) -> str:
     w(
         "Each benchmark puts a world with a known answer in front of the "
         "backends. The references do not use a groundfield solver: closed forms "
-        "(hemisphere, uniformly loaded ring with elliptic integrals, uniform line "
+        "(Weber's disc, uniformly loaded ring with elliptic integrals, uniform line "
         "currents), an independent analytic Galerkin solver for the thin-wire rod, "
         "the Tagg/Sunde series summed to $|K|^m < 10^{-17}$, `mpmath` quadrature "
         "of the three-layer kernel, and Pollaczek's line impedance. Where a "
@@ -876,8 +876,9 @@ def render_page(data: dict[str, Any]) -> str:
         "`mom` on the same discretisation is the reference: `mom_sommerfeld` "
         "integrates the same layered Green's function numerically (a kernel "
         "check), `image_2layer` replaces the computed current distribution by a "
-        "uniform one (an ansatz check), `fem` solves an equivalent hemisphere "
-        "(experimental)."
+        "uniform one (an ansatz check), `fem` solves the electrodes as solid "
+        "bodies in a volume mesh (an independent method; the difference is the "
+        "deficit of the point kernel of `mom`)."
     )
     w("")
     w("![Deviation from mom per two-layer case](validation/two_layer_top_layer.svg)")

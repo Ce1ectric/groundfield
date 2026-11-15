@@ -349,14 +349,35 @@ def test_subnetwork_without_soil_contact_is_rejected(kind: str) -> None:
 
 
 def test_backends_without_junction_support_reject_the_world() -> None:
-    from groundfield.solver.registry import BackendCapabilityError
+    """Every built-in backend supports junctions since fem runs the network
+    of the shared pipeline (user decision Q37); a registered backend
+    without the capability rejects the world."""
+    from groundfield.solver.registry import (
+        BackendCapabilities,
+        BackendCapabilityError,
+        register_backend,
+        unregister_backend,
+    )
 
     w = _rod_world()
     _create_junction(w, name="J", position=(0.0, 0.0, -0.2))
     _lead(w, "lead", "J", "g1")
     gf.create_source(w, attached_to="J", magnitude=1.0)
-    with pytest.raises(BackendCapabilityError, match=r"(?s)junction.*'image'"):
-        w.solve(gf.create_engine(backend="fem", segment_length=SEG))
+    register_backend(
+        "toy_no_junctions",
+        "groundfield.solver.image:solve_image",
+        capabilities=BackendCapabilities(soils={"homogeneous"}),
+    )
+    try:
+        with pytest.raises(BackendCapabilityError, match=r"(?s)junction.*'image'"):
+            w.solve(gf.create_engine(backend="toy_no_junctions", segment_length=SEG))
+    finally:
+        unregister_backend("toy_no_junctions")
+    res = w.solve(gf.create_engine(backend="fem", segment_length=SEG))
+    drop = (
+        res.metadata["junction_potentials"]["J"][0] - res.electrode_potentials["g1"][0]
+    )
+    assert abs(drop - 0.5) < 1e-12  # 1 A through the 0.5 Ohm lead
 
 
 def test_input_impedance_of_a_source_on_a_junction() -> None:

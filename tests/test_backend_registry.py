@@ -113,20 +113,25 @@ def test_builtin_backends_are_registered_with_their_capabilities() -> None:
         "fem",
     }
     # Concrete-shell correction (ADR-0012): the image family and, since the
-    # release scope of 2026-11-14, the point-matching family.
+    # release scope of 2026-11-14, the point-matching family; fem resolves
+    # the shell since its conforming model (user decision Q37).
     assert {n for n, c in caps.items() if c.concrete_shells} == {
         "image",
         "image_2layer",
         "image_nlayer",
         "mom",
         "mom_sommerfeld",
+        "fem",
     }
-    # fem reduces every conductor to a lumped branch without inductance and
-    # skin effect (audit round 2, A2C-4: the skin model is a feature too).
-    assert caps["fem"].conductors == frozenset({"lumped"})
-    assert caps["mom"].conductors == frozenset(
-        {"lumped", "distributed", "inductive", "skin"}
-    )
+    # Every built-in backend honours every conductor model since fem runs
+    # the network of the shared pipeline (user decision Q37; up to then it
+    # reduced every conductor to a lumped branch, audit round 2, A2C-4).
+    for name in ("mom", "fem"):
+        assert caps[name].conductors == frozenset(
+            {"lumped", "distributed", "inductive", "skin"}
+        )
+    for flag in ("junctions", "two_terminal_sources", "voltage_sources"):
+        assert getattr(caps["fem"], flag), flag
     # fem has no source kernel; every other backend uses one.
     assert caps["fem"].kernels == frozenset()
     assert "point" in caps["mom"].kernels
@@ -247,7 +252,12 @@ def test_capability_check_runs_before_the_backend() -> None:
 
 @pytest.mark.finding("10.74")
 def test_concrete_shell_capability_error_names_the_image_family() -> None:
-    from groundfield.solver.registry import BackendCapabilityError
+    from groundfield.solver.registry import (
+        BackendCapabilities,
+        BackendCapabilityError,
+        register_backend,
+        unregister_backend,
+    )
 
     w = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
     gf.create_electrode(
@@ -259,16 +269,25 @@ def test_concrete_shell_capability_error_names_the_image_family() -> None:
         concrete_shell_coefficient_ohm_m=100.0,
     )
     gf.create_source(w, attached_to="f1")
-    # 'mom' solves concrete shells since the release scope of 2026-11-14;
-    # 'fem' is the backend left without the correction.
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        with pytest.raises(BackendCapabilityError) as excinfo:
-            gf.Engine(backend="fem", segment_length=SEG).solve(w)
+    # Every built-in backend solves concrete shells since fem resolves them
+    # (user decision Q37); a registered backend without the correction is
+    # refused, naming those that solve the world.
+    register_backend(
+        "toy_no_shell",
+        _toy_result,
+        capabilities=BackendCapabilities(soils={"homogeneous"}),
+    )
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            with pytest.raises(BackendCapabilityError) as excinfo:
+                gf.Engine(backend="toy_no_shell", segment_length=SEG).solve(w)
+    finally:
+        unregister_backend("toy_no_shell")
     msg = str(excinfo.value)
     assert "concrete-shell" in msg
     assert "'image'" in msg
-    assert "'mom'" in msg and "'mom_sommerfeld'" in msg
+    assert "'mom'" in msg and "'mom_sommerfeld'" in msg and "'fem'" in msg
 
 
 @pytest.mark.finding("10.74")
@@ -336,8 +355,16 @@ def test_two_terminal_source_warns_when_the_backend_ignores_return_to() -> None:
 
 
 @pytest.mark.finding("10.74")
-def test_fem_warns_when_it_reduces_a_distributed_conductor() -> None:
-    from groundfield.solver.registry import BackendCapabilityWarning
+def test_a_backend_that_reduces_a_distributed_conductor_warns() -> None:
+    """No built-in backend reduces conductor models since fem runs the
+    network of the shared pipeline (user decision Q37); a registered one
+    that solves only lumped conductors warns."""
+    from groundfield.solver.registry import (
+        BackendCapabilities,
+        BackendCapabilityWarning,
+        register_backend,
+        unregister_backend,
+    )
 
     w = _rod_world()
     gf.create_electrode(w, "rod", name="g2", position=(5.0, 0.0, 0.5), length=2.0)
@@ -349,8 +376,16 @@ def test_fem_warns_when_it_reduces_a_distributed_conductor() -> None:
         cross_section=50e-6,
         discretize_segment_length=1.0,
     )
-    with pytest.warns(BackendCapabilityWarning, match="distributed"):
-        gf.Engine(backend="fem", segment_length=SEG).solve(w)
+    register_backend(
+        "toy_lumped",
+        _toy_result,
+        capabilities=BackendCapabilities(soils={"homogeneous"}, conductors={"lumped"}),
+    )
+    try:
+        with pytest.warns(BackendCapabilityWarning, match="distributed"):
+            gf.Engine(backend="toy_lumped", segment_length=SEG).solve(w)
+    finally:
+        unregister_backend("toy_lumped")
 
 
 # ---------------------------------------------------------------------
@@ -459,11 +494,12 @@ def test_every_backend_reports_the_metadata_core(backend: str) -> None:
     assert md["soil_kind"] == "two_layer"
     assert md["earth_inductive_model"] == "sommerfeld"
     assert isinstance(md["n_segments"], int)
-    assert md["n_segments"] == (0 if backend == "fem" else 4)
-    # The image family runs the line kernel by default since 10.28.
+    assert md["n_segments"] == 4  # fem: the segments of its point sources
+    # The image family runs the line kernel by default since 10.28; fem's
+    # point sources take the default kernel too (user decision Q37).
     image_family = backend in ("image", "image_2layer", "image_nlayer", "cim")
-    expected = "line" if image_family else "point"
-    assert md["kernel"] == (None if backend == "fem" else expected)
+    expected = "line" if image_family or backend == "fem" else "point"
+    assert md["kernel"] == expected
     assert isinstance(md["solve_time_s"], float) and md["solve_time_s"] >= 0.0
     assert md["series"] == {"max_terms": 300, "tol": 1e-6}
 
@@ -575,9 +611,14 @@ def _skin_pen_world() -> "gf.World":
 
 
 @pytest.mark.finding("10.37")
-@pytest.mark.parametrize("backend", ["fem", "image", "mom"])
+@pytest.mark.parametrize("backend", ["image", "mom"])
 def test_a_backend_that_ignores_the_skin_model_says_so(backend: str) -> None:
-    """fem returned the DC value at 1 kHz without a word (image/mom: +54.9 %)."""
+    """fem returned the DC value at 1 kHz without a word (image/mom: +54.9 %).
+
+    Since its conforming model fem runs the network of the shared pipeline
+    and honours the skin model like image and mom (user decision Q37,
+    ``tests/test_fem.py``); no built-in backend ignores it any more.
+    """
     # audit A2C-4
     import warnings
 
@@ -601,7 +642,7 @@ def test_a_backend_that_ignores_the_skin_model_says_so(backend: str) -> None:
     honoured = abs(u_1k) > 1.1 * abs(u_dc)
     reported = any("skin" in t for t in texts)
     assert honoured != reported, (backend, abs(u_dc), abs(u_1k), texts)
-    assert reported is (backend == "fem")
+    assert not reported
 
 
 @pytest.mark.finding("10.37")

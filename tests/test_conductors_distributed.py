@@ -385,20 +385,14 @@ def test_galvanic_distributed_cross_engine(backend: str) -> None:
     assert rel < 0.05, f"{backend}: I_g1_ref={I1_ref:.4f}, I_g1={I1:.4f}, rel={rel:.3f}"
 
 
-def test_galvanic_distributed_fem_warns_lumped_fallback(caplog) -> None:
-    """The FEM backend cannot consume distributed conductors and
-    should fall back to a lumped branch with a warning."""
-    import logging
+def test_galvanic_distributed_fem_refuses_the_world() -> None:
+    """Up to 2026.11 fem fell back to a lumped branch with a warning; its
+    conforming axisymmetric model refuses a conductor that leaks along its
+    route (user decision Q37) and names the backends that solve it."""
+    from groundfield.solver.registry import BackendCapabilityError
 
-    caplog.set_level(logging.WARNING, logger="groundfield.solver.fem")
-    res = _solve(_galvanic_world(n_seg=4), "fem")
-    assert any("distributed conductors" in m for m in caplog.messages), caplog.messages
-    # Sum of currents still conserved (FEM treats the conductor as
-    # a single lumped branch — both end electrodes carry the full
-    # source current between them).
-    I1 = res.electrode_currents["g1"][0].real
-    I2 = res.electrode_currents["g2"][0].real
-    assert (I1 + I2) == pytest.approx(1.0, rel=1e-9)
+    with pytest.raises(BackendCapabilityError, match="'image'"):
+        _solve(_galvanic_world(n_seg=4), "fem")
 
 
 # ---------------------------------------------------------------------

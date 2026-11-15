@@ -143,7 +143,7 @@ def test_model_copy_rejects_an_unknown_field_with_a_suggestion() -> None:
         {"kernel": "lin"},
         {"backend": "imagee"},
         {"earth_inductive_model": "carson"},
-        {"options": {"fem": {"n_radail": 61}}},
+        {"options": {"fem": {"extrapolat": False}}},
         {"options": {"fem": 3}},
     ],
     ids=[
@@ -167,10 +167,10 @@ def test_model_copy_validates_the_update(update) -> None:
 @pytest.mark.finding("A1-02", "A1-04")
 def test_model_copy_validates_option_mappings_into_models() -> None:
     copy = gf.Engine(backend="fem").model_copy(
-        update={"options": {"fem": {"n_radial": 61}}}
+        update={"options": {"fem": {"extrapolate": False}}}
     )
     assert isinstance(copy.options["fem"], FemOptions)
-    assert _solve(copy).metadata["n_radial"] == 61
+    assert _solve(copy).metadata["fem_extrapolated"] is False
 
 
 def test_model_copy_repeats_no_warning_of_an_unchanged_field() -> None:
@@ -183,7 +183,7 @@ def test_model_copy_repeats_no_warning_of_an_unchanged_field() -> None:
 
 
 def test_model_copy_warns_about_what_the_update_introduces() -> None:
-    engine = gf.Engine(backend="fem", options={"fem": {"n_radial": 61}})
+    engine = gf.Engine(backend="fem", options={"fem": {"extrapolate": False}})
     with pytest.warns(BackendOptionsWarning, match="fem"):
         engine.model_copy(update={"backend": "image"})
 
@@ -207,36 +207,36 @@ def test_model_copy_keeps_pydantic_copy_semantics() -> None:
 @pytest.mark.finding("A1-04")
 def test_assigned_options_are_validated() -> None:
     engine = gf.Engine(backend="fem")
-    engine.options = {"fem": {"n_radial": 61}}
+    engine.options = {"fem": {"extrapolate": False}}
     assert isinstance(engine.options["fem"], FemOptions)
-    assert _solve(engine).metadata["n_radial"] == 61
+    assert _solve(engine).metadata["fem_extrapolated"] is False
 
 
 @pytest.mark.finding("A1-04")
 def test_an_assigned_misspelled_option_is_named() -> None:
     engine = gf.Engine(backend="fem")
-    with pytest.raises(ValueError, match="did you mean 'n_radial'"):
-        engine.options = {"fem": {"n_radail": 61}}
+    with pytest.raises(ValueError, match="did you mean 'extrapolate'"):
+        engine.options = {"fem": {"extrapolat": False}}
 
 
 @pytest.mark.finding("A1-04")
 def test_options_mutated_in_place_are_validated_when_read() -> None:
     engine = gf.Engine(backend="fem")
-    engine.options["fem"] = {"n_radial": 61}  # bypasses assignment validation
-    assert engine.backend_options().n_radial == 61
-    assert _solve(engine).metadata["n_radial"] == 61
+    engine.options["fem"] = {"extrapolate": False}  # bypasses assignment validation
+    assert engine.backend_options().extrapolate is False
+    assert _solve(engine).metadata["fem_extrapolated"] is False
 
-    engine.options["fem"] = {"n_radail": 61}
-    with pytest.raises(ValueError, match="did you mean 'n_radial'"):
+    engine.options["fem"] = {"extrapolat": False}
+    with pytest.raises(ValueError, match="did you mean 'extrapolate'"):
         engine.backend_options()
-    with pytest.raises(ValueError, match="n_radial"):
+    with pytest.raises(ValueError, match="extrapolat"):
         _solve(engine)
 
 
 @pytest.mark.finding("A1-04")
 def test_options_mutated_for_an_unknown_backend_raise_at_solve() -> None:
     engine = gf.Engine(backend="fem")
-    engine.options["femm"] = {"n_radial": 61}
+    engine.options["femm"] = {"extrapolate": False}
     with pytest.raises(ValueError, match="fem"):
         _solve(engine)
 
@@ -287,7 +287,7 @@ def test_every_field_is_validated_on_assignment(name, value) -> None:
 
 @pytest.mark.finding("A1-04")
 def test_an_assigned_backend_warns_about_options_it_ignores() -> None:
-    engine = gf.Engine(backend="fem", options={"fem": {"n_radial": 61}})
+    engine = gf.Engine(backend="fem", options={"fem": {"extrapolate": False}})
     with pytest.warns(BackendOptionsWarning, match="fem"):
         engine.backend = "image"
 

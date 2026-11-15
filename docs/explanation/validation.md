@@ -10,11 +10,11 @@ Suite result of that run: **69 passed, 7 skipped** (`pytest tests/benchmarks --r
 
 ## What is compared with what
 
-Each benchmark puts a world with a known answer in front of the backends. The references do not use a groundfield solver: closed forms (hemisphere, uniformly loaded ring with elliptic integrals, uniform line currents), an independent analytic Galerkin solver for the thin-wire rod, the Tagg/Sunde series summed to $|K|^m < 10^{-17}$, `mpmath` quadrature of the three-layer kernel, and Pollaczek's line impedance. Where a benchmark compares two backends on the same discretisation (B6, B7, B10, B13), it checks the current model of one against the other, not the accuracy of either; the bound states which.
+Each benchmark puts a world with a known answer in front of the backends. The references do not use a groundfield solver: closed forms (Weber's disc, uniformly loaded ring with elliptic integrals, uniform line currents), an independent analytic Galerkin solver for the thin-wire rod, the Tagg/Sunde series summed to $|K|^m < 10^{-17}$, `mpmath` quadrature of the three-layer kernel, and Pollaczek's line impedance. Where a benchmark compares two backends on the same discretisation (B6, B7, B10, B13), it checks the current model of one against the other, not the accuracy of either; the bound states which.
 
 | ID | Benchmark | Case | Reference |
 |---|---|---|---|
-| B1 | Hemisphere | hemisphere a = 1 m at the surface, homogeneous 100 Ω·m | ρ/(2πa) = 15.9155 Ω, analytic |
+| B1 | Surface disc | disc b = 1 m on the surface (a coin 10 µm thick), homogeneous 100 Ω·m | ρ/(4b) = 25 Ω, Weber's disc, analytic |
 | B2 | Rod, homogeneous soil | rod L = 3 m, a = 8 mm, top at the surface, 100 Ω·m, ds ∈ {0.5, 0.25, 0.125} m | thin-wire limit 33.1957 Ω (independent analytic Galerkin solver, Richardson on 96/192 segments; reduced-kernel end effect leaves ~0.2 % uncertainty); Sunde 33.4927 Ω for orientation |
 | B3 | Ring, homogeneous soil | ring r = 2 m, a = 8 mm, z = 0.8 m, 100 Ω·m, ds ∈ {0.5, 0.25, 0.125} m | uniformly loaded thin ring + air image, closed form with complete elliptic integrals: 12.4816 Ω (exact for the thin-wire model by symmetry; Dwight 12.5429 Ω) |
 | B4 | Two-layer Sommerfeld kernel | 1050 points: h_1 ∈ {0.05 … 30} m, ρ₂/ρ₁ ∈ {1/2000 … 2000}, s ∈ {0 … 5000} m, five depth pairs | exact Tagg/Sunde image series until \|K\|^m < 1e-17 |
@@ -89,15 +89,15 @@ The cross-checks between backends run the image family with `kernel="point"`, th
 
 | Benchmark | Measure | Bound | Worst measured | Cases | Status | Note |
 |---|---|---|---|---|---|---|
-| B1 Hemisphere | abs(Z/Z_ref - 1) | 0.5 % | 0.16 % | 1 | pass | observed order of convergence 1.99; discretisation of the conforming shell mesh alone |
-| B2 Rod, homogeneous soil | abs(Z/Z_ref - 1) | 1 % | 0.70 % | 3 | pass | equals Dwight's rod formula |
-| B3 Ring, homogeneous soil | abs(Z/Z_ref - 1) | 1 % | 0.34 % | 3 | pass | equals Dwight's ring formula |
-| B6 Top-layer electrodes, two-layer soil | abs(Z/Z_ref - 1) | 5 % | 4.3 % | 10 | pass | experimental; equivalent hemisphere in layered soil (10.23) |
-| B7 Rod through the layer interface | abs(Z/Z_ref - 1) | excluded | — | — | excluded | raises BackendCapabilityError (v0.15.0: +1092 %, silent); excluded: the rod reaches a layer its equivalent hemisphere does not (10.23) |
-| B8 Two-port reciprocity | abs(Z_AB/Z_BA - 1) | excluded | — | — | excluded | Z_AB = Z_BA = 0; excluded: clusters solved without coupling (10.23) |
-| B9 Limits of the layered kernels (`equal_rho_fem`) | abs(Z/Z_ref - 1) | 0.1 % | 2.0e-4 | 3 | pass | declared stack; <= 1e-5 for interfaces below the hemisphere (10.49) |
-| B9 Limits of the layered kernels (`layer_limit_fem`) | abs(Z/Z_ref - 1) | 1 % | 0.20 % | 2 | pass | experimental; h₁ = 4 mm emits FemReductionWarning (structural interface rule, audit F01) |
-| B10 Ring with three bonded rods | abs(Z/Z_ref - 1) | excluded | — | — | excluded | -35 % / -45 %; excluded: radii summed (10.23) |
+| B1 Surface disc | abs(Z/Z_ref - 1) | 5e-4 | 3.1e-4 | 1 | pass | observed order of convergence 1.87; discretisation of the conforming tensor mesh alone (user decision Q37; up to 2026.11 the hemisphere of the equivalent-hemisphere mesh) |
+| B2 Rod, homogeneous soil | abs(Z/Z_ref - 1) | 0.1 % | 7.3e-5 | 3 | pass | solid rod with flat ends (user decision Q37); the thin-wire limit itself is uncertain at a few 1e-4 (33.185 Ω at 384 segments) |
+| B3 Ring, homogeneous soil | abs(Z/Z_ref - 1) | 5e-4 | 5.7e-5 | 3 | pass | solid torus (user decision Q37) |
+| B6 Top-layer electrodes, two-layer soil | abs(Z/Z_ref - 1) | 3 % | 1.3 % | 10 | pass | conforming model (user decision Q37): the deficit of mom's point kernel (10.28) |
+| B7 Rod through the layer interface | abs(Z/Z_ref - 1) | 3 % | 1.1 % | 2 | pass | conforming model (user decision Q37; up to 2026.11 it raised, v0.15.0: +1092 %, silent): the deficit of mom's point kernel |
+| B8 Two-port reciprocity | abs(Z_AB/Z_BA - 1) | excluded | — | — | excluded | refused; excluded: rod and ring on different axes, which the axisymmetric model refuses (user decision Q37); the port matrix of coaxial electrodes is symmetric to round-off |
+| B9 Limits of the layered kernels (`equal_rho_fem`) | abs(Z/Z_ref - 1) | 1e-12 | 0 | 3 | pass | the conforming model meshes the canonical stack (user decision Q37) |
+| B9 Limits of the layered kernels (`layer_limit_fem`) | abs(Z/Z_ref - 1) | 0.1 % | 5.0e-4 | 2 | pass | physical limit (user decision Q37) |
+| B10 Ring with three bonded rods | abs(Z/Z_ref - 1) | excluded | — | — | excluded | refused; excluded: rods off the ring's axis, which the axisymmetric model refuses (user decision Q37; up to 2026.11 -35 % / -45 %, radii summed) |
 
 ### Deprecated names `cim` and `bem`
 
@@ -138,7 +138,7 @@ Against the thin-wire solution of the same rod (33.1957 Ω, the B2 reference, wh
 
 ## Two-layer soil, electrodes in the top layer (B6)
 
-`mom` on the same discretisation is the reference: `mom_sommerfeld` integrates the same layered Green's function numerically (a kernel check), `image_2layer` replaces the computed current distribution by a uniform one (an ansatz check), `fem` solves an equivalent hemisphere (experimental).
+`mom` on the same discretisation is the reference: `mom_sommerfeld` integrates the same layered Green's function numerically (a kernel check), `image_2layer` replaces the computed current distribution by a uniform one (an ansatz check), `fem` solves the electrodes as solid bodies in a volume mesh (an independent method; the difference is the deficit of the point kernel of `mom`).
 
 ![Deviation from mom per two-layer case](validation/two_layer_top_layer.svg)
 
@@ -166,63 +166,65 @@ The safety helpers emit `UniformCurrentFieldWarning` when a result of the image 
 
     | Benchmark | Key | Case | Measured | Bound |
     |---|---|---|---|---|
-    | B1 | `fem` | 60x40 | 0.16 % | 0.5 % |
-    | B1 | `fem` | observed order | 1.99 | — |
+    | B1 | `fem` | levels 0/1 | 3.1e-4 | 5e-4 |
+    | B1 | `fem` | observed order | 1.87 | — |
     | B2 | `image` | ds=0.5 | 0.30 % | 1.5 % |
     | B2 | `image` | ds=0.25 | 0.63 % | 1.5 % |
     | B2 | `image` | ds=0.125 | 0.79 % | 1.5 % |
     | B2 | `mom` | ds=0.5 | 0.63 % | 2 % |
     | B2 | `mom` | ds=0.25 | 1.1 % | 2 % |
     | B2 | `mom` | ds=0.125 | 1.4 % | 2 % |
-    | B2 | `fem` | ds=0.5 | 0.70 % | 1 % |
-    | B2 | `fem` | ds=0.25 | 0.70 % | 1 % |
-    | B2 | `fem` | ds=0.125 | 0.70 % | 1 % |
+    | B2 | `fem` | ds=0.5 | 7.3e-5 | 0.1 % |
+    | B2 | `fem` | ds=0.25 | 7.3e-5 | 0.1 % |
+    | B2 | `fem` | ds=0.125 | 7.3e-5 | 0.1 % |
     | B3 | `image` | ds=0.5 | 1.2 % | 1.5 % |
     | B3 | `image` | ds=0.25 | 1.2 % | 1.5 % |
     | B3 | `image` | ds=0.125 | 1.2 % | 1.5 % |
     | B3 | `mom` | ds=0.5 | 1.2 % | 1.5 % |
     | B3 | `mom` | ds=0.25 | 1.2 % | 1.5 % |
     | B3 | `mom` | ds=0.125 | 1.2 % | 1.5 % |
-    | B3 | `fem` | ds=0.5 | 0.34 % | 1 % |
-    | B3 | `fem` | ds=0.25 | 0.34 % | 1 % |
-    | B3 | `fem` | ds=0.125 | 0.34 % | 1 % |
+    | B3 | `fem` | ds=0.5 | 5.7e-5 | 5e-4 |
+    | B3 | `fem` | ds=0.25 | 5.7e-5 | 5e-4 |
+    | B3 | `fem` | ds=0.125 | 5.7e-5 | 5e-4 |
     | B4 | `mom_sommerfeld` | max silent error | 2.0e-10 | 1e-9 |
     | B5 | `mom_sommerfeld` | duplicated stacks | 2.7e-13 | 1e-10 |
     | B5 | `mom_sommerfeld` | genuine three layers | 7.7e-16 | 1e-10 |
     | B6 | `image_2layer` | ring 1000/30/h=5 | 4.4e-16 | 1 % |
     | B6 | `mom_sommerfeld` | ring 1000/30/h=5 | 3.0e-11 | 1e-7 |
-    | B6 | `fem` | ring 1000/30/h=5 | 1.1 % | 5 % |
     | B6 | `image_2layer` | rod 1000/30/h=5 | 0.37 % | 1 % |
     | B6 | `mom_sommerfeld` | rod 1000/30/h=5 | 4.5e-12 | 1e-7 |
-    | B6 | `fem` | rod 1000/30/h=5 | 1.5 % | 5 % |
     | B6 | `image_2layer` | ring 1000/30/h=10 | 0 | 1 % |
     | B6 | `mom_sommerfeld` | ring 1000/30/h=10 | 1.4e-11 | 1e-7 |
-    | B6 | `fem` | ring 1000/30/h=10 | 1.5 % | 5 % |
     | B6 | `image_2layer` | rod 1000/30/h=10 | 0.36 % | 1 % |
     | B6 | `mom_sommerfeld` | rod 1000/30/h=10 | 2.2e-12 | 1e-7 |
-    | B6 | `fem` | rod 1000/30/h=10 | 1.4 % | 5 % |
     | B6 | `image_2layer` | ring 1000/30/h=30 | 6.7e-16 | 1 % |
     | B6 | `mom_sommerfeld` | ring 1000/30/h=30 | 4.4e-12 | 1e-7 |
-    | B6 | `fem` | ring 1000/30/h=30 | 1.5 % | 5 % |
     | B6 | `image_2layer` | rod 1000/30/h=30 | 0.36 % | 1 % |
     | B6 | `mom_sommerfeld` | rod 1000/30/h=30 | 7.4e-13 | 1e-7 |
-    | B6 | `fem` | rod 1000/30/h=30 | 1.4 % | 5 % |
     | B6 | `image_2layer` | ring 30/200/h=5 | 6.7e-16 | 1 % |
     | B6 | `mom_sommerfeld` | ring 30/200/h=5 | 2.6e-9 | 1e-7 |
-    | B6 | `fem` | ring 30/200/h=5 | 1.3 % | 5 % |
     | B6 | `image_2layer` | rod 30/200/h=5 | 0.33 % | 1 % |
     | B6 | `mom_sommerfeld` | rod 30/200/h=5 | 5.6e-10 | 1e-7 |
-    | B6 | `fem` | rod 30/200/h=5 | 1.1 % | 5 % |
     | B6 | `image_2layer` | ring 100/400/h=2 | 4.4e-16 | 1 % |
     | B6 | `mom_sommerfeld` | ring 100/400/h=2 | 1.2e-8 | 1e-7 |
-    | B6 | `fem` | ring 100/400/h=2 | 4.3 % | 5 % |
     | B6 | `image_2layer` | rod 100/400/h=2 | 0.25 % | 1 % |
     | B6 | `mom_sommerfeld` | rod 100/400/h=2 | 2.8e-9 | 1e-7 |
-    | B6 | `fem` | rod 100/400/h=2 | 0.20 % | 5 % |
+    | B6 | `fem` | ring 1000/30/h=5 | 1.3 % | 3 % |
+    | B6 | `fem` | rod 1000/30/h=5 | 0.63 % | 3 % |
+    | B6 | `fem` | ring 1000/30/h=10 | 1.2 % | 3 % |
+    | B6 | `fem` | rod 1000/30/h=10 | 0.62 % | 3 % |
+    | B6 | `fem` | ring 1000/30/h=30 | 1.2 % | 3 % |
+    | B6 | `fem` | rod 1000/30/h=30 | 0.61 % | 3 % |
+    | B6 | `fem` | ring 30/200/h=5 | 0.85 % | 3 % |
+    | B6 | `fem` | rod 30/200/h=5 | 0.57 % | 3 % |
+    | B6 | `fem` | ring 100/400/h=2 | 0.75 % | 3 % |
+    | B6 | `fem` | rod 100/400/h=2 | 0.59 % | 3 % |
     | B7 | `mom_sommerfeld` | 1000/30 | 4.4e-11 | 1e-7 |
     | B7 | `mom_sommerfeld` | 100/1000 | 1.4e-10 | 1e-7 |
     | B7 | `image_2layer` | 1000/30 | 0.38 % | 2 % |
     | B7 | `image_2layer` | 100/1000 | 2.2e-4 | 2 % |
+    | B7 | `fem` | 1000/30 | 0.35 % | 3 % |
+    | B7 | `fem` | 100/1000 | 1.1 % | 3 % |
     | B8 | `image` | homogeneous | 0 | 1e-10 |
     | B8 | `image_2layer` | top_layer | 2.2e-16 | 1e-7 |
     | B8 | `image_2layer` | cross_layer | 7.3e-9 | 1e-7 |
@@ -248,17 +250,17 @@ The safety helpers emit `UniformCurrentFieldWarning` when a result of the image 
     | B9 | `equal_rho_integral` | mom_sommerfeld TwoLayer(100,100,h=0.5) | 0 | 1e-10 |
     | B9 | `equal_rho_integral` | mom_sommerfeld TwoLayer(100,100,h=30) | 0 | 1e-10 |
     | B9 | `equal_rho_integral` | mom_sommerfeld MultiLayer([100]*3) | 0 | 1e-10 |
-    | B9 | `equal_rho_fem` | fem TwoLayer(100,100,h=0.5) | 2.0e-4 | 0.1 % |
-    | B9 | `equal_rho_fem` | fem TwoLayer(100,100,h=30) | 1.3e-6 | 0.1 % |
-    | B9 | `equal_rho_fem` | fem MultiLayer([100]*3) | 1.7e-5 | 0.1 % |
     | B9 | `layer_limit_integral` | image_2layer h1=0.004 | 5.1e-4 | 0.1 % |
     | B9 | `layer_limit_integral` | mom h1=0.004 | 5.1e-4 | 0.1 % |
     | B9 | `layer_limit_integral` | mom_sommerfeld h1=0.004 | 5.1e-4 | 0.1 % |
-    | B9 | `layer_limit_fem` | fem h1=0.004 | 0.20 % | 1 % |
     | B9 | `layer_limit_integral` | image_2layer h1=4000 | 2.0e-4 | 0.1 % |
     | B9 | `layer_limit_integral` | mom h1=4000 | 2.0e-4 | 0.1 % |
     | B9 | `layer_limit_integral` | mom_sommerfeld h1=4000 | 2.0e-4 | 0.1 % |
-    | B9 | `layer_limit_fem` | fem h1=4000 | 2.2e-4 | 1 % |
+    | B9 | `equal_rho_fem` | fem TwoLayer(100,100,h=0.5) | 0 | 1e-12 |
+    | B9 | `equal_rho_fem` | fem TwoLayer(100,100,h=30) | 0 | 1e-12 |
+    | B9 | `equal_rho_fem` | fem MultiLayer([100]*3) | 0 | 1e-12 |
+    | B9 | `layer_limit_fem` | fem h1=0.004 | 5.0e-4 | 0.1 % |
+    | B9 | `layer_limit_fem` | fem h1=4000 | 2.0e-4 | 0.1 % |
     | B10 | `image` | HomogeneousSoil | 1.4 % | 3 % |
     | B10 | `image` | TwoLayerSoil | 2.8 % | 3 % |
     | B11 | `image_2layer` | 5->2.5 | 0.54 % | 0.6 % |

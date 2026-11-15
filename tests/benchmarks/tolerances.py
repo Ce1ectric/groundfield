@@ -62,15 +62,16 @@ _REL = "abs(Z/Z_ref - 1)"
 
 BENCHMARKS: dict[str, Benchmark] = {
     "B1": Benchmark(
-        title="Hemisphere",
-        case="hemisphere a = 1 m at the surface, homogeneous 100 Ω·m",
-        reference="ρ/(2πa) = 15.9155 Ω, analytic",
+        title="Surface disc",
+        case="disc b = 1 m on the surface (a coin 10 µm thick), homogeneous 100 Ω·m",
+        reference="ρ/(4b) = 25 Ω, Weber's disc, analytic",
         bounds={
             "fem": Bound(
-                5e-3,
+                5e-4,
                 _REL,
-                "-0.16 % at 60 × 40; observed order 1.99",
-                "discretisation of the conforming shell mesh alone",
+                "-3.1e-4 at levels 0/1 extrapolated; observed order 1.87",
+                "discretisation of the conforming tensor mesh alone (user decision "
+                "Q37; up to 2026.11 the hemisphere of the equivalent-hemisphere mesh)",
             ),
         },
     ),
@@ -91,7 +92,13 @@ BENCHMARKS: dict[str, Benchmark] = {
                 "point-source near field drifts under refinement (10.31); "
                 "target 0.5 % with an exact near field",
             ),
-            "fem": Bound(1.0e-2, _REL, "+0.70 %", "equals Dwight's rod formula"),
+            "fem": Bound(
+                1e-3,
+                _REL,
+                "-7.3e-5",
+                "solid rod with flat ends (user decision Q37); the thin-wire limit "
+                "itself is uncertain at a few 1e-4 (33.185 Ω at 384 segments)",
+            ),
         },
     ),
     "B3": Benchmark(
@@ -105,7 +112,7 @@ BENCHMARKS: dict[str, Benchmark] = {
         bounds={
             "image": Bound(1.5e-2, _REL, "-1.18 %", "point kernel (10.28)"),
             "mom": Bound(1.5e-2, _REL, "-1.18 %", "uniform current by symmetry"),
-            "fem": Bound(1.0e-2, _REL, "+0.34 %", "equals Dwight's ring formula"),
+            "fem": Bound(5e-4, _REL, "-5.7e-5", "solid torus (user decision Q37)"),
         },
     ),
     "B4": Benchmark(
@@ -153,10 +160,11 @@ BENCHMARKS: dict[str, Benchmark] = {
             ),
             "mom_sommerfeld": Bound(1e-7, _REL, "<= 1.2e-8", "kernel check"),
             "fem": Bound(
-                5e-2,
+                3e-2,
                 _REL,
-                "+0.20 … +4.3 %",
-                "experimental; equivalent hemisphere in layered soil (10.23)",
+                "+0.57 … +1.34 %",
+                "conforming model (user decision Q37): the deficit of mom's point "
+                "kernel (10.28)",
             ),
         },
     ),
@@ -174,11 +182,11 @@ BENCHMARKS: dict[str, Benchmark] = {
                 xfail="10.15",
             ),
             "fem": Bound(
-                None,
+                3e-2,
                 _REL,
-                "raises BackendCapabilityError (v0.15.0: +1092 %, silent)",
-                "excluded: the rod reaches a layer its equivalent hemisphere "
-                "does not (10.23)",
+                "+0.35 / +1.12 %",
+                "conforming model (user decision Q37; up to 2026.11 it raised, "
+                "v0.15.0: +1092 %, silent): the deficit of mom's point kernel",
             ),
         },
     ),
@@ -202,8 +210,10 @@ BENCHMARKS: dict[str, Benchmark] = {
             "fem": Bound(
                 None,
                 "abs(Z_AB/Z_BA - 1)",
-                "Z_AB = Z_BA = 0",
-                "excluded: clusters solved without coupling (10.23)",
+                "refused",
+                "excluded: rod and ring on different axes, which the axisymmetric "
+                "model refuses (user decision Q37); the port matrix of coaxial "
+                "electrodes is symmetric to round-off",
             ),
         },
     ),
@@ -223,20 +233,19 @@ BENCHMARKS: dict[str, Benchmark] = {
                 "image_2layer, mom, mom_sommerfeld, cim, bem",
             ),
             "equal_rho_fem": Bound(
-                1e-3,
+                1e-12,
                 _REL,
-                "2.0e-4 (h = 0.5 m cuts the hemisphere's near field)",
-                "declared stack; <= 1e-5 for interfaces below the hemisphere (10.49)",
+                "0 (canonical stack, 10.48)",
+                "the conforming model meshes the canonical stack (user decision Q37)",
             ),
             "layer_limit_integral": Bound(
                 1e-3, _REL, "5.1e-4 (4 mm) / 2.0e-4 (4 km)", "physical limit"
             ),
             "layer_limit_fem": Bound(
-                1e-2,
+                1e-3,
                 _REL,
-                "2.1e-3 / 2.3e-4",
-                "experimental; h₁ = 4 mm emits FemReductionWarning (structural "
-                "interface rule, audit F01)",
+                "5.0e-4 / 2.0e-4",
+                "physical limit (user decision Q37)",
             ),
         },
     ),
@@ -251,7 +260,13 @@ BENCHMARKS: dict[str, Benchmark] = {
                 "+1.43 % / +2.83 %",
                 "uniform current per electrode (10.22); target 2 %",
             ),
-            "fem": Bound(None, _REL, "-35 % / -45 %", "excluded: radii summed (10.23)"),
+            "fem": Bound(
+                None,
+                _REL,
+                "refused",
+                "excluded: rods off the ring's axis, which the axisymmetric model "
+                "refuses (user decision Q37; up to 2026.11 -35 % / -45 %, radii summed)",
+            ),
         },
     ),
     "B11": Benchmark(
