@@ -350,3 +350,135 @@ def test_a_wire_in_a_thin_layer_is_counted_once_and_listed_per_interface() -> No
     assert len(rec) == 1 and str(rec[0].message).startswith("1 horizontal wire ")
     found = diagnostics.diagnose(w).by_category("interface_contact")
     assert [d.data["interface_m"] for d in found] == [1.0, 1.012]
+
+
+def _stop_the_3d_model(monkeypatch):
+    """Replace the 3-D model by a stub that stops the solve after the dispatch."""
+    pytest.importorskip("skfem")
+    pytest.importorskip("pyamg")
+    from groundfield.solver.fem import _solid
+
+    class _Stop(Exception):
+        pass
+
+    def stop(*args, **kwargs):
+        raise _Stop
+
+    monkeypatch.setattr(_solid, "solid_earth", stop)
+    return _Stop
+
+
+def _rods_with_a_tip_on_the_interface() -> gf.World:
+    """Auditor W4R2A's world: two bonded rods side by side (not coaxial), the
+    tip of one on h_1 = 2 m of 1000 / 30 Ohm m."""
+    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=2.0))
+    gf.create_electrode(
+        w, "rod", name="r1", position=(0, 0, 0.5), length=1.5, wire_radius=0.008
+    )
+    gf.create_electrode(
+        w, "rod", name="r2", position=(3, 0, 0.5), length=1.0, wire_radius=0.008
+    )
+    gf.create_conductor(w, start="r1", end="r2")
+    gf.create_source(w, attached_to="r1", magnitude=1.0)
+    return w
+
+
+def test_w4r2a_03_the_3d_fem_warns_for_a_rod_end_at_an_interface(monkeypatch) -> None:
+    """The 3-D model is a thin wire without end faces too: a rod with its tip
+    on 1000 / 30 Ohm m read +43 % against the solid rod with an estimate of
+    6e-3 (auditor W4R2A, ``r09``), and its dispatch emitted only the
+    horizontal-wire warning; its comment said that its own guards refuse rod
+    ends near an interface, which they do not (vertical pieces are skipped).
+    The dispatch now warns as the integral backends do, once per solve."""
+    # audit W4R2A-03
+    stop = _stop_the_3d_model(monkeypatch)
+    w = _rods_with_a_tip_on_the_interface()
+    with warnings.catch_warnings(record=True) as rec:
+        warnings.simplefilter("always")
+        with pytest.raises(stop):
+            gf.create_engine(backend="fem", segment_length=0.25).solve(w)
+    hits = [
+        str(r.message) for r in rec if issubclass(r.category, InterfaceContactWarning)
+    ]
+    assert len(hits) == 1 and "rod end" in hits[0] and "'r1'" in hits[0], hits
+
+
+def test_a_rod_end_and_a_wire_warn_once_each_in_the_3d_model(monkeypatch) -> None:
+    """A rod end and a strip next to the interface: one warning each, as in
+    the integral backends."""
+    # audit W4R2A-03
+    stop = _stop_the_3d_model(monkeypatch)
+    w = _rods_with_a_tip_on_the_interface()
+    gf.create_electrode(
+        w, "strip", name="s", start=(0, 5, 1.99), end=(5, 5, 1.99), wire_radius=0.005
+    )
+    gf.create_conductor(w, start="r1", end="s")
+    with warnings.catch_warnings(record=True) as rec:
+        warnings.simplefilter("always")
+        with pytest.raises(stop):
+            gf.create_engine(backend="fem", segment_length=0.25).solve(w)
+    hits = [
+        str(r.message) for r in rec if issubclass(r.category, InterfaceContactWarning)
+    ]
+    assert len(hits) == 2, hits
+    assert sum("rod end" in h for h in hits) == 1
+    assert sum("horizontal wire" in h for h in hits) == 1
+
+
+def test_the_axisymmetric_fem_solves_a_rod_end_at_an_interface_without_a_warning() -> (
+    None
+):
+    """The axisymmetric model solves the rod with its flat end face, which
+    is the remedy of the rod-end rule; it warns for neither rule, and
+    ``diagnose()`` with an ``fem`` engine lists no rod end for a world it
+    takes (with the default engine it does)."""
+    # audit W4R2A-03, W4R2A-05
+    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=2.0))
+    gf.create_electrode(
+        w, "rod", name="tip", position=(0, 0, 0.5), length=1.5, wire_radius=0.008
+    )
+    gf.create_source(w, attached_to="tip", magnitude=1.0)
+    res, hits = _contact_warnings(w, "fem")
+    assert res.metadata["fem_model"] == "axisymmetric" and not hits
+    eng = gf.create_engine(backend="fem", segment_length=0.25)
+    assert not diagnostics.diagnose(w, eng).by_category("interface_contact")
+    found = diagnostics.diagnose(w, gf.Engine()).by_category("interface_contact")
+    assert [f.data["end"] for f in found] == ["tip"]
+
+
+def test_w4r2a_05_diagnose_agrees_with_an_axisymmetric_fem_solve() -> None:
+    """Auditor W4R2A's test: ``diagnose(world, engine)`` with an ``fem``
+    engine reported the ``interface_contact`` warning for a ring that the
+    axisymmetric model solves as a solid torus without a warning (the
+    solve's own remedy)."""
+    # audit W4R2A-05
+    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=2.01))
+    gf.create_electrode(
+        w, "ring", name="g1", center=(0, 0, 2.0), radius=2.0, wire_radius=0.005
+    )
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    eng = gf.create_engine(backend="fem", segment_length=0.25)
+    res, hits = _contact_warnings(w, "fem")
+    assert res.metadata["fem_model"] == "axisymmetric" and not hits
+    found = diagnostics.diagnose(w, eng).by_category("interface_contact")
+    assert not [f for f in found if f.severity == "warning"], [f.message for f in found]
+    # the integral engines and the forced 3-D model keep the finding
+    for other in (
+        gf.Engine(),
+        gf.create_engine(backend="mom", segment_length=0.25),
+        gf.create_engine(
+            backend="fem", segment_length=0.25, options={"fem": {"model": "3d"}}
+        ),
+    ):
+        found = diagnostics.diagnose(w, other).by_category("interface_contact")
+        assert [f.subjects for f in found] == [("g1",)], other.backend
+
+
+def test_diagnose_with_an_fem_engine_keeps_the_findings_of_a_3d_world() -> None:
+    """For a world that goes to the 3-D model, ``diagnose()`` with an ``fem``
+    engine keeps the rod end (the 3-D model warns for it too)."""
+    # audit W4R2A-03, W4R2A-05
+    w = _rods_with_a_tip_on_the_interface()
+    eng = gf.create_engine(backend="fem", segment_length=0.25)
+    found = diagnostics.diagnose(w, eng).by_category("interface_contact")
+    assert [(f.subjects, f.data["end"]) for f in found] == [(("r1",), "tip")]

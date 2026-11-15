@@ -311,10 +311,14 @@ def solve_fem(
         For a world that mixes local and projected coordinates (user
         decision D5), as every backend.
     InterfaceContactWarning
-        3-D model: for a horizontal wire within the reach of a contrasting
-        layer interface, where the smoothed line source shares the
-        thin-wire error of the integral engines (audits W4A-07, W4B-02).
-        The axisymmetric model resolves the wire and does not warn.
+        3-D model: for a rod end within one wire radius of a layer
+        interface (audit W4R2A-03: a rod tip on 1000/30 Ohm m read +43 %
+        against the solid rod, with an estimate of 6e-3) and for a
+        horizontal wire within the reach of a contrasting one (audits
+        W4A-07, W4B-02), where the smoothed line source shares the
+        thin-wire error of the integral engines; once per rule and solve,
+        as there. The axisymmetric model resolves rod end faces and ring
+        wires and does not warn.
     DeprecationWarning
         For ``n_radial``, ``n_axial`` or ``z_far_factor``.
 
@@ -433,13 +437,23 @@ def _solve(
     three_d = model == "3d" or (model == "auto" and not _is_axisymmetric(world, engine))
     topology = None
     if three_d:
-        from groundfield.solver._guards import _warn_wires_near_interfaces
+        from groundfield.solver._guards import (
+            _warn_rod_ends_near_interfaces,
+            _warn_wires_near_interfaces,
+        )
+        from groundfield.solver._layered import interface_depths
         from groundfield.solver.fem._solid import require_extra, solid_earth
 
         require_extra()
-        # The 3-D model's smoothed line sources share the thin-wire limit
-        # next to a contrasting interface (audits W4A-07, W4B-02); its own
-        # guards refuse rod ends near an interface.
+        # The 3-D model's smoothed line sources share both thin-wire limits
+        # next to a contrasting interface, as the integral backends do: a rod
+        # end without an end face (audit W4R2A-03: a rod tip on 1000/30 Ohm m
+        # read +43 % against the solid rod with an estimate of 6e-3) and a
+        # horizontal wire within the reach (audits W4A-07, W4B-02). Its own
+        # guards do not see rod ends (they skip vertical pieces).
+        _warn_rod_ends_near_interfaces(
+            world.electrodes, interface_depths(world.soil) or None
+        )
         _warn_wires_near_interfaces(world)
         disc, topo = port_topology(world)
         topology = (disc, topo)

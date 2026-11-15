@@ -1408,14 +1408,44 @@ def _overlap_findings(world: "World") -> list[Diagnostic]:
     return out
 
 
-def _interface_contact_findings(world: "World") -> list[Diagnostic]:
+def _solved_as_solid_bodies(world: "World", engine: "Engine | None") -> bool:
+    """Whether ``engine`` solves ``world`` with ``fem``'s axisymmetric model.
+
+    That model resolves rod end faces and ring wires as the solid bodies
+    they are, which is the remedy of both thin-wire limits next to an
+    interface, and its solve does not warn for them (audit W4R2A-05). Every
+    other engine, ``fem``'s 3-D model included, shares the limits.
+    """
+    if engine is None or not world.electrodes:
+        return False
+    from groundfield.solver import registry
+
+    try:
+        spec = registry.resolve_backend(engine.backend, world).spec
+    except ValueError:  # an unknown backend: the solve reports it
+        return False
+    if spec.name != "fem":
+        return False
+    model = getattr(engine.backend_options("fem"), "model", "auto")
+    if model == "3d":
+        return False
+    from groundfield.solver.fem import _is_axisymmetric
+
+    return _is_axisymmetric(world, engine)
+
+
+def _interface_contact_findings(
+    world: "World", engine: "Engine | None" = None
+) -> list[Diagnostic]:
     """Thin-wire limits next to a layer interface.
 
     Rod heads and tips within one wire radius of an interface (audit
     A3S-05; ``data["end"]`` is ``"head"`` or ``"tip"``) and horizontal
     wires within the reach of a contrasting interface (audits W4A-07,
     W4B-02; ``data["end"]`` is ``None``, ``data["reach_radii"]`` the reach of
-    :func:`groundfield.solver._guards.wire_contact_reach`).
+    :func:`groundfield.solver._guards.wire_contact_reach`). None for a world
+    that ``engine`` solves with ``fem``'s axisymmetric model
+    (:func:`_solved_as_solid_bodies`, audit W4R2A-05).
     """
     from groundfield.solver._guards import (
         _rod_ends_near_interfaces,
@@ -1469,6 +1499,8 @@ def _interface_contact_findings(world: "World") -> list[Diagnostic]:
                 },
             )
         )
+    if out and _solved_as_solid_bodies(world, engine):
+        return []
     return out
 
 
@@ -1670,7 +1702,12 @@ def diagnose(
         where the thin wire deviates from the solid wire by more than about
         1 % (3.5 wire radii over a layer 33 times more conductive; audits
         W4A-07, W4B-02); the segment backends and the 3-D ``fem`` warn with
-        :class:`~groundfield.solver.InterfaceContactWarning` too.
+        :class:`~groundfield.solver.InterfaceContactWarning` too. With an
+        ``fem`` engine there is no such finding for a world that its
+        axisymmetric model takes (``FemOptions.model`` ``"auto"`` or
+        ``"axisymmetric"``): that model resolves the rod end faces and the
+        ring wires as the solid bodies they are and its solve does not warn
+        (audit W4R2A-05).
     ``inert``
         Settings the solve ignores: conductors not attached at both ends,
         the deprecated concrete-shell registry, non-default boundary
@@ -1695,7 +1732,7 @@ def diagnose(
     if proximity and (engine is None or check_budget_ok(world, engine)):
         report.findings.extend(_proximity_findings(world, engine))
     report.findings.extend(_overlap_findings(world))
-    report.findings.extend(_interface_contact_findings(world))
+    report.findings.extend(_interface_contact_findings(world, engine))
     report.findings.extend(_inert_findings(world))
     if result is not None:
         report.findings.extend(_series_findings(result))
