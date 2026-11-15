@@ -291,6 +291,17 @@ W1B-05: a negative clearance put the cabinets inside the outer houses, 0 on a
 foundation wire, NaN failed late in the rod constructor)."""
 
 
+def _clearance_not_below_gap(prefix: str, clearance_m: float, max_gap_m: float) -> str:
+    """Message for ``end_clearance_m >= max_far_end_gap_m`` (audit W1R2-09)."""
+    return (
+        f"{prefix}CabinetConfig.end_clearance_m ({clearance_m:g} m) must be "
+        f"smaller than max_far_end_gap_m ({max_gap_m:g} m): a cabinet on the ray "
+        "through its group's centroid stands at least end_clearance_m from its "
+        "group, so every group would take the ray through its far-end building "
+        "(audit W1R2-09)."
+    )
+
+
 class SubstationConfig(GeneratorConfig):
     """Substation block — position + grounding system."""
 
@@ -348,8 +359,10 @@ class CabinetConfig(GeneratorConfig):
     end_clearance_m
         Smallest plan distance in m between the earth electrodes of a
         cabinet and those of any other site (building groups only),
-        positive and finite; a distribution is checked where it is drawn
-        (audit W1B-05).
+        positive, finite and smaller than ``max_far_end_gap_m`` — a cabinet
+        on the centroid ray stands at least this far from its group, so a
+        larger value sent every group to the far-end ray, silently (audit
+        W1R2-09); a distribution is checked where it is drawn (audit W1B-05).
     max_far_end_gap_m
         Largest plan distance in m (default 20, positive and finite) between
         a cabinet on the ray through its group's centroid and the nearest
@@ -393,9 +406,10 @@ class CabinetConfig(GeneratorConfig):
     end_clearance_m: Union[_PositiveDistance, AnyDistribution] = Field(
         default=1.0,
         description=(
-            "Distance in m (positive, finite) beyond the far end of its "
-            "building group at which a cabinet's earth electrodes stand "
-            "(placement=None only); a distribution is checked where it is drawn."
+            "Distance in m (positive, finite, smaller than max_far_end_gap_m) "
+            "beyond the far end of its building group at which a cabinet's "
+            "earth electrodes stand (placement=None only); a distribution is "
+            "checked where it is drawn."
         ),
     )
     max_far_end_gap_m: Union[_PositiveDistance, AnyDistribution] = Field(
@@ -417,6 +431,20 @@ class CabinetConfig(GeneratorConfig):
     @classmethod
     def _renamed_fields(cls, data: object) -> object:
         return rename_input_keys(data, cls._field_renames, "CabinetConfig")
+
+    @model_validator(mode="after")
+    def _clearance_below_far_end_gap(self) -> "CabinetConfig":
+        # audit W1R2-09: with end_clearance_m >= max_far_end_gap_m every
+        # group took the far-end ray, silently. Distributions are checked
+        # where they are drawn (TnNetworkGenerator._group_cabinets).
+        clearance, max_gap = self.end_clearance_m, self.max_far_end_gap_m
+        if (
+            isinstance(clearance, float)
+            and isinstance(max_gap, float)
+            and clearance >= max_gap
+        ):
+            raise ValueError(_clearance_not_below_gap("", clearance, max_gap))
+        return self
 
     @property
     def quote_per_100_buildings(self) -> Union[float, Distribution]:
@@ -1567,7 +1595,9 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         Raises
         ------
         ValueError
-            If the drawn ``end_clearance_m`` is not positive and finite, or
+            If the drawn ``end_clearance_m`` or ``max_far_end_gap_m`` is not
+            positive and finite, if the drawn ``end_clearance_m`` is not
+            smaller than the drawn ``max_far_end_gap_m`` (audit W1R2-09), or
             if a cabinet's electrodes come closer than ``end_clearance_m``
             to those of another site (:func:`_check_cabinet_clearance`).
         """
@@ -1595,6 +1625,10 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
             raise ValueError(
                 "TnNetworkGenerator: CabinetConfig.max_far_end_gap_m must be a "
                 f"positive, finite distance in m; drew {max_gap!r}."
+            )
+        if clearance >= max_gap:
+            raise ValueError(
+                _clearance_not_below_gap("TnNetworkGenerator: ", clearance, max_gap)
             )
         groups = [[wired[i] for i in group] for group in index_groups]
         cabinets: list[PlannedSite] = []

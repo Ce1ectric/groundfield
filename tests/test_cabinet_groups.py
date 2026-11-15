@@ -782,6 +782,45 @@ def test_the_threshold_moves_two_groups_of_the_100_house_grid_either_way() -> No
     assert counts == [4, 2, 0]
 
 
+# audit W1R2-09; coordinator's decision on W1R2 (both fields new in 2026.11)
+@pytest.mark.parametrize(
+    "clearance, max_gap", [(20.0, 20.0), (21.0, 20.0), (5.0, 4.0), (1.0, 1.0)]
+)
+def test_an_end_clearance_not_below_the_far_end_gap_is_rejected(
+    clearance: float, max_gap: float
+) -> None:
+    """A cabinet on the centroid ray stands at least ``end_clearance_m`` from
+    its group, so with ``end_clearance_m >= max_far_end_gap_m`` every group
+    took the far-end ray, silently (base: 0 / 1 / 3 / 3 far-end groups of
+    the 50-house grid at 1 / 10 / 19 / 21 m)."""
+    with pytest.raises(ValueError, match=r"end_clearance_m.*max_far_end_gap_m"):
+        CabinetConfig(end_clearance_m=clearance, max_far_end_gap_m=max_gap)
+
+
+# audit W1R2-09; coordinator's decision on W1R2
+def test_a_drawn_end_clearance_not_below_the_far_end_gap_is_rejected() -> None:
+    """Distributions are checked where they are drawn; just below the
+    threshold the network builds."""
+    for cabinets in (
+        CabinetConfig(end_clearance_m=Discrete(values=[25.0])),
+        CabinetConfig(max_far_end_gap_m=Discrete(values=[0.5])),
+        CabinetConfig(
+            end_clearance_m=Discrete(values=[3.0]),
+            max_far_end_gap_m=Discrete(values=[3.0]),
+        ),
+    ):
+        cfg = TnNetworkConfig(cabinets=cabinets)
+        with pytest.raises(ValueError, match=r"end_clearance_m.*max_far_end_gap_m"):
+            TnNetworkGenerator(cfg, seed=0).plan()
+    plan = _plan(
+        building_counts={"residential": 50},
+        cabinets=CabinetConfig(end_clearance_m=Discrete(values=[19.0])),
+    )
+    assert [s.cabinet_rule for s in plan.sites if s.role == "cabinet"] == [
+        "far_end_ray"
+    ] * 3
+
+
 # audit W1B-02; user decisions Q22, Q35
 @pytest.mark.parametrize(
     "kw",
