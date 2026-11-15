@@ -38,23 +38,47 @@ of the whole wire, at any segment length. The reduced kernel
 Evaluation
 ----------
 Exact Galerkin integrals are needed only for pairs closer than
-:data:`NEAR_FACTOR` times the longer segment: parallel pairs have a
+:data:`SWITCH_FACTOR` times the longer segment: parallel pairs have a
 closed form, other pairs use a Gauss–Legendre rule on the observing
 segment, graded towards the point of closest approach, with the exact
 inner line potential. Farther pairs use the point kernel plus the
-leading (quadrupole) term of the segment average,
+leading (quadrupole) term of the segment average and the radius term of
+the reduced kernel,
 
 .. math::
-    \\frac{1}{R} + \\frac{L_i^2 (3c_i^2 - 1) + L_j^2 (3c_j^2 - 1)}
+    \\frac{1}{R} + \\frac{L_i^2 (3c_i^2 - 1) + L_j^2 (3c_j^2 - 1) - 12 a^2}
     {24 R^3},\\qquad c_k = \\frac{(P_i - P_j)\\cdot t_k}{R},
 
-whose remainder is of order :math:`(L/R)^4`. Field points (after the
-solve) see the exact line potential near a segment and the point
-kernel plus :math:`L_j^2 (3c_j^2 - 1)/(24R^3)` farther away. The
-Tagg/Sunde images of a two-layer soil (``n >= 1``) are at least
-:math:`2(h_1 - z)` away; they use the point form, with the exact
-Galerkin value for the rare image pairs closer than
-:data:`NEAR_FACTOR` segment lengths (wires close to the interface).
+whose remainder is of order :math:`(L/R)^4`; between :data:`NEAR_FACTOR`
+(6) and :data:`SWITCH_FACTOR` (7.5) segment lengths the exact and the far
+value are blended with a C¹ weight (user decision D2). Field points (after
+the solve) see the exact line potential near a segment and the point
+kernel plus :math:`L_j^2 (3c_j^2 - 1)/(24R^3)` farther away.
+
+Images
+------
+The soil-surface image is treated like a direct pair. The Tagg/Sunde
+images of a two-layer soil (``n >= 1``) and the images of the cross-layer
+correction (``image_2layer._LayeredImageFamilies``) are at least
+:math:`2(h_1 - z)` away from a segment. Near image pairs are Galerkin
+integrals in which the line potential of the image at a point of the
+observer uses the transverse distance :math:`\\max(\\rho_\\perp, a)` of the
+point from the image's axis (:func:`galerkin_pairs`, audit W3A-02): the
+mean value of a line potential over the wire's circumference, exact for a
+parallel image at any distance, and the reduced kernel for a collinear one
+(:math:`\\rho_\\perp = 0`, a rod against its own image); an image within the
+wire radius of its own segment (a wire within :math:`a/2` of the interface)
+blends into the reduced kernel of the direct pair it then nearly coincides
+with, so that a wire on the interface is continuous between the series and
+the cross-layer path (:func:`image_shift`). Far images carry
+the quadrupole term without the radius term (:func:`image_quadrupole_rows`,
+tapered off between 60 and 120 segment lengths of vertical distance,
+:data:`IMAGE_QUADRUPOLE_REACH`, and left out below
+:data:`IMAGE_QUADRUPOLE_TOL`), or stay point sources with
+``Engine.image_far_field = "point"``. The far-image work follows the pair
+(:class:`FarImages`: an image is evaluated on the pairs whose longer segment
+reaches it, audit W3A-01) and, in the reaction matrix, which is symmetric,
+on its upper half (:func:`add_symmetric`).
 """
 
 from __future__ import annotations
@@ -191,6 +215,7 @@ def line_potential_pairs(
     L: np.ndarray,
     a2: np.ndarray,
     transverse: bool = False,
+    blend: np.ndarray | float = 0.0,
 ) -> np.ndarray:
     """Reduced line potential ``(1/L) ∫_0^L dl / sqrt(|X - A - l t|² + a²)``.
 
@@ -211,10 +236,15 @@ def line_potential_pairs(
         Squared regularisation radius in m², shape broadcastable to
         ``(P,)``.
     transverse
-        Use ``ρ² = max(|X - A|² - s², a²)`` (the transverse distance of
-        ``X`` from the line, floored at ``a``) instead: the potential of an
-        image line averaged over the circumference of radius ``a`` around
-        ``X`` (audit W3A-02, see :func:`galerkin_pairs`).
+        Use ``ρ² = max(ρ_⊥², a²) + blend · min(ρ_⊥², a²)``, ``ρ_⊥`` the
+        transverse distance of ``X`` from the line, instead of
+        ``ρ_⊥² + a²``: the potential of an image line averaged over the
+        circumference of radius ``a`` around ``X`` (``blend = 0``) or the
+        reduced kernel (``blend = 1``; audit W3A-02, see
+        :func:`galerkin_pairs`).
+    blend
+        Weight of the reduced kernel with ``transverse``, broadcastable to
+        ``(P,)``.
 
     Returns
     -------
@@ -226,7 +256,11 @@ def line_potential_pairs(
     w2 = np.einsum("...k,...k->...", W, W)
     L = np.broadcast_to(L, s.shape)
     if transverse:
-        rho2 = np.maximum(np.maximum(w2 - s * s, 0.0), np.broadcast_to(a2, s.shape))
+        perp2 = np.maximum(w2 - s * s, 0.0)
+        a2b = np.broadcast_to(a2, s.shape)
+        rho2 = np.maximum(perp2, a2b) + np.broadcast_to(blend, s.shape) * np.minimum(
+            perp2, a2b
+        )
     else:
         rho2 = np.maximum(w2 - s * s, 0.0) + np.broadcast_to(a2, s.shape)
     u = L - s
@@ -361,7 +395,9 @@ _SHORT_NODES = 0.5 * (leggauss(6)[0] + 1.0)  # 6-point rule on [0, 1]
 _SHORT_WEIGHTS = 0.5 * leggauss(6)[1]
 
 
-def _parallel_pairs(Ai, ti, Li, Aj, tj, Lj, a2, transverse=False) -> np.ndarray:
+def _parallel_pairs(
+    Ai, ti, Li, Aj, tj, Lj, a2, transverse=False, blend=0.0
+) -> np.ndarray:
     """Galerkin integral of (anti-)parallel segment pairs.
 
     Closed form, except for pairs with a segment shorter than
@@ -376,7 +412,10 @@ def _parallel_pairs(Ai, ti, Li, Aj, tj, Lj, a2, transverse=False) -> np.ndarray:
     y1 = np.minimum(ya, yb)
     y2 = np.maximum(ya, yb)
     d_perp2 = np.maximum(np.einsum("pk,pk->p", w, w) - ya * ya, 0.0)
-    d = np.sqrt(np.maximum(d_perp2, a2) if transverse else d_perp2 + a2)
+    if transverse:
+        d = np.sqrt(np.maximum(d_perp2, a2) + blend * np.minimum(d_perp2, a2))
+    else:
+        d = np.sqrt(d_perp2 + a2)
     val = _g2(Li - y1, d) - _g2(-y1, d) - _g2(Li - y2, d) + _g2(-y2, d)
     val = val / (Li * Lj)
     short_i = Li < _SHORT_PARALLEL_RATIO * d
@@ -463,7 +502,7 @@ def _closest_parameter(Ai, di, Aj, dj) -> np.ndarray:
     return s
 
 
-def _skew_pairs(Ai, ti, Li, Aj, tj, Lj, a2, transverse=False) -> np.ndarray:
+def _skew_pairs(Ai, ti, Li, Aj, tj, Lj, a2, transverse=False, blend=None) -> np.ndarray:
     """Galerkin integral of non-parallel pairs by graded quadrature.
 
     The outer integral over segment ``i`` is split at the point of
@@ -492,6 +531,7 @@ def _skew_pairs(Ai, ti, Li, Aj, tj, Lj, a2, transverse=False) -> np.ndarray:
         xs, Lm = x_star[mask], Li[mask]
         A_i, t_i = Ai[mask], ti[mask]
         A_j, t_j, L_j, a2_j = Aj[mask], tj[mask], Lj[mask], a2[mask]
+        b_j = 0.0 if blend is None else blend[mask][:, None]
         part = np.zeros(xs.shape[0])
         for side, extent in ((-1.0, xs), (+1.0, Lm - xs)):
             # nodes x = x* + side·extent·u, u in [0, 1] (graded towards 0)
@@ -504,6 +544,7 @@ def _skew_pairs(Ai, ti, Li, Aj, tj, Lj, a2, transverse=False) -> np.ndarray:
                 L_j[:, None],
                 a2_j[:, None],
                 transverse,
+                b_j,
             )
             part += extent * (phi @ weights)
         total[mask] = part
@@ -521,6 +562,7 @@ def galerkin_pairs(
     j: np.ndarray,
     *,
     transverse: bool = False,
+    shift: np.ndarray | None = None,
 ) -> np.ndarray:
     """Galerkin integral ``K_ij`` of segment pairs in 1/m.
 
@@ -542,6 +584,16 @@ def galerkin_pairs(
         image (``ρ_⊥ = 0``, a rod against its own image) keeps the reduced
         kernel, which is exact there. Direct pairs and the soil-surface image
         keep the reduced kernel.
+    shift
+        With ``transverse``: per source of ``src`` the distance in m of the
+        image from its own segment, across the segment's axis. An image within
+        the wire radius of its segment (a wire within ``a/2`` of the
+        interface) nearly coincides with it and takes the reduced kernel of
+        the direct pair, blended with the weight
+        ``max(0, 1 - shift²/a²)``: with the transverse distance alone the
+        series path and the cross-layer path of the same wire on the
+        interface differed by ``(ρ_1 - ρ_2)`` times the difference of the
+        two kernels (0.14 % for a ring on a 1000/30 interface).
 
     Returns
     -------
@@ -564,6 +616,7 @@ def galerkin_pairs(
                     src,
                     j[k : k + _GALERKIN_CHUNK],
                     transverse=transverse,
+                    shift=shift,
                 )
                 for k in range(0, i.shape[0], _GALERKIN_CHUNK)
             ]
@@ -571,11 +624,22 @@ def galerkin_pairs(
     Ai, ti, Li = obs.start[i], obs.tangent[i], obs.length[i]
     Aj, tj, Lj = src.start[j], src.tangent[j], src.length[j]
     a2 = 0.5 * (obs.radius[i] ** 2 + src.radius[j] ** 2)
+    blend = np.zeros(i.shape[0])
+    if transverse and shift is not None:
+        blend = np.maximum(1.0 - shift[j] * shift[j] / a2, 0.0)
     out = np.empty(i.shape[0])
     par = np.abs(np.einsum("pk,pk->p", ti, tj)) > 1.0 - _PARALLEL_TOL
     if par.any():
         out[par] = _parallel_pairs(
-            Ai[par], ti[par], Li[par], Aj[par], tj[par], Lj[par], a2[par], transverse
+            Ai[par],
+            ti[par],
+            Li[par],
+            Aj[par],
+            tj[par],
+            Lj[par],
+            a2[par],
+            transverse,
+            blend[par],
         )
     skew = ~par
     if skew.any():
@@ -588,8 +652,21 @@ def galerkin_pairs(
             Lj[skew],
             a2[skew],
             transverse,
+            blend[skew],
         )
     return out
+
+
+def image_shift(segs: LineSegments, img: LineSegments) -> np.ndarray:
+    """Distance of each image segment from its own segment across its axis, in m.
+
+    ``img`` is :meth:`LineSegments.image` of ``segs``: the image is displaced
+    vertically by ``Δz``, of which ``|Δz| sqrt(1 - t_z²)`` is across the
+    segment's axis (zero for a vertical rod, whose image is collinear).
+    """
+    dz = img.mid[:, 2] - segs.mid[:, 2]
+    tz = segs.tangent[:, 2]
+    return np.abs(dz) * np.sqrt(np.maximum(1.0 - tz * tz, 0.0))
 
 
 # ---------------------------------------------------------------------
@@ -875,7 +952,9 @@ def _corrections(
     radius term (audit W3A-02, :func:`galerkin_pairs`).
     """
     if obs is not None:
-        exact = galerkin_pairs(obs, i, src, j, transverse=image)
+        # An image set ``src`` is the image of the observing segments.
+        shift = image_shift(obs, src) if image else None
+        exact = galerkin_pairs(obs, i, src, j, transverse=image, shift=shift)
     else:
         exact = line_potential_pairs(
             obs_mid[i],

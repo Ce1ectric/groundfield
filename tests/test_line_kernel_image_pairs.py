@@ -18,9 +18,16 @@ axis: the plain kernel for parallel images (``rho_perp >= a``) and the reduced
 kernel for collinear ones (``rho_perp = 0``: a rod against its own image, where
 every point of the surface circle is ``sqrt(r² + a²)`` from the source).
 ``ln max(rho, a)`` is the exact circle average of the 2-D line potential for
-any ``rho``, so one formula covers both. The far form of images carries no
-radius term. The soil surface image keeps the reduced kernel (see the module
-docstring of :mod:`groundfield.solver._line_kernel`).
+any ``rho``, so one formula covers both. An image within the wire radius of
+its own segment (a wire within ``a/2`` of the interface, whose surface crosses
+it) blends into the reduced kernel of the direct pair, with weight
+``max(0, 1 - shift²/a²)``: there the image nearly coincides with the wire,
+and with the transverse distance alone a ring on a 1000/30 interface differed
+by 0.14 % between the series and the cross-layer path
+(``tests/test_cross_layer_line_kernel.py::test_ring_resistance_is_continuous_through_a_deep_interface``).
+The far form of images carries no radius term. The soil surface image keeps
+the reduced kernel (see the module docstring of
+:mod:`groundfield.solver._line_kernel`).
 """
 
 from __future__ import annotations

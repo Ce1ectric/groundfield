@@ -93,6 +93,7 @@ from groundfield.solver._line_kernel import (
     far_image_rows,
     far_images,
     galerkin_pairs,
+    image_shift,
     image_taper,
     point_self_term,
     reaction_corrections,
@@ -296,8 +297,10 @@ def _two_layer_self_kernel_factory(
     handled by the analytical line-self correction (same as the
     homogeneous backend, but with $\\rho_1$ as prefactor). The
     image terms with $n \\ge 1$ are at least $2(h_1 - z)$ away
-    from the segments, so the point-source approximation is used for
-    them.
+    from the segments: point sources with the point kernel; with the line
+    kernel Galerkin integrals for near image pairs and the quadrupole far
+    form (or the point form, ``far_field="point"``) beyond, see
+    :mod:`groundfield.solver._line_kernel`.
 
     Parameters
     ----------
@@ -977,7 +980,14 @@ class _LayeredImageFamilies:
                     img = line.image(offset, sign)
                     dz = line.mid[:, 2] - img.mid[:, 2]
                     idx = np.arange(n)
-                    exact = galerkin_pairs(line, idx, img, idx, transverse=True)
+                    exact = galerkin_pairs(
+                        line,
+                        idx,
+                        img,
+                        idx,
+                        transverse=True,
+                        shift=image_shift(line, img),
+                    )
                     value = exact - 1.0 / np.sqrt(a * a + dz * dz)
                     out += (weight * coef_diag) * value
             return out
@@ -997,7 +1007,9 @@ class _LayeredImageFamilies:
                 idx = np.flatnonzero((line.length >= shortest) & (taper != 0.0))
                 if not idx.size:
                     continue
-                exact = galerkin_pairs(line, idx, img, idx, transverse=True)
+                exact = galerkin_pairs(
+                    line, idx, img, idx, transverse=True, shift=image_shift(line, img)
+                )
                 value = exact - 1.0 / np.sqrt(a[idx] * a[idx] + dz[idx] * dz[idx])
                 out[idx] += (weight * coef_diag[idx]) * (taper[idx] * value)
         return out
