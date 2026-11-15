@@ -214,8 +214,12 @@ class SommerfeldTailTruncationWarning(UserWarning):
 # pairs is ``n_seg**2`` and the oscillation-resolved lambda grid reaches
 # ~5e4 nodes, so the full matrix can exceed 100 GiB. The contraction is
 # blocked over the distance axis to keep the transient allocation below
-# this budget; row-blocking a matmul is bit-for-bit identical to the
-# single-shot form (see ``tests/test_layered_green_chunking.py``).
+# this budget. Row-blocking the matrix-vector product is bit-for-bit
+# identical to the single-shot form with OpenBLAS (``tests/
+# test_layered_green_chunking.py``); Accelerate (macOS arm64) may sum a row
+# in another order depending on the block (up to 2e-13 absolute measured,
+# stream w3xl ``item3_blas_row_independence.py``), so callers that must be
+# bit-identical evaluate a pair-by-pair group in one piece.
 _HANKEL_MATMUL_BUDGET_BYTES = 512 * 1024 * 1024
 
 # --- Oscillation resolution of the linear (large-lambda) region -------
@@ -346,9 +350,9 @@ def _hankel_contract(
     but never materialises the full ``(n_s, n_lambda)`` Bessel matrix:
     the distance axis is processed in row blocks sized so each transient
     ``J0`` block stays within :data:`_HANKEL_MATMUL_BUDGET_BYTES`. The
-    result is identical to the single-shot contraction (a matmul is a
-    row-independent reduction), so accuracy is unchanged; only peak
-    memory is bounded. ``s_values`` of any shape is accepted and the
+    result equals the single-shot contraction to round-off (bit for bit
+    with OpenBLAS; Accelerate may order the sums of a row by block), so
+    accuracy is unchanged; only peak memory is bounded. ``s_values`` of any shape is accepted and the
     original shape is preserved on return.
     """
     orig_shape = s_values.shape
