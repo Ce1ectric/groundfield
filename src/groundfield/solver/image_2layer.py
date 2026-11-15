@@ -88,9 +88,9 @@ from groundfield.solver._line_kernel import (
     LineSegments,
     SparseCorrection,
     _point_values,
+    far_image_rows,
     far_images,
     galerkin_pairs,
-    image_quadrupole_rows,
     image_taper,
     point_self_term,
     reaction_corrections,
@@ -815,7 +815,7 @@ class _LayeredImageFamilies:
         for (_, tab), far in zip(self.groups, self.far, strict=True):
             if not far:
                 continue
-            Q = image_quadrupole_rows(
+            Q = far_image_rows(
                 line.mid[sl],
                 line.tangent[sl],
                 line.length[sl],
@@ -845,10 +845,13 @@ class _LayeredImageFamilies:
         for images, tab in self.groups:
             for weight, offset, sign in images:
                 band = sorted((offset + sign * z_lo, offset + sign * z_hi))
-                if _depth_gap(z, band[0], band[1]) >= reach:
+                gap = _depth_gap(z, band[0], band[1])
+                if gap >= reach:
                     continue
                 img = line.image(offset, sign)
-                i, j, w, far = switch_pairs(line.mid, line.length, img.mid, img.length)
+                i, j, w, far = switch_pairs(
+                    line.mid, line.length, img.mid, img.length, gap
+                )
                 coef = tab[lay[i], lay[j]]
                 keep = (i != j) & (coef != 0.0)
                 if not keep.any():
@@ -883,17 +886,27 @@ class _LayeredImageFamilies:
         """
         line = self.line
         n = line.mid.shape[0]
-        idx = np.arange(n)
         a = line.radius
         out = np.zeros(n)
         for (_, tab), far in zip(self.groups, self.far, strict=True):
             coef_diag = tab[self.layer, self.layer]
-            for weight, offset, sign in far:
+            for (weight, offset, sign), shortest in zip(
+                far.images, far.shortest, strict=True
+            ):
                 img = line.image(offset, sign)
-                exact = galerkin_pairs(line, idx, img, idx)
                 dz = line.mid[:, 2] - img.mid[:, 2]
-                value = exact - 1.0 / np.sqrt(a * a + dz * dz)
-                out += (weight * coef_diag) * (image_taper(dz, line.length) * value)
+                taper = image_taper(dz, line.length)
+                # A segment's own image follows the rule of every pair: only
+                # segments that reach the image (audit W3A-01; before, every
+                # far image of a long segment gave every short one a Galerkin
+                # self image, and its diagonal changed when a long piece was
+                # added to the world) and are within its taper.
+                idx = np.flatnonzero((line.length >= shortest) & (taper != 0.0))
+                if not idx.size:
+                    continue
+                exact = galerkin_pairs(line, idx, img, idx)
+                value = exact - 1.0 / np.sqrt(a[idx] * a[idx] + dz[idx] * dz[idx])
+                out[idx] += (weight * coef_diag[idx]) * (taper[idx] * value)
         return out
 
 

@@ -59,13 +59,14 @@ Galerkin value for the rare image pairs closer than
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 from numpy.polynomial.legendre import leggauss
 
 __all__ = [
     "FAR_IMAGE_QUADRUPOLE",
+    "FarImages",
     "IMAGE_QUADRUPOLE_REACH",
     "IMAGE_QUADRUPOLE_TOL",
     "NEAR_FACTOR",
@@ -552,6 +553,7 @@ def near_pairs(
     src_mid: np.ndarray,
     src_len: np.ndarray,
     factor: float = NEAR_FACTOR,
+    gap: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Index pairs with ``|P_i - Q_j| < factor · max(L_i, L_j)``.
 
@@ -567,6 +569,11 @@ def near_pairs(
     50 m in a 16-house world turned a 0.8 s line solve into 29 s and
     1.7 GiB (audit round 1, A1-numerics F02). The pair set is the same,
     so the results are too.
+
+    ``gap`` is a lower bound of every pair distance in m (the depth gap of
+    the observers and an image band): only the segments whose radius
+    ``factor · L`` reaches it are queried (audit W3A-01; the pair set is
+    the same).
 
     Returns
     -------
@@ -594,17 +601,21 @@ def near_pairs(
         found_j.append(q if query_is_source else other)
 
     # Pairs near a source: the observers within factor · L_j of source j.
-    _collect(
-        cKDTree(obs_mid).query_ball_point(src_mid, r=factor * src_len * pad + 1e-12),
-        np.arange(n_src),
-        query_is_source=True,
-    )
+    r_src = factor * src_len * pad + 1e-12
+    reach = np.flatnonzero(r_src >= gap)
+    if reach.size:
+        _collect(
+            cKDTree(obs_mid).query_ball_point(src_mid[reach], r=r_src[reach]),
+            reach,
+            query_is_source=True,
+        )
     # Pairs near an observer segment: the sources within factor · L_i.
-    with_length = np.flatnonzero(obs_len > 0.0)
+    r_obs = factor * obs_len * pad + 1e-12
+    with_length = np.flatnonzero((obs_len > 0.0) & (r_obs >= gap))
     if with_length.size:
         _collect(
             cKDTree(src_mid).query_ball_point(
-                obs_mid[with_length], r=factor * obs_len[with_length] * pad + 1e-12
+                obs_mid[with_length], r=r_obs[with_length]
             ),
             with_length,
             query_is_source=False,
@@ -706,10 +717,12 @@ def switch_pairs(
     obs_len: np.ndarray,
     src_mid: np.ndarray,
     src_len: np.ndarray,
+    gap: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Pairs that need the exact value, with their blending weights.
 
-    Every pair with ``|P_i − Q_j| < SWITCH_FACTOR · max(L_i, L_j)``.
+    Every pair with ``|P_i − Q_j| < SWITCH_FACTOR · max(L_i, L_j)``; ``gap``
+    as in :func:`near_pairs`.
 
     Returns
     -------
@@ -718,7 +731,7 @@ def switch_pairs(
         value and ``far`` (the dense far form of :func:`quadrupole_block` /
         :func:`image_quadrupole_rows` is added for the pair).
     """
-    i, j = near_pairs(obs_mid, obs_len, src_mid, src_len, factor=SWITCH_FACTOR)
+    i, j = near_pairs(obs_mid, obs_len, src_mid, src_len, SWITCH_FACTOR, gap)
     d = obs_mid[i] - src_mid[j]
     r2 = (d[:, 0] * d[:, 0] + d[:, 1] * d[:, 1]) + d[:, 2] * d[:, 2]
     w, far = _switch(r2, NEAR_FACTOR * np.maximum(obs_len[i], src_len[j]))
@@ -819,31 +832,162 @@ def _corrections(
     return _blended(exact, point, w, far, q)
 
 
+@dataclass(frozen=True)
+class FarImages:
+    """The far images some pair needs, with the shortest pair that needs each.
+
+    Attributes
+    ----------
+    images
+        ``(weight, offset, sign)`` of the images, in the order of the series.
+    shortest
+        Per image the shortest longer segment of a pair, in m, for which the
+        image's far-field term can be nonzero: a pair with
+        ``max(L_i, L_j) < shortest[k]`` lies beyond the taper
+        (:data:`IMAGE_QUADRUPOLE_REACH`) or below the tolerance
+        (:data:`IMAGE_QUADRUPOLE_TOL`) of image ``k``, whatever its position
+        (its vertical distance to the image is at least the depth gap of the
+        observers and the image band). Audit W3A-01: up to it every image any
+        pair needed was evaluated on every pair, so eight 9.4 m pieces among
+        1920 segments of 0.5 m multiplied the far-image work by 5.6.
+    """
+
+    images: tuple[tuple[float, float, float], ...] = ()
+    shortest: np.ndarray = field(default_factory=lambda: np.zeros(0))
+
+    def __len__(self) -> int:
+        return len(self.images)
+
+    def __bool__(self) -> bool:
+        return bool(self.images)
+
+    def __iter__(self):
+        return iter(self.images)
+
+
+#: Relative margin of :attr:`FarImages.shortest`: a pair is evaluated when its
+#: longer segment is at least ``(1 - margin)`` times the bound, so the
+#: round-off of the taper and tolerance tests cannot drop a nonzero term.
+_SHORTEST_MARGIN = 1e-9
+
+
 def far_images(
     z_obs: np.ndarray, segs: LineSegments, images: list[tuple[float, float, float]]
-) -> list[tuple[float, float, float]]:
+) -> FarImages:
     """The images that carry the far-field quadrupole term for some pair.
 
-    An image whose depth band lies farther than the second value of
-    :data:`IMAGE_QUADRUPOLE_REACH` longest segment lengths from every
-    observer (depths ``z_obs``) is left out: its taper is zero for every
-    pair, so leaving it out changes no number and saves its cost.
+    For every image the depth gap ``g`` between the observers (depths
+    ``z_obs``) and the image band bounds the vertical distance of every pair
+    from below, so the image's term vanishes for a pair whose longer segment
+    ``L`` satisfies ``L <= g / 120`` (the end of the taper,
+    :data:`IMAGE_QUADRUPOLE_REACH`) or ``|w| (L² + 3 a_max²) / (6 g²) <``
+    :data:`IMAGE_QUADRUPOLE_TOL`. The smaller of the two lengths is
+    :attr:`FarImages.shortest`; an image that no segment reaches is left out
+    (its taper or tolerance is zero for every pair, so leaving it out changes
+    no number and saves its cost).
     """
     if not images or not z_obs.size or not segs.mid.shape[0]:
-        return []
+        return FarImages()
     z = segs.mid[:, 2]
     z_lo, z_hi = float(z.min()), float(z.max())
     l_max = float(segs.length.max())
-    reach = IMAGE_QUADRUPOLE_REACH[1] * l_max
+    hi = IMAGE_QUADRUPOLE_REACH[1]
+    reach = hi * l_max
     # The largest (L² + 3a²) of any pair: a field point has a = 0, a segment
     # pair a² = (a_i² + a_j²)/2 <= max a².
-    size = (l_max * l_max + 3.0 * float(segs.radius.max()) ** 2) / (6.0 * _qtol())
-    out = []
+    a2_max = float(segs.radius.max()) ** 2
+    size = (l_max * l_max + 3.0 * a2_max) / (6.0 * _qtol())
+    kept, shortest = [], []
     for weight, offset, sign in images:
         band = sorted((offset + sign * z_lo, offset + sign * z_hi))
         gap = _depth_gap(z_obs, band[0], band[1])
-        if gap < reach and abs(weight) * size >= gap * gap:
-            out.append((weight, offset, sign))
+        wa = abs(weight)
+        if not (gap < reach and wa * size >= gap * gap):
+            continue
+        by_tol = np.sqrt(max(6.0 * _qtol() * gap * gap / wa - 3.0 * a2_max, 0.0))
+        kept.append((weight, offset, sign))
+        shortest.append(max(gap / hi, by_tol) * (1.0 - _SHORTEST_MARGIN))
+    return FarImages(tuple(kept), np.array(shortest, dtype=float))
+
+
+def far_image_rows(
+    obs_mid: np.ndarray,
+    obs_t: np.ndarray | None,
+    obs_len: np.ndarray,
+    segs: LineSegments,
+    far: FarImages,
+    obs_radius: np.ndarray | None = None,
+) -> np.ndarray:
+    """:func:`image_quadrupole_rows` of the far images, pair class by pair class.
+
+    Every image is evaluated on the pairs whose longer segment reaches
+    :attr:`FarImages.shortest` only: the rows of such observers against all
+    sources and the other rows against such sources (audit W3A-01). The
+    images are taken in the order of the series and every entry accumulates
+    its terms in that order, so the block is bit-identical to one pass of
+    :func:`image_quadrupole_rows` over all pairs and images (the terms left
+    out are exact zeros). Arguments as :func:`image_quadrupole_rows`.
+
+    Returns
+    -------
+    numpy.ndarray
+        Shape ``(len(obs_mid), len(segs.mid))``, in 1/m.
+    """
+    n_obs, n_src = obs_mid.shape[0], segs.mid.shape[0]
+    out = np.zeros((n_obs, n_src))
+    if not far or not n_obs or not n_src:
+        return out
+    obs_len = np.asarray(obs_len, dtype=float)
+    distinct = np.unique(np.concatenate([obs_len, segs.length]))
+    # Level of an image: the number of distinct lengths below its bound;
+    # level 0 needs every pair.
+    level = np.searchsorted(distinct, far.shortest, side="left")
+    images = far.images
+    k = 0
+    while k < len(images):
+        end = k + 1
+        while end < len(images) and level[end] == level[k]:
+            end += 1
+        run = list(images[k:end])
+        lev = int(level[k])
+        k = end
+        if lev == 0:
+            image_quadrupole_rows(
+                obs_mid, obs_t, obs_len, segs, run, obs_radius=obs_radius, out=out
+            )
+            continue
+        if lev >= distinct.size:
+            continue  # no pair reaches the image
+        need = distinct[lev]
+        rows = obs_len >= need
+        cols = np.flatnonzero(segs.length >= need)
+        if rows.any():
+            r = np.flatnonzero(rows)
+            blk = out[r]
+            image_quadrupole_rows(
+                obs_mid[r],
+                None if obs_t is None else obs_t[r],
+                obs_len[r],
+                segs,
+                run,
+                obs_radius=None if obs_radius is None else obs_radius[r],
+                out=blk,
+            )
+            out[r] = blk
+        if cols.size and not rows.all():
+            r = np.flatnonzero(~rows)
+            ix = np.ix_(r, cols)
+            blk = out[ix]
+            image_quadrupole_rows(
+                obs_mid[r],
+                None if obs_t is None else obs_t[r],
+                obs_len[r],
+                segs.subset(cols),
+                run,
+                obs_radius=None if obs_radius is None else obs_radius[r],
+                out=blk,
+            )
+            out[ix] = blk
     return out
 
 
@@ -870,6 +1014,7 @@ def image_quadrupole_rows(
     segs: LineSegments,
     images: list[tuple[float, float, float]],
     obs_radius: np.ndarray | None = None,
+    out: np.ndarray | None = None,
 ) -> np.ndarray:
     """Dense far-field term of far images, ``Σ_k w_k · τ_k · Q_k``, in 1/m.
 
@@ -895,14 +1040,18 @@ def image_quadrupole_rows(
     obs_radius
         Wire radii of the observing segments in m (the radius term of
         :func:`quadrupole_block`); ``None`` for field points.
+    out
+        C-contiguous float array of shape ``(len(obs_mid), len(segs.mid))``
+        to add the terms to, image by image; ``None`` starts from zeros.
 
     Returns
     -------
     numpy.ndarray
-        Shape ``(len(obs_mid), len(segs.mid))``.
+        Shape ``(len(obs_mid), len(segs.mid))`` (``out`` when given).
     """
     n_obs, n_src = obs_mid.shape[0], segs.mid.shape[0]
-    out = np.zeros((n_obs, n_src))
+    if out is None:
+        out = np.zeros((n_obs, n_src))
     if not images or not n_obs or not n_src:
         return out
     kernel = None
@@ -1193,10 +1342,11 @@ def series_corrections(
     parts = []
     for weight, offset, sign in images:
         band = sorted((offset + sign * float(z.min()), offset + sign * float(z.max())))
-        if _depth_gap(z, band[0], band[1]) >= reach:
+        gap = _depth_gap(z, band[0], band[1])
+        if gap >= reach:
             continue
         img = segs.image(offset, sign)
-        i, j, w, far = switch_pairs(segs.mid, segs.length, img.mid, img.length)
+        i, j, w, far = switch_pairs(segs.mid, segs.length, img.mid, img.length, gap)
         if i.size:
             point = _point_values(segs.mid, img.mid, i, j, min_distance)
             values = _corrections(
@@ -1250,10 +1400,11 @@ def series_field_corrections(
     parts = []
     for weight, offset, sign in images:
         band = sorted((offset + sign * float(z.min()), offset + sign * float(z.max())))
-        if _depth_gap(z_pts, band[0], band[1]) >= reach:
+        gap = _depth_gap(z_pts, band[0], band[1])
+        if gap >= reach:
             continue
         img = segs.image(offset, sign)
-        i, j, w, far = switch_pairs(points, zero, img.mid, img.length)
+        i, j, w, far = switch_pairs(points, zero, img.mid, img.length, gap)
         if i.size:
             point = _point_values(points, img.mid, i, j, min_distance)
             values = _corrections(

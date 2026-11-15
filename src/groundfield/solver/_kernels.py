@@ -44,12 +44,13 @@ import numpy as np
 from groundfield.solver._guards import _MIN_DISTANCE, _require_image_separation
 from groundfield.solver import _line_kernel
 from groundfield.solver._line_kernel import (
+    FarImages,
     LineSegments,
     SparseCorrection,
-    field_corrections,
+    far_image_rows,
     far_images,
+    field_corrections,
     field_quadrupole_rows,
-    image_quadrupole_rows,
     point_self_term,
     reaction_corrections,
     reaction_quadrupole_rows,
@@ -652,7 +653,7 @@ class TwoLayerSeriesKernel:
         self._S: np.ndarray | None = None
         self._S_points: np.ndarray | None = None
         self._series_corrections: SparseCorrection | None = None
-        self._far: list[tuple[float, float, float]] | None = None
+        self._far: FarImages | None = None
 
     def _images(self) -> list[tuple[float, float, float]]:
         """``(weight, offset, sign)`` of every image ``n >= 1``, canonical order."""
@@ -676,7 +677,7 @@ class TwoLayerSeriesKernel:
         line = self.line
         if _line_kernel.FAR_IMAGE_QUADRUPOLE:
             sl = slice(i0, i0 + rows.shape[0])
-            rows += image_quadrupole_rows(
+            rows += far_image_rows(
                 line.mid[sl],
                 line.tangent[sl],
                 line.length[sl],
@@ -686,8 +687,8 @@ class TwoLayerSeriesKernel:
             )
         self._line_series().add_to_rows(rows, i0)
 
-    def _far_images(self) -> list[tuple[float, float, float]]:
-        """Images with their quadrupole weights (built once)."""
+    def _far_images(self) -> FarImages:
+        """Far images with the pairs that need them (built once)."""
         if self._far is None:
             self._far = far_images(self.line.mid[:, 2], self.line, self._images())
         return self._far
@@ -994,7 +995,7 @@ def _line_field_correction(
 
     m, n = points.shape[0], line.mid.shape[0]
     outs = [np.zeros((m,) + c.shape[1:]) for c in real_parts]
-    far = []
+    far = FarImages()
     if images and _line_kernel.FAR_IMAGE_QUADRUPOLE:
         far = far_images(points[:, 2], line, images)
     for sl in _field_row_blocks(m, n, force_blocks=True):
@@ -1002,7 +1003,7 @@ def _line_field_correction(
         if far:
             # Far Tagg/Sunde images with the quadrupole term (wave 3, 10.28).
             pts = points[sl]
-            Q += image_quadrupole_rows(pts, None, np.zeros(pts.shape[0]), line, far)
+            Q += far_image_rows(pts, None, np.zeros(pts.shape[0]), line, far)
         for out, c in zip(outs, real_parts, strict=True):
             out[sl] += Q @ c
         # Sparse near corrections block by block as well (audit round 1,

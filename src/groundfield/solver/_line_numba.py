@@ -180,7 +180,8 @@ def image_quadrupole_rows(
         The term is left out for a pair where
         ``|w| (L² + 3a²) / (6 dz²) < tol``.
     out
-        Output block, shape ``(b, N)``, overwritten.
+        Output block, shape ``(b, N)``; the terms are added to it, image by
+        image in the given order.
     """
     n = out.shape[1]
     dxy2 = np.empty(n)
@@ -211,7 +212,6 @@ def image_quadrupole_rows(
             qtol[c] = (
                 lmax * lmax + 3.0 * (0.5 * (ro[r] * ro[r] + rs[c] * rs[c]))
             ) * inv_tol
-            out[r, c] = 0.0
         row = out[r]
         zr = zo[r]
         for k in range(z_img.shape[0]):
