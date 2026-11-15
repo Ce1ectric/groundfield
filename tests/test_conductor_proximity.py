@@ -144,3 +144,18 @@ def test_segment_distance_with_random_point_segments() -> None:
     brute = np.linalg.norm(pa - b1[:, None, :], axis=-1).min(axis=1)
     assert np.all(d <= brute + 1e-12) and np.all(brute - d <= 1e-6)
     assert np.all(t == 0.0)
+
+
+# audit W3B-03 (own attack: the same round-off in the proximity kinds)
+def test_wires_drawn_at_the_touching_distance_are_close_not_interpenetrating() -> None:
+    """Base 098bbbc: two 5 mm wires drawn 1e-14 m closer than touching (the
+    service drops of a row at the touching distance, decision D9) were
+    'interpenetrating'; within 1e-9 of the touching distance they are
+    'close', and 1e-6 inside it they still interpenetrate."""
+    for factor, kind in ((1.0 - 1e-12, "close"), (1.0 - 1e-6, "interpenetrating")):
+        y = 0.01 * factor
+        ep = np.array(
+            [[[0.0, 0.0, 0.6], [40.0, 0.0, 0.6]], [[0.0, y, 0.6], [40.0, y, 0.6]]]
+        )
+        (hit,) = find_close_wires(ep, [0.005, 0.005], ["a", "b"])
+        assert hit.kind == kind

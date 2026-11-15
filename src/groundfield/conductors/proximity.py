@@ -21,7 +21,9 @@ closer than a threshold, classified as
     the end point of one segment lies on the interior of the other (a
     T-contact; the model does not connect conductors there);
 ``"interpenetrating"``
-    the axis distance is below the sum of the radii, $d < a_i + a_j$;
+    the axis distance is below the sum of the radii, $d < a_i + a_j$, by
+    more than $10^{-9}$ of it (wires drawn at the touching distance are
+    ``"close"``; audit W3B-03);
 ``"close"``
     $d$ is below the threshold
     $\max(\texttt{rel\_threshold}\cdot(a_i + a_j), \texttt{abs\_threshold})$;
@@ -64,6 +66,12 @@ ProximityKind = Literal["crossing", "touching", "interpenetrating", "close", "ju
 # End points closer than this fraction of the longer segment count as
 # shared (junction) and two axes closer than it as intersecting.
 _TOUCH_REL = 1e-9
+# Two wires interpenetrate when their axes are closer than the sum of their
+# radii by more than this fraction of it: wires drawn at the touching
+# distance lie closer by round-off (1e-14 m for 5 mm wires, the service drops
+# of a row since decision D9) and are close, not interpenetrating (the
+# tolerance of the overlap check of diagnose(), audit W3B-03).
+_CONTACT_REL_TOL = 1e-9
 
 
 @dataclass(frozen=True)
@@ -259,7 +267,7 @@ def find_close_wires(
             kind: ProximityKind = "junction"
         elif dist[k] <= tol:
             kind = "touching" if (at_end_a or at_end_b) else "crossing"
-        elif dist[k] < rad[ia] + rad[ib]:
+        elif dist[k] < (rad[ia] + rad[ib]) * (1.0 - _CONTACT_REL_TOL):
             kind = "interpenetrating"
         else:
             kind = "close"
