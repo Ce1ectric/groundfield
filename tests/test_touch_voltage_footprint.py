@@ -189,7 +189,9 @@ def test_grid_envelope_includes_the_mesh_centres_with_interior_meshes() -> None:
     np.testing.assert_allclose(env[24:], u_centres, rtol=1e-12)
     without = touch_voltage_envelope(res, w, electrode="g1", n_angles=24)
     assert without[1].shape == (24,)
-    np.testing.assert_array_equal(without[1], env[:24])
+    # bit for bit with OpenBLAS on Linux x86-64; up to 2.2e-15 with
+    # Accelerate on macOS arm64 (the points are evaluated in other batches)
+    np.testing.assert_allclose(without[1], env[:24], rtol=1e-14, atol=0)
 
 
 @pytest.mark.finding("10.21")

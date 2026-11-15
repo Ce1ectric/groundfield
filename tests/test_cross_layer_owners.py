@@ -149,7 +149,10 @@ def test_equal_resistivities_reproduce_the_homogeneous_backend() -> None:
     """Guard: TwoLayerSoil(rho, rho, h) is homogeneous soil — one owner per rod.
 
     The interface sits on a segment boundary (h_1 = 2 m, ds = 0.5 m), so the
-    two discretisations coincide and the results agree bit for bit.
+    two discretisations coincide and the results agree to round-off: bit for
+    bit with OpenBLAS on Linux x86-64, one unit in the last place (2.1e-16)
+    with Accelerate on macOS arm64. A discretisation difference would show
+    at 1e-6 and above.
     """
 
     def z(soil, backend: str) -> complex:
@@ -160,4 +163,5 @@ def test_equal_resistivities_reproduce_the_homogeneous_backend() -> None:
         return w.solve(eng).cluster_impedance("r")[0]
 
     layered = z(gf.TwoLayerSoil(rho_1=100.0, rho_2=100.0, h_1=2.0), "image_2layer")
-    assert layered == z(gf.HomogeneousSoil(rho=100.0), "image")
+    homogeneous = z(gf.HomogeneousSoil(rho=100.0), "image")
+    assert layered == pytest.approx(homogeneous, rel=1e-15, abs=0)

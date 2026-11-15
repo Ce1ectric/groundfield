@@ -60,9 +60,13 @@ CASES: dict[str, Callable[[], Quantities]] = {}
 #: Absolute noise floors of residual-type quantities (see
 #: :func:`tests.golden.harness.noise_floor`): ``case -> {pattern: floor}``.
 #: The rms error of an exact synthetic vector fit is pure round-off
-#: (1.3e-13 ohm with numpy 2.5, 2.4e-10 ohm with numpy 2.4).
+#: (1.3e-13 ohm with numpy 2.5, 2.4e-10 ohm with numpy 2.4). The current
+#: of the probe lead of the junction case is zero by construction (its
+#: junction S has nothing else attached): -1.6e-19 A with OpenBLAS on Linux
+#: x86-64, 7.2e-21 A with Accelerate on macOS arm64, at a 1 A feed.
 NOISE_FLOORS: dict[str, dict[str, float]] = {
     "fit_vector_fit_synthetic": {"rms": 1e-8},
+    "junction_measurement_leads_hom": {"I/probe": 1e-15},
 }
 
 

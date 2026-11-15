@@ -422,7 +422,9 @@ def test_conductors_meeting_end_to_end_on_one_axis_keep_the_filament() -> None:
 def test_the_on_axis_rule_is_free_of_order_and_direction() -> None:
     """Permuting and reversing the pieces permutes the core-shield block
     bit for bit (up to the orientation sign), and the loop oracle agrees
-    with the vectorised assembly."""
+    with the vectorised assembly to round-off (bit for bit with OpenBLAS on
+    Linux x86-64; 2 of 49 entries differ by 3.7e-16 with Accelerate on
+    macOS arm64 for ``image="antiparallel"``)."""
     seg = np.concatenate([_axis_pieces(4), _axis_pieces(3, 10.0, LENGTH - 20.0)])
     radii = np.array([R_CORE] * 4 + [R_SHIELD] * 3)
     shields = np.array([False] * 4 + [True] * 3)
@@ -431,7 +433,7 @@ def test_the_on_axis_rule_is_free_of_order_and_direction() -> None:
         kw = dict(image=image, shields=shields, include_internal=~shields)
         L = build_inductance_matrix(seg, radii, conductors=labels, **kw)
         oracle = _build_inductance_matrix_loop(seg, radii, conductors=labels, **kw)
-        assert np.array_equal(L, oracle)
+        np.testing.assert_allclose(L, oracle, rtol=1e-15, atol=0)
     L = build_inductance_matrix(
         seg, radii, conductors=labels, image="none", shields=shields
     )

@@ -469,14 +469,18 @@ def test_source_record_and_tables_carry_voltage_and_current() -> None:
     res = _solve(w, frequencies=[50.0, 150.0])
     rec = _record(res, "v1")
     assert rec.kind == "voltage"
-    assert rec.voltage == [U_PHASOR, U_PHASOR]
+    # The source is given as magnitude and phase; the polar round trip is
+    # exact with glibc on Linux x86-64 and one unit in the last place off
+    # (6.2e-17) with the system libm on macOS arm64.
+    assert len(rec.voltage) == 2
+    assert all(_close(u, U_PHASOR, rtol=1e-15) for u in rec.voltage)
     assert len(rec.current) == 2 and rec.current[0] != 0j
     irec = _record(res, "i2")
     assert irec.voltage == [] and irec.current == [2.0 + 0j, 2.0 + 0j]
     df = res.to_dataframe("sources")
     row = df[(df.source == "v1") & (df.frequency_hz == 50.0)].iloc[0]
     assert row.current_a == rec.current[0]
-    assert row.voltage_v == U_PHASOR
+    assert row.voltage_v == rec.voltage[0]
     assert _close(row.input_impedance_ohm, U_PHASOR / rec.current[0])
     with pytest.raises(ValueError, match="several sources"):
         res.input_impedance()

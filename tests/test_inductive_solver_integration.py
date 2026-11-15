@@ -171,13 +171,39 @@ def test_sommerfeld_accepts_a_surface_crossing_conductor() -> None:
 @pytest.mark.finding("10.60")
 @pytest.mark.parametrize("model", ["carson_series", "sommerfeld"])
 def test_multifrequency_solve_equals_single_frequency_solves(model: str) -> None:
-    """One assembly for all frequencies; every frequency is bit-identical."""
-    w = _pen_world(60.0, dsl=10.0)
+    """One assembly for all frequencies; every frequency equals its own solve.
+
+    Bit for bit with OpenBLAS on Linux x86-64. With Accelerate on macOS
+    arm64 the electrode potentials differ by up to one unit in the last
+    place (2.0e-16), which the difference ``v1 - v2`` of the series
+    impedance amplifies by ``|v1| / |v1 - v2|`` (3088 at DC): 1.26e-12.
+    The test therefore compares the solved potentials and currents, not
+    the cancelling difference.
+    """
+
+    def solved(freqs: list[float]) -> np.ndarray:
+        eng = gf.create_engine(
+            backend="image",
+            segment_length=0.5,
+            frequencies=freqs,
+            earth_inductive_model=model,
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            res = _pen_world(60.0, dsl=10.0).solve(eng)
+        return np.array(
+            [
+                res.electrode_potentials["g1"],
+                res.electrode_potentials["g2"],
+                res.electrode_currents["g2"],
+            ]
+        )
+
     freqs = [0.0, 50.0, 250.0, 1000.0]
-    z_all = _series_impedance(w, model, freqs)
+    all_f = solved(freqs)
     for k, f in enumerate(freqs):
-        z_one = _series_impedance(_pen_world(60.0, dsl=10.0), model, [f])[0]
-        assert z_all[k] == z_one
+        one_f = solved([f])[:, 0]
+        np.testing.assert_allclose(all_f[:, k], one_f, rtol=1e-15, atol=0)
 
 
 @pytest.mark.finding("10.60")

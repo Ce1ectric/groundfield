@@ -229,11 +229,15 @@ def test_crossing_filaments_at_tiny_angles(
     now comes from a cross product; measured worst case 1.0e-9 at 1e-8 ...
     3e-8 rad, 3.5e-10 at 7e-8 rad (the crossing point of two axes 1e-8 rad
     apart is only known to about 1e-16/1e-8 of the length), 8.6e-11 at
-    1e-7 rad, below 5e-11 from 1e-6 rad on."""
+    1e-7 rad, below 5e-11 from 1e-6 rad on (OpenBLAS / glibc on Linux
+    x86-64). With Accelerate / the system libm on macOS arm64 the worst
+    case below 1e-7 rad is 2.3e-9 (1e-8 rad, rotated frame, sweep of
+    phi = 1e-8 ... 7e-8 rad and four crossing points); the bound there
+    is 5e-9."""
     u = np.array([math.cos(phi), math.sin(phi), 0.0])
     c = np.array([where, 0.0, 0.0])
     pts = [np.zeros(3), np.array([5.0, 0.0, 0.0]), c - 2.0 * u, c + 3.0 * u]
     if frame == "rotated":
         pts = _rotated(pts)
-    bound = 2e-9 if phi < 1e-7 else (1e-10 if phi < 1e-5 else 5e-12)
+    bound = 5e-9 if phi < 1e-7 else (1e-10 if phi < 1e-5 else 5e-12)
     assert neumann_mutual(*pts) == pytest.approx(_mp_reference(*pts), rel=bound, abs=0)
