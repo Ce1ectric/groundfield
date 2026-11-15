@@ -554,7 +554,7 @@ reproduces 0.15.0, it is named.
   model for rods and rings in one to three layers away from interfaces and
   other wires (audits W4B-01, W4B-02); the AP1 station in the
   corner soils of the AP1 grid lies between `image_2layer` (+0.7 … +3.0 %) and
-  `mom` (−0.4 … −0.9 %), at 1.5 … 3 minutes and 3.6 … 4.4 GB per solve. It
+  `mom` (−0.4 … −0.9 %), at 1.5 … 3 minutes and 4.1 … 4.3 GB per solve. It
   needs the optional extra `fem3d` (scikit-fem, BSD-3; pyamg, MIT;
   `pip install "groundfield[fem3d]"`, decision D6) and raises `ImportError`
   naming it otherwise. Both models run the network of the shared pipeline:

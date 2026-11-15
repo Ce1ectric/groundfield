@@ -316,20 +316,21 @@ read from differences between configurations of the same length and the
 same free ends — a straight 4 m bar against an L of two 2 m arms (the
 corner), straight 4 m and 8 m bars against a T and a crossing (user
 decision Q40). A 5 mm bar with 5 cm cover, 0.8 m deep in 100 Ω·m
-(evidence of stream w4fem3d), each junction as the equivalent length of
-wire (negative where the shared concrete leaks less than the overlapping
+(evidence of streams w4fem3d and fw4fem3d), each junction as the
+equivalent length of wire at the default prism faces, after audit W4B-01
+(negative where the shared concrete leaks less than the overlapping
 shells):
 
 | Junction (not converged) | $\rho_c$ = 1 000 Ω·m | 5 000 Ω·m |
 |---|---|---|
-| corner | −1.5 cm | −1.4 cm |
-| crossing | −6.0 cm | −2.8 cm |
-| T-joint | +0.2 cm | +3.2 cm |
+| corner | +3.4 cm | +5.7 cm |
+| crossing | −5.1 cm | −1.9 cm |
+| T-joint | +0.6 cm | +3.7 cm |
 
 These numbers are not converged (audit W4B-05): one refinement of the prism
-faces moved the corner by about 5 cm (+3.4 / +5.7 cm before), the crossing
-and the T-joint were refined once only, and the impedance form of the same
-runs gives −4 … −6 cm for every junction. A junction acts like a few cm of
+faces moved the corner to −1.5 / −1.4 cm (−4.9 / −7.1 cm), the crossing
+and the T-joint were not refined, and the impedance form of the same runs
+gives −4.0 … −6.3 cm for every junction. A junction acts like a few cm of
 wire, at most about $2\,r_b$, sign not settled. With each wire's own shell
 an L of 4 m reads 0.35 % low, and the house mesh (60 m: 4 corners,
 4 T-joints, 1 crossing) changes by about 1 % or less (0.35 … 0.85 % with
