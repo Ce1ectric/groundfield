@@ -297,8 +297,9 @@ shows what agrees with independent references and how well.
   horizontal earth electrode — foundation, `RingElectrodeSpec` circle, strip — is
   met at its nearest point (Q41, Q43); only sites with rods alone keep the head
   of their first rod. A house whose horizontal electrode touches or crosses the
-  substation's (e.g. 10 m houses 5 m from the default 4 m ring) cannot be fed
-  (a drop of no length; the generator raises and names both sites). The following values were measured before user decisions
+  substation's (e.g. 10 m houses 5 m from the default 4 m ring) gets a drop of no length: the star topology feeds it from its main instead (drops of
+  2.39 / 1.61 m in the touching / crossing cases of audit W1B), the radial topology
+  raises and names both sites. The following values were measured before user decisions
   Q22, Q35 and Q43 (see the release notes for the change they bring): with an isolated PEN the end of a
   drop changes the resistive model only through its length (radial default
   grid with 2 ring houses, 50 Hz: −0.025 %); the joints and the star
@@ -314,21 +315,29 @@ shows what agrees with independent references and how well.
   0.15.0 (12 m × 8 m ring houses +5.7 … +14.0 %; default 10 m ring houses:
   star +1.2 … +2.1 % for the 30-house network — the networks of 1 … 5 houses
   have no drop, all on the main, and move by +0.6 … +10.4 % through the joint
-  and the Q38 owner —, radial −10.8 … −1.1 %). `LvNetworkLayout.plot(world=...)` draws the
+  and the Q38 owner —, radial −10.8 … −1.1 %). A layout cable is joined to the substation and to every cabinet whose closed earth
+  electrode it passes through, not only at its ends; a cable through a house foundation
+  is not joined to it (the house keeps its drop, of no length in plan there). `LvNetworkLayout.plot(world=...)` draws the
   drops as built; without a world it draws the layout's stubs (centroid to
   tap).
-- **Cabinets per building group.** The star topology groups the buildings by
-  bearing around the substation (equal sizes, from the widest gap) and puts each
-  cabinet on the ray through its group's centroid, 1 m beyond the group; a group
-  that spans a wide angle (three cabinets for the 50-house grid) has drops up to
-  113 m to its outer houses, a single group around the substation (one cabinet for
-  a row through it) has its cabinet on one side only, the houses of the other side
-  fed from the substation. The houses share their group's main (a tree): with an
-  inductive PEN the network reactance at 1 kHz is +55 … +64 % (default star 30
-  houses, `sommerfeld` / `carson_series`) above the former cabinet strip with its
-  parallel drops; results of default `TnNetworkGenerator` networks therefore depend
-  on this topology choice, which a given `CabinetConfig.placement` can replace.
-  Planning 8 000 default star houses takes 14.6 s (6.9 s with the former strip).
+- **Cabinets per building group.** The star topology groups the buildings by bearing
+  around the substation (equal sizes, from the widest gap) and puts each cabinet on
+  the ray through its group's centroid, 1 m beyond the group; a cabinet that would
+  stand there farther than `CabinetConfig.max_far_end_gap_m` (20 m) from its houses
+  (a group of about 180°, e.g. 10 houses and one small commercial building: 50.4 m)
+  stands on the ray through the group's far-end building instead. The threshold is a
+  choice: the groups of the default 50-house grid stand 8.8 … 12.8 m from their houses
+  on the centroid ray (a wide group there, 206 … 341°, still has drops up to 113 m to
+  its outer houses), the wide AP1 groups 23.7 … 50.4 m; 15 / 25 m move one group of the
+  100-house grid more / fewer. A single group around the substation (one cabinet for a
+  row through it) has its cabinet on one side only. A cabinet whose electrodes would
+  come closer than `end_clearance_m` to another site raises (3 of 100 random
+  200-house layouts 12 m apart); a given `CabinetConfig.placement` avoids it. The
+  houses share their group's main (a tree): with an inductive PEN the network
+  reactance at 1 kHz is +55 … +64 % (default star 30 houses, `sommerfeld` /
+  `carson_series`) above the former cabinet strip with its parallel drops; results of
+  default `TnNetworkGenerator` networks therefore depend on this topology choice.
+  Planning 8 000 default star houses takes about 14 s (6.9 s with the former strip).
 - **Measurement leads** of the in-line set-up are laid side by side; their
   mutual inductance depends on the logarithm of that spacing, which is a
   modelling choice, not a measured value.

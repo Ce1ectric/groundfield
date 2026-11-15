@@ -186,3 +186,19 @@ def test_pass10_page_holds_every_fragment_verbatim() -> None:
         "docs/audit/pass-10.md does not hold these fragments verbatim; regenerate "
         f"the page from changelog.d/ (see the docd report): {stale}"
     )
+
+
+def test_the_q41_entry_no_longer_states_the_superseded_rules() -> None:
+    """The Q41 entry does not keep rules that Q43 and R6A-01 replaced (audit W1B-07)."""
+    import pathlib
+
+    import groundfield as gf
+
+    text = " ".join(
+        pathlib.Path(gf.__file__).resolve().parents[2].joinpath("CHANGELOG.md").read_text().split()
+    )
+    assert "stays a node that houses may tap" not in text
+    assert (
+        "among them the default substations of both generators), `site_anchor_point`, "
+        "`connection_point` and everything attached by name are unchanged"
+    ) not in text

@@ -84,6 +84,13 @@ limits a result, the reference documentation states the limit.
   Grids are within +0.36 … +0.70 %. A current varying along each wire
   (linear or per sub-piece, as `mom` solves it) would close the gap; until
   then `backend="mom"` gives the per-segment solution.
+- **Group rule for wide groups.** A group of about 180° is served by one main to its
+  far-end building; a street-row rule or a minimum of two groups for buildings
+  around the substation would serve it better (a decision).
+- **One cabinet around the substation.** Ten houses in a row through the substation get
+  their only cabinet at one end; the other half is fed from the substation.
+- **A cabinet that cannot keep its clearance** raises; moving it on along the ray past
+  the blocking site would always place it (dense random layouts only so far).
 - **Overlapping concrete shells at junctions.** Where the wires of an
   encased foundation meet (the corners of a rectangle, the crossings and
   T-joints of a mesh), their shells overlap within about $r_b$ of the

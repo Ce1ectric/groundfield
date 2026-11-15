@@ -116,7 +116,9 @@ reproduces 0.15.0, it is named.
 | 10.22 (Q30, Q44) | polylines one owner per straight run, stars per arm | rectangle outlines −0.000 … −0.31 % bare, −0.62 % in wet concrete (16 m × 1 m), L-shape −0.13 / −0.19 %; T06 outlines alone ≤ −0.004 %; T06 layout with the AP1 station −0.03 … −0.40 % (one current per segment: +0.14 … +0.51 % → +0.07 … +0.12 % above it); stars alone 0, in a cluster member currents up to 3.4 % | building outlines (the AP1 houses), hand-built polylines, stars next to other electrodes | `img_mixed_cluster_hom`, `line_img_mixed_cluster_hom` |
 | 10.46 (Q32) | unmarked conductors of different radii on one axis touch | coax pair 31.97 → 43.47 µH loop | worlds with conductors drawn on one axis without the marker | none |
 | 10.46 (Q33) | shield without internal inductance | −50 nH/m per `cable_shield` conductor; coax 31.97 → 26.97 µH; `buried_lead()` two-pole −2.5 % in X | `cable_shield` conductors with `inductance_model` | none |
-| Q22 / Q35, Q43 (10.38) | cabinets per building group at the far end of their houses, radial substation slots tap the trunk; mains and drops meet rings and strips at their nearest point; layout cables reach a site where the polyline enters it | default grids (10 … 150 houses, 100 Ω·m): resistive PEN at 50 Hz star +0.02 … +0.85 %, radial −0.01 … +0.49 % (Q43 alone −0.05 … −0.13 %); isolated Neumann PEN (n ≤ 50, `carson_series` and `sommerfeld`): 50 Hz \|Z\| −0.03 … +0.97 %, Im −9.9 … +82 %; 1 kHz star Re −6.0 … +5.6 %, Im −9.1 … +70 %, \|Z\| −1.4 … +13.1 %, radial Re −0.5 … +8.3 %, Im −9.6 … +96 %, \|Z\| −1.2 … +15.4 % (default star 30 houses X +64 / +55 %: the houses share their main instead of parallel drops; Q43 alone Im −4 … −11 %); 100 ring houses +0.88 %; T06 layout −0.026 % (100 Ω·m), T07 Z_meas +1.51 %; the AP1-like layout (foundation station) unchanged; golden `gen_tn_default` ≤ 1.4e-2 (cabinet rod current −63 %), `gen_tn_measurement_overhead_leads` ≤ 1.9e-2 | `TnNetworkGenerator` worlds (cabinet positions and feeding with the default `placement=None`; radial substation slots; every default substation ring); layout worlds with ring / strip sites or router corners inside a site; not a given cabinet placement apart from Q43, not foundation stations |
+| Q22 / Q35, Q43 (10.38) | cabinets per building group at the far end of their houses, radial substation slots tap the trunk; mains and drops meet rings and strips at their nearest point; layout cables reach a site where the polyline enters it | default grids (10 … 150 houses, 100 Ω·m): resistive PEN at 50 Hz star +0.12 … +0.85 %, radial −0.01 … +0.49 % (Q43 alone −0.05 … −0.13 %); isolated Neumann PEN (n ≤ 50, `carson_series` and `sommerfeld`): 50 Hz \|Z\| −0.03 … +0.97 %, Im −9.9 … +82 %; 1 kHz star Re −6.0 … +5.6 %, Im −9.1 … +70 %, \|Z\| −1.4 … +13.1 %, radial Re −0.5 … +8.3 %, Im −9.6 … +96 %, \|Z\| −1.2 … +15.4 % (default star 30 houses X +64 / +55 %: the houses share their main instead of parallel drops; Q43 alone Im −4 … −11 %); 100 ring houses +0.88 %; T06 layout −0.026 % (100 Ω·m), T07 Z_meas +1.51 %; the AP1-like layout (foundation station) unchanged; golden `gen_tn_default` ≤ 1.4e-2 (cabinet rod current −63 %), `gen_tn_measurement_overhead_leads` ≤ 1.9e-2 | `TnNetworkGenerator` worlds (cabinet positions and feeding with the default `placement=None`; radial substation slots; every default substation ring); layout worlds with ring / strip sites or router corners inside a site; not a given cabinet placement apart from Q43, not foundation stations |
+| W1B-01, W1B-02 (10.38) | cabinet of a wide group (farther than `max_far_end_gap_m` = 20 m from its houses on the centroid ray) on the ray through its far-end building; clearance over every electrode | default star grids of 100 … 200 houses and AP1 mixes with a wide group (100 Ω·m): resistive PEN 50 Hz −0.03 … +0.49 % (star 100 −0.031 %, 150 +0.089 %, 200 +0.072 %, 10 houses + 1 small +0.489 %; image 2 m and 1 m agree to 0.001 %); isolated Neumann PEN of the wide mixes at 1 kHz \|Z\| +0.3 … +1.9 %; 100 ring houses −0.023 %; drops 10 houses + 1 small 527 → 312 m, star 150 2 653 → 2 989 m; the 10 / 30 / 50-house grids, radial networks and golden cases unchanged | `TnNetworkGenerator` star worlds with `placement=None` that have a wide group, or rods at a group's far end; not a given placement |
+| W1B-03, W1B-04 (10.38) | layout cables joined to every substation / cabinet they pass; legs that leave and come back keep their taps | layouts with a cable through a passed cabinet −0.16 … −0.45 % (50 Hz, 1 m / 0.5 m); R6A's families: 32 of 200 cabinet, 10 of 120 random layouts change (drops −7.4 … +2.0 m); T06 and the AP1-like layout unchanged | `LvNetworkLayout` worlds whose cables pass through the closed electrodes of a site other than at their ends |
 | 10.46 (Q32/Q33), audit W1A-02 | pieces of conductors lying beside each other | coax in pieces +0.09 … +9.6 % (back to the lumped value); drops routed back along the PEN main: X(1 kHz) +3.9e-4, Zin 1.3e-5 (golden `cond_drops_along_pen_main_perfect_mirror`) | worlds with a core inside a marked shield, or cables / drops drawn on one axis, with `discretize_segment_length` |
 | 10.22 (Q30), audit W1A-01 | owners at projected coordinates | generated mesh foundations at UTM coordinates +0.09 … +0.64 % (back to the local value) | worlds built at absolute UTM coordinates |
 | 10.38 | the PEN cables of `TnNetworkGenerator`: every cabinet keeps its own cable, a service drop taps the cable that feeds its building at the point nearest to it instead of running from the cabinet back along the main | golden networks: substation potential −2.1 %, substation leakage −3.1 … −4.8 %, house potentials −0.2 … +1.0 %, measurement network −1.1 %; input impedance of default-grid networks with ring foundations −6.4 / −1.2 / −0.3 % for 30 / 100 / 200 houses (star; with user decisions Q38 and Q41) (golden `gen_tn_default`, `gen_tn_measurement_overhead_leads`) | `TnNetworkGenerator` worlds; not the layout builder |
@@ -654,15 +656,14 @@ reproduces 0.15.0, it is named.
   limitations). The layout builder keeps its taps on the layout polyline,
   clipped at the projection of a site's foundation contact onto it, so no tap
   on the first or last segment lies inside a site foundation, also next to a
-  rotated, polygon or offset one (a corner of the cable inside a site
-  foundation stays a node that houses may tap, see the known limitations). Up to then every conductor ended at the connection point
+  rotated, polygon or offset one (corners inside the foundation of the substation or a cabinet are part of
+  that site, see the layout entry under Fixed). Up to then every conductor ended at the connection point
   of the site's anchor — a corner of a rectangular foundation (meshes since
   audit A2G-04, rings since Q38), the first vertex of a building outline: 47
   of 282 drops of a ring-house test set ran along a side of their own
-  foundation and 45 crossed it (audits D3A-02, D3B-03). Sites without a
-  foundation (rods, `RingElectrodeSpec` circles and strips, among them the
-  default substations of both generators), `site_anchor_point`,
-  `connection_point` and everything attached by name are unchanged;
+  foundation and 45 crossed it (audits D3A-02, D3B-03). Sites with rods only,
+  `site_anchor_point`, `connection_point` and everything attached by name
+  are unchanged (rings and strips: user decision Q43);
   `site_contact_wires(site)` is new (named `site_foundation_wires` before user decision Q43), `materialise_branch` rejects a
   `PlannedContact` that names no foundation wire of its site or lies farther
   than one minimum section from it, and `LvNetworkLayout.plot(world=...)`
@@ -671,7 +672,9 @@ reproduces 0.15.0, it is named.
   0.2 s before user decision Q41 (0.15.0 had no planning step); 8000 radial
   houses with `max_feeder_length_m=1e5` 18.4 s against 5.9 s. With the
   cabinets per building group (user decisions Q22, Q35; quiet machine)
-  1000 / 8000 star houses take 0.88 / 14.6 s, radial 0.98 / 17.2 s. Tests:
+  1000 / 8000 star houses take 0.86 / 14.1 s, radial with
+  `max_feeder_length_m=1e5` 0.98 / 17.2 s (the default 500 m: 8 000 radial
+  houses 2.6 s). Tests:
   `tests/test_foundation_contact.py`,
   `tests/test_lv_network_layout.py::test_plot_draws_the_drops_as_built_from_the_world`.
 - Rectangular foundations at multiples of 90° are rotated with the exact
@@ -728,9 +731,19 @@ reproduces 0.15.0, it is named.
   (user decisions Q22, Q35).** `TnNetworkGenerator` (star topology) orders the
   buildings by bearing around the substation, from the widest angular gap on,
   cuts them into one run of consecutive bearings per cabinet (sizes differ by at
-  most one, `StarCabinetTopology.group_buildings`) and places each cabinet on the
-  ray through its group's centroid, `CabinetConfig.end_clearance_m` (new, 1 m)
-  beyond the group's farthest point; the cabinet feeds its group (a building that
+  most one, `StarCabinetTopology.group_buildings`) and places each cabinet on the ray through its group's centroid,
+  `CabinetConfig.end_clearance_m` (new, 1 m, positive) beyond the group's farthest
+  earth electrode along it (rods included) plus the plan extent of the cabinet's own
+  grounding — unless the cabinet would stand there farther than
+  `CabinetConfig.max_far_end_gap_m` (new, 20 m, positive) from the nearest electrode
+  of its group: a wide group's cabinet stands on the ray through its far-end building
+  (the largest projection of its position on the direction of the centroid), 1 m
+  beyond that building (audits W1B-01, W1B-02, W1B-05; on the centroid ray the groups
+  of the default 50-house grid stand 8.8 … 12.8 m from their houses, the wide AP1
+  groups 23.7 … 50.4 m — 10 houses and one small commercial building had their
+  cabinet 50.4 m from the nearest building, drops 527.4 m, now 1.56 m, 311.8 m); a
+  cabinet whose electrodes would come closer than `end_clearance_m` to those of
+  another site raises a `ValueError` naming both; the cabinet feeds its group (a building that
   a main crosses stays fed by that main, Q41). Up to then the cabinets stood on a
   strip along the substation row: both cabinets of the default 30-house network
   west of the substation, the eastern houses fed by drops of 3.5 … 106.5 m from
@@ -1178,16 +1191,29 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
   the harness's norm-wise measure; D3B-02, R4B-13). Tests:
   `tests/test_foundation_owners.py::test_one_owner_per_side_against_one_current_per_segment_holds_in_the_scope`,
   `::test_the_texts_quote_the_field_change_at_the_passive_foundation`.
-- The layout builder builds a cable from where its polyline leaves the start
-  site's closed electrodes for the last time to where it first enters the end
-  site's; the corners in between are part of the sites. A router corner inside a
-  small cabinet ring was a node that houses tapped — 82 of 2 540 drops of 200
-  random layouts with a 2 m cabinet ring started inside it, 79 junctions lay
-  inside it — and a tap at a cabinet's waypoint that the polyline passes earlier
-  was inserted there (audit R6A-01). Tests:
+- The layout builder merges the leading run of a cable's waypoints inside its start
+  site's closed electrodes and the trailing run inside its end site's into those
+  sites, and clips the cable at every other site it passes — the substation, a
+  cabinet, or its own start or end site again: the cable is joined to that site
+  where it enters and where it leaves it, the waypoints in between are part of it,
+  and a free end inside it ends the cable there. A router corner inside a small
+  cabinet ring was a node that houses tapped — 82 of 2 540 drops of 200 random
+  layouts with a 2 m cabinet ring started inside it, 79 junctions lay inside it
+  (audit R6A-01) —, a cable to a far cabinet kept a tap inside a near cabinet's ring
+  (audit W1B-03), and the first fix merged every waypoint before the last passage
+  through the start site and after the first entry into the end site, so a leg that
+  came back lost its taps (audit W1B-04: 142.8 instead of 30.0 m of drops). Tests:
   `tests/test_foundation_contact.py::test_no_layout_drop_starts_inside_a_cabinet_foundation_behind_a_short_bridge`,
   `::test_no_layout_drop_starts_inside_the_station_ring_with_a_fine_router_grid`,
-  `::test_no_layout_drop_or_junction_lies_inside_a_cabinet_foundation_in_random_layouts`.
+  `::test_no_layout_drop_or_junction_lies_inside_a_cabinet_foundation_in_random_layouts`,
+  `::test_no_layout_tap_lies_inside_a_cabinet_the_cable_passes`,
+  `::test_a_hand_made_cable_is_joined_to_a_cabinet_it_passes`,
+  `::test_a_cable_whose_free_end_lies_inside_a_cabinet_ends_at_it`,
+  `::test_a_cable_through_its_start_station_keeps_its_outbound_taps`,
+  `::test_a_cable_that_overshoots_its_cabinet_keeps_its_far_leg`.
+- The owner texts of the generators say one current per straight wire, an outline
+  one owner per straight side (user decisions Q30, Q44; audit W1A-04). Test:
+  `tests/test_foundation_owners.py::test_no_text_describes_the_owners_of_before_q30_and_q44`.
 - **Straight runs of polylines at projected coordinates (audit W1A-01, user
   decision Q30).** A vertex continues a straight wire when it lies on the
   chord of its neighbours up to 64 units of round-off of the coordinates
