@@ -322,3 +322,31 @@ def test_an_ap1_station_is_not_reported() -> None:
     assert not hits
     assert math.isfinite(len(diagnostics.diagnose(w).findings))
     assert not diagnostics.diagnose(w).by_category("interface_contact")
+
+
+def test_a_wire_in_a_thin_layer_is_counted_once_and_listed_per_interface() -> None:
+    """Three layers: a ring in a 12 mm middle layer lies within reach of both
+    of its interfaces; the warning counts one wire, diagnose() lists one
+    finding per interface (100 / 1000 / 10 Ohm m: reach 2.9 and 3.8 radii)."""
+    # audit W4A-07 (self-check of the stream)
+    soil = gf.MultiLayerSoil(
+        layers=[
+            gf.SoilLayer(rho=100.0, h=1.0),
+            gf.SoilLayer(rho=1000.0, h=0.012),
+            gf.SoilLayer(rho=10.0),
+        ]
+    )
+    w = gf.create_world(soil=soil)
+    gf.create_electrode(
+        w, "ring", name="r", center=(0, 0, 1.006), radius=2.0, wire_radius=0.005
+    )
+    gf.create_source(w, attached_to="r", magnitude=1.0)
+    from groundfield.solver._guards import _warn_wires_near_interfaces
+
+    # mom_sommerfeld refuses a wire below h_1 in three layers; the warning
+    # itself is checked directly
+    with pytest.warns(InterfaceContactWarning) as rec:
+        _warn_wires_near_interfaces(w)
+    assert len(rec) == 1 and str(rec[0].message).startswith("1 horizontal wire ")
+    found = diagnostics.diagnose(w).by_category("interface_contact")
+    assert [d.data["interface_m"] for d in found] == [1.0, 1.012]

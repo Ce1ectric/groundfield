@@ -1130,7 +1130,7 @@ def _warn_wires_near_interfaces(world: "object") -> None:
     from groundfield.solver.registry import warn_external
 
     name, kind, z, h, a, rho_wire, rho_other, reach = hits[0]
-    n = len(hits)
+    n = len({(hit[1], hit[0]) for hit in hits})  # a wire near two interfaces once
     contrast = max(rho_wire, rho_other) / min(rho_wire, rho_other)
     side = "conductive" if rho_other < rho_wire else "resistive"
     warn_external(
