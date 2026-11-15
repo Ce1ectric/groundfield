@@ -343,9 +343,8 @@ class World(BaseModel):
         -----
         A :class:`~groundfield.sources.VoltageSource` of 0 V is accepted:
         it is an ideal short between its terminals (or to remote earth)
-        whose current the solve returns. Up to the calendar release a
-        voltage source raised :class:`NotImplementedError` here (up to
-        0.15.0 it solved to zero potentials with a warning).
+        whose current the solve returns (up to 0.15.0 voltage sources
+        were dropped with a warning and solved to zero potentials).
         """
         self._check_unique_names()
         if require_source and self.soil is None:

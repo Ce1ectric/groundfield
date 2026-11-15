@@ -40,8 +40,9 @@ pytestmark = pytest.mark.finding("10.51")
 
 SEG = 0.5
 U_PHASOR = 230.0 * cmath.exp(1j * math.radians(30.0))
-#: Round-off bound of the comparison with a scaled current-source solve.
-RTOL = 1e-11
+#: Round-off bound of the comparison with a scaled current-source solve
+#: (measured: at most 1.4e-15, evidence/w2src/validate_voltage_sources.txt).
+RTOL = 1e-12
 
 
 def _soil(rho: float = 100.0) -> gf.HomogeneousSoil:
@@ -255,6 +256,65 @@ def test_voltage_source_on_a_junction_with_an_internal_resistance() -> None:
     assert _close(res.electrode_potentials["g1"][0], z_e * i_v)
 
 
+@pytest.mark.parametrize("driven", ["g1", "grid"])
+def test_voltage_source_with_a_grid_of_one_owner_per_wire(driven) -> None:
+    """Owner split of the image family (Q30): a driven or a floating grid."""
+
+    def world() -> gf.World:
+        w = _rod_world()
+        gf.create_electrode(
+            w,
+            "grid_mesh",
+            name="grid",
+            corner=(6.0, -5.0, 0.5),
+            size=(10.0, 10.0),
+            n_x=2,
+            n_y=2,
+        )
+        return w
+
+    w_v = world()
+    _voltage(w_v, driven, name="v1")
+    w_i = world()
+    gf.create_source(w_i, attached_to=driven, name="i1", magnitude=1.0)
+    res_v = _solve(w_v)
+    res_i = _solve(w_i)
+    assert res_v.metadata["wire_owners"]["grid"] == 6
+    _check_scaled(res_v, res_i, "v1", "i1")
+    passive = "grid" if driven == "g1" else "g1"
+    # The passive electrode floats: exactly zero net current.
+    assert res_v.electrode_currents[passive][0] == 0j
+
+
+def test_post_processing_reads_the_solved_source_current() -> None:
+    """split_factor and touch_voltage_spectrum use the solved current."""
+    from groundfield.postprocess.current_balance import split_factor
+
+    def world() -> gf.World:
+        w = _buried_rods()
+        gf.create_conductor(
+            w,
+            name="lead",
+            start="g1",
+            end="g2",
+            cross_section=16e-6,
+            lumped_series_resistance_ohm=5.0,
+        )
+        return w
+
+    w_v = world()
+    _voltage(w_v, "g1", name="v1")
+    w_i = world()
+    gf.create_source(w_i, attached_to="g1", name="i1", magnitude=1.0)
+    res_v, res_i = _solve(w_v), _solve(w_i)
+    s_v, s_i = split_factor(res_v, w_v), split_factor(res_i, w_i)
+    assert 0.0 < s_i.real < 1.0
+    assert _close(s_v, s_i)
+    u_v = gf.touch_voltage_spectrum(res_v, w_v, electrode="g1", currents=[100.0])
+    u_i = gf.touch_voltage_spectrum(res_i, w_i, electrode="g1", currents=[100.0])
+    assert u_i > 0.0 and u_v == pytest.approx(u_i, rel=1e-12)
+
+
 # ---------------------------------------------------------------------
 # two-terminal voltage source, several sources, superposition
 # ---------------------------------------------------------------------
@@ -376,8 +436,9 @@ def test_voltage_driven_rod_against_dwight_and_the_hemispherical_far_field() -> 
     i_v = _record(res, "v1").current[0]
     radius = w.electrodes[0].wire_radius
     r_dwight = dwight1936.rod(rho, length, radius)
-    # Model error of the thin-wire, uniform-current rod (< 1 %).
-    assert abs(i_v - U_PHASOR / r_dwight) <= 0.01 * abs(i_v)
+    # Dwight's formula is the uniform-current (average-potential) rod too:
+    # measured -0.012 % at ds = 0.5 ... 0.125 m.
+    assert abs(i_v - U_PHASOR / r_dwight) <= 1e-3 * abs(i_v)
     # Far field of any electrode: the hemispherical electrode.
     r = 2000.0
     phi = res.potential(np.array([[r, 0.0, 0.0]]))[0]

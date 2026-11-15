@@ -913,13 +913,14 @@ def step_voltage(
 
 
 def _source_current(result: "FieldResult", source: str | None, k: int) -> complex:
-    """Impressed current of the selected current source at index ``k``."""
+    """Current of the selected source at index ``k``: impressed, or solved
+    for a voltage source."""
     if not result.sources:
         raise ValueError(
             "touch_voltage_spectrum needs the source snapshot of the solve "
             "(FieldResult.sources); this result carries none."
         )
-    current = [s for s in result.sources if s.kind == "current"]
+    current = [s for s in result.sources if s.kind in ("current", "voltage")]
     if source is None:
         if len(current) != 1:
             names = ", ".join(s.name for s in current) or "none"
