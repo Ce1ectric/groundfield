@@ -64,7 +64,7 @@ page runs in its own temporary working directory, which is prepended to
 Pages of the old layout
 -----------------------
 :data:`LEGACY_PREFIXES` names the pages of the documentation layout
-before 2026.11 (``docs/api``, ``docs/engines``, ``docs/examples``, the
+before 2026.11 (``docs/api``, ``docs/engines``, the old ``docs/examples``, the
 old top-level pages). The 2026.11 restructure (Diátaxis) deletes or moves
 all of them; while one still exists in a working tree, its blocks run
 without strictness and failures are only reported. The new layout never
@@ -117,7 +117,6 @@ SLOW_PAGES: dict[str, str] = {}
 LEGACY_PREFIXES: tuple[str, ...] = (
     "docs/api/",
     "docs/engines/",
-    "docs/examples/",
     "docs/concepts.md",
     "docs/performance.md",
     "docs/installation.md",

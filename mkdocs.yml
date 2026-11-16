@@ -146,7 +146,8 @@ extra:
 # Diátaxis layout (review pass 10, Appendix B). Pages are owned by the
 # docs streams of release 2026.11: getting started and reference (DOC-A),
 # tutorials and how-to guides (DOC-B), explanation and ADRs (DOC-C),
-# changelog, roadmap and audit history (DOC-D).
+# changelog, roadmap and audit history (DOC-D); the examples (case studies
+# E01-E03) were added in the final documentation pass.
 nav:
   - Home: index.md
   - Getting started:
@@ -164,6 +165,9 @@ nav:
       - "T08 Touch and step voltage": tutorials/T08_touch_and_step_assessment.ipynb
       - "T09 Choosing an engine, convergence": tutorials/T09_choosing_an_engine_and_convergence.ipynb
       - "T10 Reproducible studies": tutorials/T10_reproducible_studies.ipynb
+  - Examples:
+      - examples/index.md
+      - "E02 Single-family house": examples/E02_single_family_house.ipynb
   - How-to guides:
       - how-to/index.md
       - "Install the optional extras": how-to/install-extras.md
