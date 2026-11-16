@@ -2059,13 +2059,8 @@ def test_w4r3b_01_a_collinear_wire_that_does_not_meet_counts_nothing() -> None:
             assert abs(_w4r2b_at(m2, d2, x) / _w4r2b_at(m1, d1, x) - 1.0) < 1e-12
 
 
-# audit W4R3B-01 (slow: one 3-D solve of about 470 000 nodes)
+# audit W4R3B-01 (slow where it solves; the 3-D model refuses it before meshing)
 @pytest.mark.slow
-@pytest.mark.xfail(
-    strict=True,
-    reason="open point of stream fw4r3b: R = gap / 1.5 (the brief) leaves R12 at "
-    "-6.0e-3, 1.45 times the transfer estimate; R <= gap / 3 meets it (h09)",
-)
 def test_w4r3b_01_stacked_rods_of_two_ports_3_cm_apart_within_their_estimates() -> None:
     """The same rods 3 cm end to end (a smaller R is possible: 2 cm >= 2.2 a):
     every 3-D port entry and the bonded value must lie within their
@@ -2092,24 +2087,48 @@ def test_w4r3b_01_stacked_rods_of_two_ports_3_cm_apart_within_their_estimates() 
     assert abs(dev[0, 1]) <= r3.metadata["fem_error_estimate_transfer"]
     bonded = 1.0 / np.linalg.inv(r).sum() / (1.0 / np.linalg.inv(axi).sum()) - 1.0
     assert abs(bonded) <= est
-    assert abs(r3.metadata["fem_source_radius"] - 0.02) < 1e-9
+
+
+def test_w4r3b_01_wires_end_to_end_stay_3_source_radii_apart() -> None:
+    """Wires end to end in line keep their gap at least 3 source radii (the
+    coordinator's decision on the open point of stream fw4r3b: at gap / 1.5
+    the transfer entry R12 lay 1.5 times outside its estimate, from gap / 3
+    on inside it in every case, evidence h09): rods of a = 8 mm 10 / 15 cm
+    apart take R = 3.33 / 5 cm, 18.1 cm apart the default 6 cm; 3 cm apart
+    (R would be 1 cm) they are refused before meshing. Round 3 before the
+    decision: 6 / 6 / 6 cm and R = 2 cm for 3 cm."""
+    # audit W4R3B-01 (coordinator decision on open point 1)
+    from groundfield.solver.fem import _solid
+
+    eng = gf.create_engine(backend="fem", segment_length=0.25)
+    for gap, expected in ((0.10, 0.10 / 3.0), (0.15, 0.05), (0.181, 0.06)):
+        w = _w4r3b_stacked(gap)
+        notes: list[str] = []
+        r = _solid.source_radius(
+            w, eng, wires3.world_pieces(w), [], None, None, notes=notes
+        )
+        assert abs(r - expected) < 1e-12, gap
+        if gap < 0.18:
+            assert "lie end to end" in notes[0] and "3 source radii" in notes[0]
+    exc = _w4r3b_until_node_check(_w4r3b_stacked(0.03))
+    assert isinstance(exc, gf.BackendCapabilityError)
+    assert "lie end to end, 30 mm apart without touching" in str(exc)
+    assert "3 source radii" in str(exc)
 
 
 # audit W4R3B-01 (slow: one 3-D solve of about 470 000 nodes)
 @pytest.mark.slow
-def test_w4r3b_01_stacked_rods_3_cm_apart_keep_their_diagonal_within_the_estimate() -> (
-    None
-):
-    """Stacked rods of two electrodes 3 cm end to end at R = 2 cm: R11, R22 and
-    the bonded value lie within the estimate of the axisymmetric model's,
-    and R12 within 1.5 times the transfer estimate (measured -6.0e-3 against
-    4.15e-3; within it only from R <= gap / 3, evidence h09 of stream
-    fw4r3b). Base: R11 +6.35e-3 (estimate 4.90e-3), R12 -2.88e-2 (transfer
-    estimate 4.46e-3) at R = 6 cm."""
-    # audit W4R3B-01
+def test_w4r3b_01_stacked_rods_6_cm_apart_within_their_estimates() -> None:
+    """Stacked rods of two electrodes 6 cm end to end take R = 2 cm: every
+    port entry, the transfer entry included, and the bonded value lie within
+    their estimates of the axisymmetric model's (measured R12 -3.5e-3 against
+    a transfer estimate of 4.3e-3, evidence h09 of stream fw4r3b). Round 3
+    before the decision (R = gap / 1.5 = 4 cm): R12 -8.78e-3 against 4.51e-3;
+    base 4f443f5 (R = 6 cm, the other rod counted whole): R12 outside too."""
+    # audit W4R3B-01 (coordinator decision on open point 1)
     from groundfield.solver.fem import solve_fem
 
-    w = _w4r3b_stacked(0.03)
+    w = _w4r3b_stacked(0.06)
     eng = gf.create_engine(backend="fem", segment_length=0.25)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -2119,11 +2138,42 @@ def test_w4r3b_01_stacked_rods_3_cm_apart_keep_their_diagonal_within_the_estimat
     r = np.asarray(r3.metadata["fem_port_resistance"])
     dev = r / axi - 1.0
     est = r3.metadata["fem_error_estimate"]
-    assert abs(r3.metadata["fem_source_radius"] - 0.02) < 1e-9
+    assert abs(r3.metadata["fem_source_radius"] - 0.02) < 1e-12
     assert abs(dev[0, 0]) <= est and abs(dev[1, 1]) <= est
+    assert abs(dev[0, 1]) <= r3.metadata["fem_error_estimate_transfer"]
     bonded = 1.0 / np.linalg.inv(r).sum() / (1.0 / np.linalg.inv(axi).sum()) - 1.0
     assert abs(bonded) <= est
-    assert abs(dev[0, 1]) <= 1.5 * r3.metadata["fem_error_estimate_transfer"]
+
+
+# audit W4R3B-01 (slow: one 3-D solve of about 310 000 nodes)
+@pytest.mark.slow
+@pytest.mark.xfail(
+    strict=True,
+    reason="open point of stream fw4r3b: the in-line factor 3 (coordinator "
+    "decision) takes R = 3.33 cm here and leaves R12 at -5.0e-3, 1.15 times the "
+    "transfer estimate; R <= gap / 5 meets it in every measured case (h09d, h12)",
+)
+def test_w4r3b_01_stacked_rods_10_cm_apart_within_their_estimates() -> None:
+    """Stacked 8 mm rods of two electrodes 10 cm end to end: every port
+    entry, the transfer entry included, and the bonded value within their
+    estimates of the axisymmetric model's (the coordinator's acceptance of
+    the in-line factor). Measured at R = 3.33 cm: R12 -5.03e-3 against a
+    transfer estimate of 4.39e-3; at R = 2 cm -2.60e-3 against 4.35e-3."""
+    # audit W4R3B-01 (coordinator decision on open point 1)
+    from groundfield.solver.fem import solve_fem
+
+    w = _w4r3b_stacked(0.10)
+    eng = gf.create_engine(backend="fem", segment_length=0.25)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        ra = solve_fem(w, eng, model="axisymmetric")
+        r3 = solve_fem(w, eng, model="3d")
+    axi = np.asarray(ra.metadata["fem_port_resistance"])
+    r = np.asarray(r3.metadata["fem_port_resistance"])
+    dev = r / axi - 1.0
+    est = r3.metadata["fem_error_estimate"]
+    assert abs(dev[0, 0]) <= est and abs(dev[1, 1]) <= est
+    assert abs(dev[0, 1]) <= r3.metadata["fem_error_estimate_transfer"]
 
 
 def _w4r3b_v_two(theta_deg, L=4.0, z=0.8, offset=0.0):
@@ -2224,6 +2274,45 @@ def test_w4r3b_02_wires_that_meet_at_a_small_angle_are_left_alone() -> None:
     for reach in (0.09, 0.12):
         b = wires3.beside_wires(model, reach)
         assert b.kind == "beside" and abs(b.distance - 0.03) < 1e-12
+
+
+def test_w4r3b_02_wires_that_meet_below_10_degrees_run_beside_each_other() -> None:
+    """Two wires of one system are left alone near where they meet only if
+    they meet at 10 degrees or more (the coordinator's decision on open point
+    2 of stream fw4r3b). A V of 9 degrees, as two bonded strips and as one
+    polyline, runs beside again and is refused before meshing, naming the
+    angle; two bonded parallel 4 m strips 8 mm apart (a = 5 mm, the surfaces
+    touch along their length) are refused naming their distance, as at the
+    base; the V of 10 degrees stays solved. Round 3 before the decision:
+    the 9-degree V and the parallel strips solved at R = 6 cm."""
+    # audit W4R3B-02 (coordinator decision on open point 2)
+    for world in (_w4r3b_v_two(9.0), _w4r3b_v_poly(9.0)):
+        b = wires3.beside_wires(_w4r2b_model(world), 1.5 * R_SRC)
+        assert b is not None and abs(b.angle - 9.0) < 1e-9
+        exc = _w4r3b_until_node_check(world)
+        assert isinstance(exc, gf.BackendCapabilityError), str(exc)
+        assert "at an angle of 9°" in str(exc) and "10°" in str(exc)
+    for world in (_w4r3b_v_two(10.0), _w4r3b_v_poly(10.0)):
+        assert wires3.beside_wires(_w4r2b_model(world), 1.5 * R_SRC) is None
+    w = gf.create_world(soil=H100)
+    gf.create_electrode(
+        w, "strip", name="g", start=(0, 0, 0.8), end=(4, 0, 0.8), wire_radius=0.005
+    )
+    gf.create_electrode(
+        w,
+        "strip",
+        name="h",
+        start=(0, 0.008, 0.8),
+        end=(4, 0.008, 0.8),
+        wire_radius=0.005,
+    )
+    gf.create_conductor(w, start="g", end="h")
+    gf.create_source(w, attached_to="g", magnitude=1.0)
+    b = wires3.beside_wires(_w4r2b_model(w), 1.5 * R_SRC)
+    assert b.kind == "beside" and abs(b.distance - 0.008) < 1e-12
+    exc = _w4r3b_until_node_check(w)
+    assert isinstance(exc, gf.BackendCapabilityError)
+    assert "runs beside electrode" in str(exc) and "8 mm apart" in str(exc)
 
 
 def _w4r3b_meander(theta, w=0.10, L=4.0, z=0.8):

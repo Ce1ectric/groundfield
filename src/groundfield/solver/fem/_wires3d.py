@@ -70,8 +70,12 @@ piece carries its own current, which the observer's correction cannot know
 (audit W4R2B-03: two coaxial rings 7.5 cm apart read +4.35e-3 in a port
 entry with the window term; audit W4R3B-01: a collinear rod of another
 electrode 1 cm below counted whole). The 3-D model keeps wires that do not
-meet but run beside each other or lie end to end at least $1.5\\,R$ apart
-(:func:`beside_wires`), so none of them reaches the window.
+meet but run beside each other at least $1.5\\,R$ apart, and wires end to end
+at least $3\\,R$ (:func:`beside_wires`), so none of them reaches the window;
+wires that meet at less than 10° count as not meeting there. An encased wire
+meets others by its outer shell radius $r_b$ (what the soil sees): two encased
+wires of different ports whose shells touch are one conductor in the
+correction, and their separate port entries are not resolved.
 For two parallel lines the exact correction is below $10^{-3}$ of the self
 term from $D = 1.5\\,R$ on (evidence ``f01`` of stream fw4fem3d); the
 surface image of a horizontal wire lies $2z \\ge 2.5\\,R$ away and never
@@ -158,6 +162,20 @@ TAPER = 2.0
 #: conductor there (:func:`beside_wires`). Two pieces lie *in line* where the
 #: gap between their nearest ends runs within this angle of both axes.
 BESIDE_SINE = 0.5
+
+#: Two wires end to end in line keep their gap at least this many source
+#: radii (the coordinator's decision on audit W4R3B-01): at a gap of 1.5 R
+#: the transfer resistance of stacked rods read 1.5 … 2.0 times outside its
+#: estimate, from a gap of 3 R on inside it in every measured case (wire
+#: radii of 2, 4 and 8 mm; evidence ``h09`` of stream fw4r3b).
+IN_LINE_FACTOR = 3.0
+
+#: Two wires that meet are left alone near where they meet only where they
+#: meet at 10° or more (this sine; the coordinator's decision on audit
+#: W4R3B-02). Below, nearly parallel or running together at the touching
+#: distance, they run beside each other as wires that do not meet: two
+#: strips touching along their length are not one conductor.
+MEET_SINE = math.sin(math.radians(10.0))
 
 
 @dataclass(frozen=True)
@@ -660,6 +678,19 @@ class Beside(NamedTuple):
     #: the reach of another wire it does not meet) or ``"in line"`` (end to
     #: end with a gap, audit W4R3B-01).
     kind: str
+    #: Angle in degrees at which the two wires meet, where they touch but meet
+    #: at less than 10° (:data:`MEET_SINE`); ``None`` otherwise.
+    angle: float | None = None
+
+    @property
+    def limit(self) -> float:
+        """The source radius in m these wires allow.
+
+        Their distance over :data:`IN_LINE_FACTOR` for wires end to end,
+        over :data:`NEAR_FACTOR` otherwise.
+        """
+        factor = IN_LINE_FACTOR if self.kind == "in line" else NEAR_FACTOR
+        return self.distance / factor
 
 
 def _runs(model: "WireModel", contacts: _Contacts) -> np.ndarray:
@@ -680,12 +711,13 @@ def _runs(model: "WireModel", contacts: _Contacts) -> np.ndarray:
 def beside_wires(model: WireModel, reach: float) -> Beside | None:
     """The closest wires that run beside each other within ``reach`` m.
 
-    The 3-D model keeps such wires at least :data:`NEAR_FACTOR` source radii
-    apart (:func:`groundfield.solver.fem._solid.source_radius`; audits
-    W4R2B-03, W4R2A-01, W4R3B-01): closer, the discs of their smoothed
-    sources reach the other wire, the mesh no longer gives the other wire's
-    exact field and the radius correction has no term for it. Two wires run
-    beside each other where
+    ``reach`` is :data:`NEAR_FACTOR` source radii. The 3-D model keeps such
+    wires at least that far apart (:func:`groundfield.solver.fem._solid.source_radius`;
+    audits W4R2B-03, W4R2A-01): closer, the discs of their smoothed sources
+    reach the other wire, the mesh no longer gives the other wire's exact
+    field and the radius correction has no term for it; wires end to end in
+    line it keeps :data:`IN_LINE_FACTOR` source radii apart (audit W4R3B-01).
+    Two wires run beside each other where
 
     * a point of one lies within ``reach`` of the *side* of a piece of the
       other — the nearest point of that piece is not one of its ends — and
@@ -697,30 +729,34 @@ def beside_wires(model: WireModel, reach: float) -> Beside | None:
       that it does not meet (:func:`wire_systems`; kind ``"around"``): a
       small ring around a rod's head; or
     * two wires that do not meet lie in line, end to end with a gap below
-      ``reach`` (kind ``"in line"``: stacked rods of two electrodes, audit
-      W4R3B-01; up to then they were left alone, and rods 1 cm apart read
-      +1.6e-2 in a port entry and −7.3e-2 in the transfer entry).
+      :data:`IN_LINE_FACTOR` source radii (kind ``"in line"``: stacked rods
+      of two electrodes, audit W4R3B-01; up to then they were left alone,
+      and rods 1 cm apart read +1.6e-2 in a port entry and −7.3e-2 in the
+      transfer entry).
 
     Left alone: pieces on one axis line that meet (the collinear pieces of a
-    galvanic conductor, a rod cut into touching pieces), and wires that meet
-    at any angle or cross at more than 30° (a rod on a ring, a T-joint, a
-    crossing, a corner, the attachment of a galvanic conductor, a V or a
-    branch narrower than 30°) — two pieces whose straight runs meet at an
-    angle θ come within ``reach`` of each other only within ``reach`` / sin θ
-    of where they meet, where the window term counts the other wire, whose
-    current agrees there (audit W4R3B-02: up to then a V narrower than 30°
-    was refused with the distance of the sample point nearest to the apex)
-    — and the consecutive chords of a ring.
+    galvanic conductor, a rod cut into touching pieces), wires that meet at
+    10° or more (:data:`MEET_SINE`; a rod on a ring, a T-joint, a crossing,
+    a corner, the attachment of a galvanic conductor, a V or a branch of 10
+    … 30°) — two pieces whose straight runs meet at an angle θ come within
+    ``reach`` of each other only within ``reach`` / sin θ of where they
+    meet, where the window term counts the other wire, whose current agrees
+    there (audit W4R3B-02: up to then a V narrower than 30° was refused with
+    the distance of the sample point nearest to the apex) — wires that cross
+    at more than 30°, and the consecutive chords of a ring. Wires that meet
+    at less than 10°, nearly parallel or touching along their length, run
+    beside each other like wires that do not meet; the result names their
+    angle.
 
     Returns
     -------
     Beside or None
-        The configuration with the smallest axis distance below ``reach``
-        (for ``"beside"``, ``"folded"`` and ``"in line"`` the distance of the
-        two pieces' axes, independent of the sampling; for ``"around"`` the
-        farthest point of the wire from the other wire, so the whole wire no
-        longer lies within 1.5 radii of the source radius it leads to),
-        ``None`` if there is none.
+        The configuration that allows the smallest source radius
+        (:attr:`Beside.limit`): for ``"beside"``, ``"folded"`` and ``"in
+        line"`` the distance of the two pieces' axes, independent of the
+        sampling; for ``"around"`` the farthest point of the wire from the
+        other wire, so the whole wire no longer lies within 1.5 radii of the
+        source radius it leads to. ``None`` if there is none.
     """
     pieces = model.pieces
     m = len(pieces)
@@ -732,7 +768,8 @@ def beside_wires(model: WireModel, reach: float) -> Beside | None:
     direction = (end - start) / length[:, None]
     ports = np.array([p.port for p in pieces], dtype=int)
     chains = _chains(model)
-    contacts = _contacts(model, reach)
+    reach_line = reach * IN_LINE_FACTOR / NEAR_FACTOR
+    contacts = _contacts(model, reach_line)
     systems = wire_systems(model, contacts)
     runs = _runs(model, contacts)
     meet = contacts.weight >= 1.0
@@ -788,8 +825,10 @@ def beside_wires(model: WireModel, reach: float) -> Beside | None:
         other = (cand[None, :] != own[:, None]) & ~collinear
         tol = 1e-9 * length[cand][None, :]
         side = (tau > tol) & (tau < length[cand][None, :] - tol)
-        # pieces whose straight runs meet are left alone (audit W4R3B-02)
+        # pieces whose straight runs meet at 10° or more are left alone
+        # (audit W4R3B-02 and the coordinator's minimum angle)
         met = np.isin(runs[own][:, None] * n_runs + runs[cand][None, :], touching)
+        met &= sine >= MEET_SINE * (1.0 - 1e-9)
         hit = other & side & ~met & (sine < BESIDE_SINE) & (dist < reach)
         if np.any(hit):
             i, j = np.nonzero(hit)
@@ -825,20 +864,25 @@ def beside_wires(model: WireModel, reach: float) -> Beside | None:
         k = int(np.argmin(np.where(tie, sampled, np.inf)))
         p_, q_ = int(pairs[k, 0]), int(pairs[k, 1])
         kind = "folded" if chains[p_] == chains[q_] else "beside"
-        best = Beside(float(d[k]), int(ports[p_]), int(ports[q_]), kind)
+        angle = None
+        if np.isin(runs[p_] * n_runs + runs[q_], touching):
+            sin_pq = float(np.linalg.norm(np.cross(direction[p_], direction[q_])))
+            angle = math.degrees(math.asin(min(1.0, sin_pq)))
+        best = Beside(float(d[k]), int(ports[p_]), int(ports[q_]), kind, angle)
     # wires in line, end to end, that do not meet (audit W4R3B-01)
     line = (
         contacts.in_line
-        & (contacts.distance < reach)
+        & (contacts.distance < reach_line)
         & (systems[contacts.i] != systems[contacts.j])
     )
     if np.any(line):
         k = int(np.argmin(np.where(line, contacts.distance, np.inf)))
-        if best is None or contacts.distance[k] < best.distance:
-            i, j = int(contacts.i[k]), int(contacts.j[k])
-            best = Beside(
-                float(contacts.distance[k]), int(ports[i]), int(ports[j]), "in line"
-            )
+        i, j = int(contacts.i[k]), int(contacts.j[k])
+        found = Beside(
+            float(contacts.distance[k]), int(ports[i]), int(ports[j]), "in line"
+        )
+        if best is None or found.limit < best.limit:
+            best = found
     first = {int(c): k for k, c in reversed(list(enumerate(col)))}
     np.fill_diagonal(farthest, np.inf)
     for c1, c2 in zip(*np.nonzero(farthest < reach), strict=True):
@@ -846,8 +890,9 @@ def beside_wires(model: WireModel, reach: float) -> Beside | None:
         far = float(farthest[c1, c2])
         if systems[k1] == systems[k2]:
             continue
-        if best is None or far < best.distance:
-            best = Beside(far, int(ports[k1]), int(ports[k2]), "around")
+        found = Beside(far, int(ports[k1]), int(ports[k2]), "around")
+        if best is None or found.limit < best.limit:
+            best = found
     return best
 
 
