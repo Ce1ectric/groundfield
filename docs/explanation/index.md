@@ -1,16 +1,21 @@
 # Explanation
 
 This section explains what `groundfield` computes, with which equations,
-under which assumptions and how well. It is written to be cited: every
-engine page states its mathematical and physical context, the equations
-and discretisation actually implemented, its validity range and the
-literature, and the accuracy figures are generated from the benchmark
+under which assumptions and how well. Read it when you want to know why a
+result looks the way it does, which engine to trust for a question, or
+how to cite the method. Every engine page states its physical model, the
+equations and discretisation actually implemented, its validity range and
+the literature; the accuracy figures are generated from the benchmark
 suite rather than written by hand.
+
+**Start here:** [Concepts](concepts.md) for the overall picture, then
+[Engines](engines/index.md) to choose the engine for your study and to see
+where each one must not be used.
 
 | Page | Content |
 |---|---|
-| [Concepts](concepts.md) | position in the software family, the objects of a computation, modelling assumptions, the reduced $\rho$–$f$ model |
-| [Engine family](engines/index.md) | the governing equations, the two current models, the registered backends, how to choose, deprecated names |
+| [Concepts](concepts.md) | the objects of a computation, what happens in a solve, what a result contains, the modelling assumptions, the reduced $\rho$–$f$ model |
+| [Engines](engines/index.md) | which engine for which question: decision path, accuracy, cost, limits of use; the governing equations and the two current models |
 | [`image`](engines/image.md) · [`image_2layer`](engines/image_2layer.md) · [`mom`](engines/mom.md) · [`mom_sommerfeld`](engines/mom_sommerfeld.md) · [`fem`](engines/fem.md) | one theory page per engine |
 | [Kernels](kernels.md) | point source and exact line source, the Galerkin self term, field points near wires |
 | [Earth return](earth-return.md) | inductive coupling of conductors: perfect mirror, Carson, Sommerfeld / Pollaczek, skin effect |

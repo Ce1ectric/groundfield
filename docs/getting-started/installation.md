@@ -1,5 +1,10 @@
 # Installation
 
+This page shows how to install `groundfield` for use (from PyPI, with the
+optional extras you need) and for development (from a Git checkout with
+Poetry). When it is installed, continue with the
+[quickstart](quickstart.md).
+
 `groundfield` runs on **Python 3.12, 3.13 and 3.14** on any operating
 system. The core dependencies are numpy, scipy, pydantic, sympy, pandas
 and matplotlib.
@@ -18,19 +23,27 @@ python -c "import groundfield; print(groundfield.__version__)"
 
 ### Optional extras
 
+The core package solves every engine except the three-dimensional model of
+`fem`. Four extras add features:
+
 | Extra | Installs | Needed for |
 |---|---|---|
+| `fast` | `numba` | compiled kernels for the two-layer image series and the far field of the exact line-source kernel; same results, shorter solve times |
+| `fem3d` | `scikit-fem`, `pyamg` | the three-dimensional model of the experimental `fem` backend: every world that is not rods on one axis and rings around it ([`fem`](../explanation/engines/fem.md)) |
 | `geo` | `requests`, `shapely`, `pyproj` | building footprints from OpenStreetMap (Overpass), WGS84 → local coordinates, polygon geometry ([Geo / OSM](../reference/api/geo.md), ADR-0011) |
 | `groundinsight` | `groundinsight` | live `groundinsight.BusType` objects and writing into the `groundinsight` SQLite store; the JSON export works without it ([IO and groundinsight](../reference/api/io.md), ADR-0008) |
-| `fast` | `numba` | compiled kernels for the two-layer image series and the far field of the exact line-source kernel; same results, shorter solve times |
 
 ```bash
-pip install "groundfield[geo,fast]"
+pip install "groundfield[fast]"                            # recommended for large studies
+pip install "groundfield[fast,fem3d,geo,groundinsight]"    # all extras
 ```
 
-Without the `geo` extra, `import groundfield.geo` works, and the
-functions that need the extra raise an `ImportError` with the install
-command. Without `fast`, every kernel runs in numpy.
+A missing extra is not an error until you call a function that needs it:
+then groundfield raises an `ImportError` that names the extra to install
+(`import groundfield.geo` itself works without `geo`). Without `fast`,
+every kernel runs in numpy. The how-to guide
+[install the optional extras](../how-to/install-extras.md) shows how to
+check what an environment has.
 
 ## From a Git checkout (development)
 
@@ -42,6 +55,7 @@ git clone https://github.com/Ce1ectric/groundfield.git
 cd groundfield
 poetry install                     # package + dev group
 poetry install --extras "geo fast" # optional extras
+poetry install --all-extras        # every extra, fem3d included
 ```
 
 The `dev` group contains pytest (with pytest-cov and pytest-xdist),
@@ -96,7 +110,7 @@ second, `2027.1.0` the first of January 2027. Releases up to `0.15.0`
 used semantic versioning. Deprecated names keep working for at least
 two releases and six months; see [Deprecations](../reference/deprecations.md).
 
-!!! note "For maintainers: cutting a release"
+??? note "For maintainers: cutting a release"
 
     The release tool lives in the repository and is not installed with
     the package:
@@ -130,3 +144,12 @@ the interface between them:
 groundinsight = { path = "../groundinsight", develop = true }
 groundmeas = { path = "../groundmeas", develop = true }
 ```
+
+## Next steps
+
+- [Quickstart](quickstart.md): a first earthing impedance, touch voltage
+  and plot in a few minutes.
+- [Tutorials](../tutorials/index.md): the package step by step, as
+  executed notebooks.
+- [Examples](../examples/index.md): three complete case studies of real
+  earthing systems.

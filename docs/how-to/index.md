@@ -1,11 +1,12 @@
 # How-to guides
 
 Short, task-oriented recipes for readers who know what they want to do.
-Each guide assumes you have worked through the first
-[tutorials](../tutorials/index.md) or know the basic workflow
-(soil → world → electrodes → source → engine → `solve`). The code blocks
-are complete and are executed by the test suite
-(`tests/test_doc_snippets.py`), so what you copy is what CI ran.
+Each guide assumes you know the basic workflow
+(soil → world → electrodes → source → engine → `solve`) from the
+[quickstart](../getting-started/quickstart.md) or the first
+[tutorials](../tutorials/index.md). The code blocks are complete and are
+executed by the test suite (`tests/test_doc_snippets.py`), so what you copy
+is what CI ran.
 
 | Guide | Task |
 |---|---|
@@ -20,6 +21,8 @@ are complete and are executed by the test suite
 | [Read and act on warnings](warnings-and-diagnostics.md) | `diagnose()`, the common warnings and what to do about them |
 | [Contribute to the documentation](contribute-to-the-docs.md) | page types, tutorial notebooks, the snippet markers, local build |
 
-The theory behind the engines and the validation numbers are in the
+Which engine to use for a task, and where each engine must not be used,
+is on [choosing an engine](../explanation/engines/index.md); the theory
+behind the engines and the validation numbers are in the
 [explanation](../explanation/index.md) section; every public name is in the
 [reference](../reference/index.md).

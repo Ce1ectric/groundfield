@@ -1,12 +1,14 @@
 # Tutorials
 
 Ten tutorials take you from a single earth rod to reproducible studies of
-whole low-voltage networks. Each one is a Jupyter notebook: the page shows
-the stored outputs of a complete run, and you can download the notebook
-and run it yourself. Every tutorial explains what is computed and why,
-gives the physics in a few sentences, and checks its key numbers against a
-second method — a closed-form formula, a limit, another engine or a
-convergence study — in `assert` cells.
+whole low-voltage networks. They are for readers who want to learn the
+package step by step; if you only need a recipe for one task, the
+[how-to guides](../how-to/index.md) are shorter. Each tutorial is a Jupyter
+notebook: the page shows the stored outputs of a complete run, and you can
+download the notebook and run it yourself. Every tutorial explains what is
+computed and why, gives the physics in a few sentences, and checks its key
+numbers against a second method — a closed-form formula, a limit, another
+engine or a convergence study — in `assert` cells.
 
 | | Tutorial | You learn |
 |---|---|---|
@@ -23,14 +25,20 @@ convergence study — in `assert` cells.
 
 ## Where to start
 
-- **New to groundfield:** T01 → T02 → T03. They cover the workflow, the
-  soil models and the impedances of connected systems.
+- **New to groundfield:** the [quickstart](../getting-started/quickstart.md),
+  then T01 → T02 → T03. They cover the workflow, the soil models and the
+  impedances of connected systems.
 - **Reduced models for network studies:** T03 → T04 → T05.
 - **Studies on real LV networks:** T03 → T06 → T07, then T10 before a
   large parameter study.
 - **Safety assessment:** T01 → T03 → T08.
-- **Validation and method questions:** T02 and T09, and the
-  [explanation](../explanation/index.md) pages of the engines.
+- **Validation and method questions:** T02 and T09, and
+  [choosing an engine](../explanation/engines/index.md).
+
+After the tutorials, the [examples](../examples/index.md) apply the same
+tools to complete engineering studies: a secondary substation with its
+low-voltage network, a single-family house, and the mesh grid of a
+high-voltage substation in two-layer soil.
 
 ## Running the notebooks yourself
 
@@ -54,4 +62,3 @@ are published with.
 The terms used (Ortsnetz, PEN, foundation earth electrode, EPR, …) are
 explained in the [glossary](../reference/glossary.md), units and sign
 conventions in [units and conventions](../reference/units-and-conventions.md).
-Task-oriented recipes are in the [how-to guides](../how-to/index.md).
