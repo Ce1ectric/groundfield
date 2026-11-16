@@ -492,7 +492,7 @@ read two coaxial rings 7.5 cm apart +4.35e-3 in a port entry, above the
 estimate). The 3-D model therefore keeps wires that run beside each other
 at least $1.5\,R$ apart, as it keeps every disc in the soil and in one
 layer: it takes $R$ = (their axis distance) / 1.5 for the whole world
-(wires end to end: their gap / 3). Two wires run beside each other where
+(wires end to end: their gap / 5). Two wires run beside each other where
 
 - a point of one lies within $1.5\,R$ of the *side* of the other (its
   nearest point is not an end of that wire) and the two run within 30° of
@@ -501,36 +501,37 @@ layer: it takes $R$ = (their axis distance) / 1.5 for the whole world
   trench of an earthing strip; or
 - the whole of one electrode's wire lies within $1.5\,R$ of another wire it
   does not meet (a small ring around a rod's head); or
-- two wires that do not meet lie in line, end to end, with a gap below
-  $3\,R$ that runs within 30° of both axes: stacked rods of two electrodes
-  (audit W4R3B-01; such rods 1 cm apart read +1.57e-2 in a port entry and
-  −7.3e-2 in the transfer entry, against estimates of 4.9e-3 / 4.5e-3).
-  Wires end to end keep their gap at $3\,R$, not $1.5\,R$: at $1.5\,R$ the
-  transfer entry read 1.5 … 2.0 times outside its estimate.
+- two wires that do not meet lie in line, end to end — the gap runs within
+  30° of both axes and within $a_1 + a_2$ of both axis lines — with a gap
+  below $5\,R$: stacked rods of two electrodes (audit W4R3B-01; such rods
+  1 cm apart read +1.57e-2 in a port entry and −7.3e-2 in the transfer
+  entry, against estimates of 4.9e-3 / 4.5e-3).
+
+Wires end to end keep their gap at $5\,R$, not $1.5\,R$, because the
+measured error of their transfer entry falls with $R$ / gap: at $1.5\,R$ it
+read 1.5 … 2.0 times its estimate, at $3\,R$ still 1.15 … 1.18 times for
+8 mm rods 10 … 18 cm apart, at $5\,R$ it lies within the estimate in every
+measured case (the coordinator's decision on the stream's open point).
 
 Stacked rods ($a$ = 8 mm, 1.5 m each, 100 Ω·m) against the axisymmetric
 model, two ports, default options (evidence `h07`, `h12` of stream fw4r3b;
 base 4f443f5 in brackets):
 
-| gap | $R$ | $R_{11}$ | $R_{12}$ | bonded | estimate (diagonal / transfer) | finer-level nodes, time |
+| gap | $R$ = gap / 5 | $R_{11}$ | $R_{12}$ | bonded | estimate (diagonal / transfer) | finer-level nodes, time |
 |---|---|---|---|---|---|---|
-| 2 mm … 4 cm | refused (below 17.6 mm) | (2 mm / 1 cm / 3 cm: +5.1e-2 / +1.6e-2 / +6.4e-3) | (−2.0e-1 / −7.3e-2 / −2.9e-2) | | | |
-| 6 cm | 2 cm | −5.1e-4 | −3.51e-3 | −9.6e-4 | 6.1e-3 / 4.3e-3 | 471 295, 18 s |
-| 10 cm | 3.33 cm | +1.15e-3 | **−5.03e-3** | +2.9e-4 | 5.5e-3 / 4.4e-3 | 308 033, 13 s |
-| 15 cm | 5 cm | +1.98e-3 | **−5.32e-3** | +1.05e-3 | 4.6e-3 / 4.6e-3 | 256 055, 9 s |
-| 18.1 cm | 6 cm | +2.47e-3 | **−5.42e-3** | +1.50e-3 | 5.1e-3 / 4.6e-3 | 203 375, 7 s |
-| 30 cm | 6 cm | +2.32e-3 | −3.74e-3 | +1.67e-3 | 5.2e-3 / 4.7e-3 | 201 509, 7 s |
+| 2 mm … 8.8 cm | refused (below 17.6 mm) | (2 mm / 1 cm / 3 cm: +5.1e-2 / +1.6e-2 / +6.4e-3) | (−2.0e-1 / −7.3e-2 / −2.9e-2) | | | |
+| 10 cm | 2 cm | −6.3e-4 | −2.60e-3 | −8.9e-4 | 6.1e-3 / 4.35e-3 | 469 905, 18 s |
+| 15 cm | 3 cm | +9.4e-4 | −3.42e-3 | +3.7e-4 | 5.7e-3 / 4.42e-3 | 364 879, 13 s |
+| 20 cm | 4 cm | +1.00e-3 | −3.62e-3 | +4.6e-4 | 5.6e-3 / 4.55e-3 | 254 903, 9 s |
+| 25 cm | 5 cm | +1.84e-3 | −3.71e-3 | +1.21e-3 | 4.7e-3 / 4.63e-3 | 253 609, 9 s |
+| 30 cm | 6 cm | +2.32e-3 | −3.74e-3 | +1.67e-3 | 5.2e-3 / 4.65e-3 | 201 509, 7 s |
 | 1 m | 6 cm | +2.14e-3 | −1.84e-3 | +1.88e-3 | 4.55e-3 / 4.75e-3 | 227 147, 8 s |
 
-Every diagonal entry and the bonded value lie within the estimate. The
-transfer entry lies within its estimate at 6 cm and from 30 cm on, but
-1.15 … 1.18 times outside it at 10 … 18 cm, where $R$ = gap / 3 is 3.3 …
-6 cm (thinner wires get there earlier: 2 mm rods 10 cm apart −3.40e-3
-against 4.58e-3). With $R$ at most a fifth of the gap it lies within in
-every measured case: 8 mm rods 10 … 30 cm apart at $R$ = 2 … 6 cm read
-−2.6e-3 … −3.7e-3 against 4.4 … 4.7e-3 (evidence `h09` of stream fw4r3b).
-Where the transfer entry of wires end to end matters, set
-`FemOptions.source_radius` to at most a fifth of their gap.
+Every entry, the transfer entry included, and the bonded value lie within
+their estimates, as do 2 mm rods 6 and 10 cm apart (R12 −2.33e-3 / −2.44e-3
+against 4.57e-3 / 4.58e-3). Stacked 8 mm rods up to 8.8 cm apart are
+refused; from a gap of 30 cm on $R$ stays 6 cm and the solve is that of
+round 3 to the last bit.
 
 The distance is that of the two wire axes, independent of how the check
 samples them. Left alone are wires that meet at 10° or more: the collinear
@@ -581,9 +582,9 @@ the mesh size around the wires use it), so the closest pair refines the
 whole mesh: the nodes grow as $1/R$. The smallest $R$ is 2.2 radii of the
 thickest bare wire of the world, wherever that wire lies (the energy radius
 must exceed 1.2 of its radii): wires beside each other closer than 3.3
-such radii, axis to axis, and wires end to end closer than 6.6, are refused
+such radii, axis to axis, and wires end to end closer than 11, are refused
 before meshing with `BackendCapabilityError` naming the distance and the
-integral engines (stacked 8 mm rods up to a gap of 5.3 cm). Two 4 mm strips 4 cm apart are refused
+integral engines (stacked 8 mm rods up to a gap of 8.8 cm). Two 4 mm strips 4 cm apart are refused
 next to a rod of 20 mm radius elsewhere in the world, and solved at
 $R$ = 2.67 cm without it (audit W4R3B-05). Where the finer mesh exceeds
 `max_nodes_3d`, `ResourceLimitError` says why $R$ is small.
@@ -690,10 +691,10 @@ analogue of benchmark B8 (rod 0 … 3 m on the axis, ring $r$ = 2.5 m at
 of −4.9e-4; evidence `g04` of stream fw4r2b, `h00`, `h07`, `h11` of stream
 fw4r3b). In B8 itself it is 2.9e-3, with `mom` refined to ds = 1/32 m
 1.5e-3 above `fem` and still falling. For two wires end to end the rule
-keeps the gap at $3\,R$; there the estimate is 0.85 … 0.87 times the
-error of $R_{12}$ for 8 mm rods at $R$ = 3.3 … 6 cm, and bounds it from a
-gap of $5\,R$ on in every measured case (see *Wires beside each other*; up to audit W4R3B-01, at
-$R$ = 6 cm for a gap of 3 cm, −2.9e-2 against 4.5e-3). Resolved concrete converges at
+keeps the gap at $5\,R$, where it bounds the error of $R_{12}$ in every
+measured case with a margin of 1.24 … 2.6 (see *Wires beside each other*;
+up to audit W4R3B-01, at $R$ = 6 cm for a gap of 3 cm, −2.9e-2 against
+4.5e-3). Resolved concrete converges at
 first order ($r \approx 2$): there the estimate is no bound. Next to a
 strongly contrasting interface the two levels can lie on either side of the
 solid wire's value, and the estimate does not see the thin-wire error (see
@@ -720,7 +721,7 @@ are in GiB.
   surface or a layer interface that its disc cannot lie in the soil and in
   one layer; wires that run beside each other closer than 1.5 times the
   smallest source radius (3.3 radii of the thickest bare wire of the world,
-  axis to axis), or lie end to end without touching closer than 3 times it
+  axis to axis), or lie end to end without touching closer than 5 times it
   (see *Wires beside each other*; wires that meet at less than 10° count as
   running beside each other), naming the wires, their distance and the
   integral engines; resolved concrete around a wire that is not straight

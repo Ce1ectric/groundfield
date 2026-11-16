@@ -228,8 +228,8 @@ applies (bit for bit) and takes the 3-D model otherwise; `"3d"` forces it,
   Default $R$ = 6 cm. Wires that do not meet but run beside each other
   (side by side within 30° of parallel, a folded arm, a wire within reach
   of another over its whole length) are kept at least $1.5\,R$ apart, two
-  wires end to end in line with a gap at least $3\,R$: $R$ becomes their
-  axis distance over 1.5 (end to end: their gap over 3) for the whole
+  wires end to end in line with a gap at least $5\,R$: $R$ becomes their
+  axis distance over 1.5 (end to end: their gap over 5) for the whole
   world, and below 2.2 radii of the thickest bare wire of the world the
   solve is refused before meshing (`BackendCapabilityError`, naming the
   distance and the integral engines). Wires that meet at 10° or more
@@ -301,9 +301,10 @@ applies (bit for bit) and takes the 3-D model otherwise; `"3d"` forces it,
   difference of the transfer entries is reported as
   `metadata["fem_error_estimate_transfer"]` (audit W4R2B-05: the
   estimate covered the diagonal only; where the model holds it is
-  1.06 … 6.3 times the error of the transfer entries; for wires end to end
-  at the gap of $3\,R$ the rule keeps, 0.85 … 0.87 times it for 8 mm rods at
-  $R$ = 3.3 … 6 cm, and a bound from $5\,R$ on). This holds away from layer
+  1.06 … 6.3 times the error of the transfer entries, also for wires end to
+  end at the gap of $5\,R$ the rule keeps: the error of their transfer entry
+  falls with $R$ / gap, and factor 3 left 1.15 … 1.18 times the estimate for
+  8 mm rods 10 … 18 cm apart). This holds away from layer
   interfaces and other wires — the model keeps wires that run beside each
   other at least $1.5\,R$ apart, and two coaxial rings 4.5 … 10 cm apart lie
   within 1.8e-3 of the solid tori in every port entry. Next to a strongly

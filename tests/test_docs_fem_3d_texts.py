@@ -226,6 +226,7 @@ def test_w4r3b_decisions_the_texts_state_the_in_line_factor_the_angle_and_shells
     assert "It is no bound for two wires end to end closer than" not in page
     assert "Touching wires that run together are not one conductor" in page
     for text in (page, adr):
-        assert "3\\,R" in text and "10°" in text and "r_b" in text
+        assert "5\\,R" in text and "10°" in text and "r_b" in text
+        assert "gap over 3" not in text and "gap / 3)" not in text
     for text in (wires, solid):
         assert "IN_LINE_FACTOR" in text and "10°" in text
