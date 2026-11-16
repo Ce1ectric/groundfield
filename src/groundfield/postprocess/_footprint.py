@@ -57,6 +57,10 @@ __all__: list[str] = []
 # reference point sitting exactly at distance d from a wire).
 _T_TOL = 1e-9
 
+#: Feet per corner of the convex hull in :meth:`Footprint.corner_feet`
+#: (the ends of the arc and three points between them).
+CORNER_SAMPLES = 5
+
 
 @dataclass(frozen=True)
 class Footprint:
@@ -217,6 +221,95 @@ class Footprint:
             else:
                 out[i] = self._support_point(c, e) + d * e
         return out
+
+    def corner_feet(self, d: float, per_corner: int = CORNER_SAMPLES) -> np.ndarray:
+        """Foot positions ``(m, 2)`` on the rounded corners of the offset curve.
+
+        The offset curve at distance ``d`` turns around every corner of the
+        convex hull of the straight wires on an arc of radius ``d``. Seen
+        from the reference point, the equally spaced rays of
+        :meth:`feet` hit such an arc only by chance (a 60 m × 40 m grid's
+        corners lie at 33.7° from its centre, between the 30° and 45° rays
+        of 24 directions), while the touch voltage is largest there.
+
+        For every hull vertex :math:`\\mathbf v` with the outward normals
+        :math:`\\mathbf n_1, \\mathbf n_2` of its two hull edges, the feet
+        are :math:`\\mathbf v + d\\,(\\cos\\phi, \\sin\\phi)` at
+        ``per_corner`` angles :math:`\\phi` spread evenly from
+        :math:`\\mathbf n_1` to :math:`\\mathbf n_2`, the ends included.
+        Every wire lies in the hull, so each foot is exactly ``d`` from its
+        vertex and at least ``d`` from every other wire. Feet that come
+        closer than ``d`` to a circular wire are dropped. A single point
+        (one rod) has no corner; the two ends of a straight wire get a
+        half circle each.
+
+        Parameters
+        ----------
+        d
+            Horizontal distance to the nearest wire in m, ``> 0``.
+        per_corner
+            Feet per hull vertex, ``>= 2``.
+
+        Returns
+        -------
+        numpy.ndarray
+            Foot positions ``(x, y)`` in m; empty ``(0, 2)`` without corners.
+        """
+        if not self.segments.size:
+            return np.empty((0, 2))
+        hull = _convex_hull(self.segments.reshape(-1, 2))
+        m = len(hull)
+        if m < 2:
+            return np.empty((0, 2))
+        feet = []
+        for i in range(m):
+            v, prev, nxt = hull[i], hull[i - 1], hull[(i + 1) % m]
+            a1 = _outward_normal_angle(prev, v)
+            a2 = _outward_normal_angle(v, nxt)
+            sweep = (a2 - a1) % (2.0 * math.pi)
+            if m == 2:  # the end of a straight wire: a half circle
+                sweep = math.pi
+            for phi in a1 + sweep * np.linspace(0.0, 1.0, per_corner):
+                feet.append(v + d * np.array([math.cos(phi), math.sin(phi)]))
+        out = np.asarray(feet, dtype=float).reshape(-1, 2)
+        if self.circles.size:
+            out = out[self.distance(out) >= d * (1.0 - 1e-9)]
+        return out
+
+
+def _convex_hull(points: np.ndarray) -> np.ndarray:
+    """Vertices of the convex hull, counter-clockwise, without collinear ones.
+
+    Andrew's monotone chain on the distinct points; one point for a single
+    distinct point, the two ends for points on one line.
+    """
+    pts = np.unique(np.round(np.asarray(points, dtype=float), 12), axis=0)
+    if len(pts) <= 2:
+        return pts
+    scale = max(1.0, float(np.abs(pts).max()))
+    tol = 1e-12 * scale * scale
+
+    def cross(o, a, b):
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+    lower: list[np.ndarray] = []
+    for q in pts:
+        while len(lower) >= 2 and cross(lower[-2], lower[-1], q) <= tol:
+            lower.pop()
+        lower.append(q)
+    upper: list[np.ndarray] = []
+    for q in pts[::-1]:
+        while len(upper) >= 2 and cross(upper[-2], upper[-1], q) <= tol:
+            upper.pop()
+        upper.append(q)
+    hull = np.array(lower[:-1] + upper[:-1])
+    return hull
+
+
+def _outward_normal_angle(a: np.ndarray, b: np.ndarray) -> float:
+    """Azimuth of the outward normal of the counter-clockwise hull edge a -> b."""
+    e = b - a
+    return math.atan2(-e[0], e[1])
 
 
 # ---------------------------------------------------------------------

@@ -178,7 +178,13 @@ def test_grid_envelope_includes_the_mesh_centres_with_interior_meshes() -> None:
     w = _grid_world()
     res = _solve(w)
     angles, env, feet = touch_voltage_envelope(
-        res, w, electrode="g1", n_angles=24, interior="meshes", return_points=True
+        res,
+        w,
+        electrode="g1",
+        n_angles=24,
+        interior="meshes",
+        corners=False,
+        return_points=True,
     )
     assert feet.shape == (24 + 16, 3)
     assert angles.shape == env.shape == (40,)
@@ -187,7 +193,7 @@ def test_grid_envelope_includes_the_mesh_centres_with_interior_meshes() -> None:
     assert got == centres
     u_centres = _ue(res, "g1") - res.potential(feet[24:])
     np.testing.assert_allclose(env[24:], u_centres, rtol=1e-12)
-    without = touch_voltage_envelope(res, w, electrode="g1", n_angles=24)
+    without = touch_voltage_envelope(res, w, electrode="g1", n_angles=24, corners=False)
     assert without[1].shape == (24,)
     # bit for bit with OpenBLAS on Linux x86-64; up to 2.2e-15 with
     # Accelerate on macOS arm64 (the points are evaluated in other batches)
@@ -203,7 +209,13 @@ def test_coarse_grid_mesh_centre_can_dominate_the_envelope() -> None:
     w = _grid_world(n=1, size=20.0)
     res = _solve(w, ds=1.0)
     angles, env, feet = touch_voltage_envelope(
-        res, w, electrode="g1", n_angles=24, interior="meshes", return_points=True
+        res,
+        w,
+        electrode="g1",
+        n_angles=24,
+        interior="meshes",
+        corners=False,
+        return_points=True,
     )
     assert feet.shape == (25, 3)
     perimeter = np.abs(env[:24]).max()
@@ -565,6 +577,7 @@ def test_envelope_of_a_rotated_foundation_stays_outside_and_samples_its_cells() 
             electrode=anchor,
             n_angles=72,
             interior="meshes",
+            corners=False,
             return_points=True,
         )
     local = _to_local(30.0, feet[:, :2])
@@ -576,7 +589,7 @@ def test_envelope_of_a_rotated_foundation_stays_outside_and_samples_its_cells() 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         _, env0 = touch_voltage_envelope(
-            r0, w0, electrode=a0, n_angles=72, interior="meshes"
+            r0, w0, electrode=a0, n_angles=72, interior="meshes", corners=False
         )
     assert np.abs(env[72:]).max() == pytest.approx(np.abs(env0[72:]).max(), rel=0.05)
 
@@ -596,7 +609,8 @@ def test_any_wire_name_of_a_rotated_foundation_selects_the_whole_foundation() ->
                 result, world, electrode=name, interior="meshes", return_points=True
             )
             np.testing.assert_allclose(got[2], ref[2], atol=1e-12)
-    # A ring-style foundation is one cell: its centre is sampled.
+    # A ring-style foundation is one cell: its centre is sampled (the last
+    # point, after the equally spaced and the corner feet).
     np.testing.assert_allclose(ref[2][-1, :2], [0.0, 0.0], atol=1e-9)
 
 

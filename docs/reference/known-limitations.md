@@ -141,7 +141,12 @@ solve.
     rings, rods and closed loops are within 2 %, but a bonded cluster is
     not: a bare ring bonded 1 m outside a house's foundation mesh reads the
     touch voltage +5 … +16 % above `mom` with the feet right above the
-    ring (the foundation alone within 2 %).
+    ring (the foundation alone within 2 %). Two-layer soil can make the
+    grid figures much larger, most of all over a resistive bottom: a
+    60 m × 40 m grid with 5 m meshes in 50 over 300 Ω·m reads the touch
+    voltage 1 m outside +12.5 %, at the mesh centres +45 % and the step
+    voltage at a corner −4.7 % (the unsafe side); in 300 over 50 Ω·m
+    +2.1 %, +7.1 % and +4.5 % (case study E03).
 
     **Instead:** for field values near such geometries solve with
     `backend="mom"` (or compare both); the safety functions warn with
@@ -816,8 +821,14 @@ those at layer interfaces under [soil layers](#soil-layers).
   (`math.inf`), gets 80 V (the curve of Figure 8 ends at 10 s), so the value
   steps from 85 V at 10 s to 80 V just above.
 
-- **Touch-voltage envelope** samples a ring of directions around the
-  electrode's footprint, a proxy for touched parts that are not known. It
+- **Touch-voltage envelope** samples 24 equally spaced directions around
+  the electrode's footprint and five feet on the arc around every corner of
+  the footprint's convex hull (`corners=True`), a proxy for touched parts
+  that are not known. Re-entrant corners of a non-convex outline get no
+  corner feet; there the equally spaced directions apply. Up to the final
+  documentation pass of 2026.11.0 the directions alone were sampled, and
+  they miss the corners of a non-square grid: a 60 m × 40 m grid read
+  12 … 28 % low (case study E03; `corners=False` reproduces it). It
   samples nothing inside the footprint unless asked: `interior="meshes"`
   adds the centres of the meshes of grids, of rings and of the generated
   mesh foundations (bonded wires, one per wire line), `interior=True` also

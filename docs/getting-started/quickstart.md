@@ -146,8 +146,9 @@ assert u_tp == 225.0
   impedance 0.9 % below `image`).
 - The **touch voltage** $U_T = U_E - \varphi(\text{feet})$ is the EPR
   $U_E$ of the touched metal minus the surface potential where a person
-  stands, 1 m away. `touch_voltage_envelope` puts the feet on 24 directions
-  1 m outside the grid's footprint; the largest value lies off the corners.
+  stands, 1 m away. `touch_voltage_envelope` puts the feet 1 m outside the
+  grid's footprint, on 24 directions and on the arc around each corner; the
+  largest value lies off the corners.
 - The **step voltage** is the difference of the surface potential over
   1 m; here from the point above a corner outwards.
 - The comparison with the permissible touch voltage of EN 50522 (Figure 8,

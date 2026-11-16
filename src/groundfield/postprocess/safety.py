@@ -568,6 +568,7 @@ def touch_voltage_envelope(
     frequency_index: int = 0,
     anchor: Anchor = "footprint",
     interior: Interior = False,
+    corners: bool = True,
     return_points: bool = False,
 ) -> tuple[np.ndarray, np.ndarray] | tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Touch voltages around an electrode, on request also inside its loops.
@@ -575,7 +576,13 @@ def touch_voltage_envelope(
     Walks ``n_angles`` equally spaced directions and places the feet as
     in :func:`touch_voltage`: with ``anchor="footprint"`` this traces
     the curve at ``distance`` from the electrode's wires (rounded around
-    corners and arm tips). The maximum of ``|U_T|`` is the conservative
+    corners and arm tips). Equally spaced directions hit the rounded
+    corners only by chance, and the touch voltage is largest there: the
+    corners of a 60 m × 40 m grid lie at 33.7° from its centre, between
+    the 30° and 45° rays of the default 24, and that envelope read 12 …
+    28 % low in two-layer soil (case study E03). With ``corners=True``
+    (the default) the feet also stand on the arc around every corner of
+    the convex hull of the wires, five per corner. The maximum of ``|U_T|`` is the conservative
     envelope used in safety verification when the touched parts are not
     known; where they are, :func:`touch_voltage_at_part` puts the feet
     around each part.
@@ -623,6 +630,14 @@ def touch_voltage_envelope(
         wires. The modes cannot see buildings: a mesh foundation's cells
         lie under the house, a ring may surround a station housing or a
         mast foot.
+    corners
+        With ``anchor="footprint"``, also place five feet on the arc of
+        the offset curve around every corner of the convex hull of the
+        wires, from one edge normal to the next (a half circle at each end
+        of a single straight wire; none for one rod or a ring). ``False``
+        reproduces the equally spaced directions alone (the behaviour up to
+        the final documentation pass of 2026.11.0). Ignored with
+        ``anchor="connection_point"``.
     return_points
         Also return the foot positions.
 
@@ -630,9 +645,12 @@ def touch_voltage_envelope(
     -------
     angles : np.ndarray, shape (n,)
         Azimuth in radians of each foot position, measured from ``+x``.
-        The first ``n_angles`` entries are :math:`\\theta_k`; appended
-        interior points carry their azimuth seen from the centroid of
-        the wires (0 for a point that coincides with it).
+        The first ``n_angles`` entries are :math:`\\theta_k`. The corner
+        points follow (they lie on the offset curve too), then the
+        interior points; both carry their azimuth seen from the centroid of
+        the wires (0 for an interior point that coincides with it). To
+        read the interior points alone, call once more with
+        ``corners=False``: they then start at index ``n_angles``.
     voltages : np.ndarray, shape (n,), dtype complex
         Touch-voltage phasor :math:`U_T` in V at every foot position.
     points : np.ndarray, shape (n, 3)
@@ -653,7 +671,8 @@ def touch_voltage_envelope(
 
     Notes
     -----
-    ``n = n_angles`` plus the number of interior points. The rule of
+    ``n = n_angles`` plus the number of interior points and of corner
+    points. The rule of
     v0.15.0 (circle around the connection point) is
     ``anchor="connection_point"``; for a generated rectangular foundation
     that connection point is a corner since 2026.11, no longer the centre
@@ -671,6 +690,18 @@ def touch_voltage_envelope(
     angles = np.linspace(0.0, 2.0 * np.pi, n_angles, endpoint=False)
     dirs = np.column_stack([np.cos(angles), np.sin(angles)])
     feet_xy = _feet_xy(world, electrode, dirs, distance, anchor, result)
+    if corners and anchor == "footprint":
+        fp = footprint_of(
+            foundation_wires(world, electrode, getattr(result, "clusters", None))
+        )
+        corner = fp.corner_feet(distance)
+        if len(corner):
+            ref = fp.reference_point
+            az = np.mod(
+                np.arctan2(corner[:, 1] - ref[1], corner[:, 0] - ref[0]), 2 * np.pi
+            )
+            angles = np.concatenate([angles, az])
+            feet_xy = np.vstack([feet_xy, corner])
     if interior is not False:
         wires = foundation_wires(world, electrode, getattr(result, "clusters", None))
         inner = interior_points_of(wires, outlines=interior is True)

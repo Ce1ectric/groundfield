@@ -54,6 +54,9 @@ def _world(electrode, current: float = 100.0) -> gf.World:
 
 
 def _envelope(res, world, name, **kwargs):
+    # These tests count the equally spaced and the interior points; the
+    # corner feet have their own tests (corners=True is the default).
+    kwargs.setdefault("corners", False)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return touch_voltage_envelope(
