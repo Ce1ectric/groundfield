@@ -260,14 +260,14 @@ with.
 ## Validation
 
 <!-- generated:begin image_2layer -->
-Generated from the benchmark run measured on 2026-11-14 with groundfield 2026.11.0 (Python 3.12.3, NumPy 2.5.4, SciPy 1.18.1, numba installed: yes; Linux x86_64); bounds from `tests/benchmarks/tolerances.py`. Details and all cases: [Validation and benchmarks](../validation.md).
+Generated from the benchmark run measured on 2026-11-16 with groundfield 2026.11.0 (Python 3.12.16, NumPy 2.4.4, SciPy 1.17.1, numba installed: yes; Darwin arm64); bounds from `tests/benchmarks/tolerances.py`. Details and all cases: [Validation and benchmarks](../validation.md).
 
 | Benchmark | Measure | Bound | Worst measured | Cases | Status | Note |
 |---|---|---|---|---|---|---|
 | B6 Top-layer electrodes, two-layer soil | abs(Z/Z_ref - 1) | 1 % | 0.37 % | 10 | pass | uniform-current ansatz |
 | B7 Rod through the layer interface | abs(Z/Z_ref - 1) | 2 % | 0.38 % | 2 | pass | one uniform current across the interface (F02); bound met since the fix of 10.15 |
 | B8 Two-port reciprocity | abs(Z_AB/Z_BA - 1) | 1e-7 | 7.3e-9 | 2 | pass |  |
-| B9 Limits of the layered kernels (`equal_rho_integral`) | abs(Z/Z_ref - 1) | 1e-10 | 0 | 2 | pass | image_2layer, mom, mom_sommerfeld, cim, bem |
+| B9 Limits of the layered kernels (`equal_rho_integral`) | abs(Z/Z_ref - 1) | 1e-10 | 4.4e-16 | 2 | pass | image_2layer, mom, mom_sommerfeld, cim, bem |
 | B9 Limits of the layered kernels (`layer_limit_integral`) | abs(Z/Z_ref - 1) | 0.1 % | 5.1e-4 | 2 | pass | physical limit |
 | B11 Grid refinement | abs(Z(ds)/Z(ds/2) - 1) | 0.6 % | 0.54 % | 2 | pass | not monotone (point kernel); 0.43 % / 0.39 % with one owner for the grid before user decision Q30 |
 
@@ -287,7 +287,7 @@ Kernel check — signed deviation from the exact uniform-current resistance:
 | Case | Exact uniform-current R | Kernel | ds = 2 m | ds = 0.5 m | ds = 0.25 m | ds = 0.125 m |
 |---|---|---|---|---|---|---|
 | strip 10 m at 0.5 m, a = 5 mm, two-layer 1000/30 Ω·m, h₁ = 5 m | 129.9464 Ω | `point` | +0.88 % | −1.1 % |  | −1.3 % |
-|  |  | `line` | +6.1e-5 | −2.7e-5 |  | −7.8e-7 |
+|  |  | `line` | −2.2e-7 | −9.3e-7 |  | −1.1e-6 |
 <!-- generated:end image_2layer -->
 
 ## Literature

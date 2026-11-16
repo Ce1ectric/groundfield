@@ -171,7 +171,7 @@ image family is the right tool.
 ## Validation
 
 <!-- generated:begin image -->
-Generated from the benchmark run measured on 2026-11-14 with groundfield 2026.11.0 (Python 3.12.3, NumPy 2.5.4, SciPy 1.18.1, numba installed: yes; Linux x86_64); bounds from `tests/benchmarks/tolerances.py`. Details and all cases: [Validation and benchmarks](../validation.md).
+Generated from the benchmark run measured on 2026-11-16 with groundfield 2026.11.0 (Python 3.12.16, NumPy 2.4.4, SciPy 1.17.1, numba installed: yes; Darwin arm64); bounds from `tests/benchmarks/tolerances.py`. Details and all cases: [Validation and benchmarks](../validation.md).
 
 | Benchmark | Measure | Bound | Worst measured | Cases | Status | Note |
 |---|---|---|---|---|---|---|
@@ -180,7 +180,7 @@ Generated from the benchmark run measured on 2026-11-14 with groundfield 2026.11
 | B8 Two-port reciprocity | abs(Z_AB/Z_BA - 1) | 1e-10 | 0 | 1 | pass |  |
 | B10 Ring with three bonded rods | abs(Z/Z_ref - 1) | 3 % | 2.8 % | 2 | pass | uniform current per straight wire (10.22); target 2 % |
 | B13 Ring with an inductive 400 m line (`image_vs_mom`) | compare_engines row deviation (Re and Im) | 5 % | 1.0 % | 1 | pass | inductive branch shared; galvanic part differs by the ansatz |
-| B13 Ring with an inductive 400 m line (`pollaczek_x`) | abs(X'/X'_P - 1), X' = Im(Z_1600 m - Z_800 m) / 800 m at 1 kHz | 0.5 % | 8.3e-6 | 1 | pass | the two-length difference cancels the end effects; the 400 m line itself is 3.7 % (1 kHz) and 10.8 % (50 Hz) below l X'_P (finite length, l / delta = 2.5 and 0.56) |
+| B13 Ring with an inductive 400 m line (`pollaczek_x`) | abs(X'/X'_P - 1), X' = Im(Z_1600 m - Z_800 m) / 800 m at 1 kHz | 0.5 % | 9.0e-6 | 1 | pass | the two-length difference cancels the end effects; the 400 m line itself is 3.7 % (1 kHz) and 10.8 % (50 Hz) below l X'_P (finite length, l / delta = 2.5 and 0.56) |
 | B13 Ring with an inductive 400 m line (`pollaczek_r`) | abs(R'/R'_P - 1), same difference | 2 % | 1.1 % | 1 | pass | converges from below with the length (-4.5 % for 400/800 m); the 400 m line is 34 % (1 kHz) and 17 % (50 Hz) below l R'_P |
 
 Near-field quantities against `mom` on the same discretisation (uniform-current ansatz; homogeneous 100 Ω·m, ds = 0.5 m):
@@ -194,19 +194,19 @@ Near-field quantities against `mom` on the same discretisation (uniform-current 
 | | `image` (`point`) | +3.4 % | +8.8 % | −22 % | — |
 | | `image` (`line`) | +4.3 % | +10 % | −23 % | — |
 | ring r = 5 m at 0.5 m | `mom` (reference) | 6.3596 Ω | 2.9730 V/A | 1.0493 V/A | — |
-| | `image` (`point`) | +6.7e-16 | +1.1e-15 | 0 | — |
-| | `image` (`line`) | +0.88 % | +1.8 % | +5.4e-5 | — |
+| | `image` (`point`) | +4.4e-16 | +6.7e-16 | −1.2e-15 | — |
+| | `image` (`line`) | +0.88 % | +1.8 % | +5.3e-5 | — |
 
 Kernel check — signed deviation from the exact uniform-current resistance:
 
 | Case | Exact uniform-current R | Kernel | ds = 2 m | ds = 0.5 m | ds = 0.25 m | ds = 0.125 m |
 |---|---|---|---|---|---|---|
 | rod 3 m from the surface, a = 8 mm, 100 Ω·m (B2 world) | 33.4997 Ω | `point` |  | −1.2 % | −1.5 % | −1.7 % |
-|  |  | `line` |  | −1.0e-6 | −1.2e-6 | +1.8e-6 |
+|  |  | `line` |  | −3.6e-7 | −8.0e-7 | −1.0e-6 |
 | ring r = 2 m at 0.8 m, a = 8 mm, 100 Ω·m (B3 world) | 12.4816 Ω | `point` |  | −1.2 % | −1.2 % | −1.2 % |
 |  |  | `line` |  | −0.24 % | −6.1e-4 | −1.5e-4 |
 | strip 10 m at 0.5 m, a = 5 mm, 100 Ω·m | 14.9411 Ω | `point` | +0.80 % | −0.96 % |  | −1.2 % |
-|  |  | `line` | −1.1e-16 | −1.7e-6 |  | +7.0e-7 |
+|  |  | `line` | −1.1e-16 | −8.3e-7 |  | −7.6e-7 |
 <!-- generated:end image -->
 
 ## Literature

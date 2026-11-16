@@ -1,17 +1,17 @@
 {
  "schema_version": 1,
  "environment": {
-  "date": "2026-11-14",
+  "date": "2026-11-16",
   "groundfield": "2026.11.0",
-  "python": "3.12.3",
-  "numpy": "2.5.4",
-  "scipy": "1.18.1",
+  "python": "3.12.16",
+  "numpy": "2.4.4",
+  "scipy": "1.17.1",
   "numba": "yes",
-  "machine": "Linux x86_64"
+  "machine": "Darwin arm64"
  },
  "suite": {
   "counts": {
-   "passed": 69,
+   "passed": 71,
    "skipped": 7
   },
   "exit_code": 0
@@ -35,7 +35,7 @@
    "benchmark": "B2",
    "backend": "image",
    "case": "ds=0.5",
-   "value": 0.003014480185957069,
+   "value": 0.003014480185956847,
    "bound": 0.015
   },
   {
@@ -49,28 +49,28 @@
    "benchmark": "B2",
    "backend": "image",
    "case": "ds=0.125",
-   "value": 0.007922053881008972,
+   "value": 0.00792205388100875,
    "bound": 0.015
   },
   {
    "benchmark": "B2",
    "backend": "mom",
    "case": "ds=0.5",
-   "value": 0.006257910464691929,
+   "value": 0.006257910464691707,
    "bound": 0.02
   },
   {
    "benchmark": "B2",
    "backend": "mom",
    "case": "ds=0.25",
-   "value": 0.01097349603103881,
+   "value": 0.010973496031038366,
    "bound": 0.02
   },
   {
    "benchmark": "B2",
    "backend": "mom",
    "case": "ds=0.125",
-   "value": 0.013899829964053034,
+   "value": 0.013899829964052812,
    "bound": 0.02
   },
   {
@@ -105,21 +105,21 @@
    "benchmark": "B3",
    "backend": "image",
    "case": "ds=0.25",
-   "value": 0.011768302835505007,
+   "value": 0.011768302835504785,
    "bound": 0.015
   },
   {
    "benchmark": "B3",
    "backend": "image",
    "case": "ds=0.125",
-   "value": 0.01176431889098739,
+   "value": 0.011764318890987835,
    "bound": 0.015
   },
   {
    "benchmark": "B3",
    "backend": "mom",
    "case": "ds=0.5",
-   "value": 0.01178352775810676,
+   "value": 0.011783527758106649,
    "bound": 0.015
   },
   {
@@ -133,7 +133,7 @@
    "benchmark": "B3",
    "backend": "mom",
    "case": "ds=0.125",
-   "value": 0.01176431889098728,
+   "value": 0.011764318890987169,
    "bound": 0.015
   },
   {
@@ -161,28 +161,28 @@
    "benchmark": "B4",
    "backend": "mom_sommerfeld",
    "case": "max silent error",
-   "value": 1.970895300210219e-10,
+   "value": 2.0143142086489254e-10,
    "bound": 1e-09
   },
   {
    "benchmark": "B5",
    "backend": "mom_sommerfeld",
    "case": "duplicated stacks",
-   "value": 2.667129717202169e-13,
+   "value": 2.3486515181460704e-13,
    "bound": 1e-10
   },
   {
    "benchmark": "B5",
    "backend": "mom_sommerfeld",
    "case": "genuine three layers",
-   "value": 7.702165202570618e-16,
+   "value": 5.813316014686781e-16,
    "bound": 1e-10
   },
   {
    "benchmark": "B6",
    "backend": "image_2layer",
    "case": "ring 1000/30/h=5",
-   "value": 4.440892098500626e-16,
+   "value": 6.661338147750939e-16,
    "bound": 0.01
   },
   {
@@ -191,6 +191,13 @@
    "case": "ring 1000/30/h=5",
    "value": 3.017075478339848e-11,
    "bound": 1e-07
+  },
+  {
+   "benchmark": "B6",
+   "backend": "fem",
+   "case": "ring 1000/30/h=5",
+   "value": 0.013446883615958916,
+   "bound": 0.03
   },
   {
    "benchmark": "B6",
@@ -203,22 +210,36 @@
    "benchmark": "B6",
    "backend": "mom_sommerfeld",
    "case": "rod 1000/30/h=5",
-   "value": 4.54036808150704e-12,
+   "value": 4.540146036902115e-12,
    "bound": 1e-07
+  },
+  {
+   "benchmark": "B6",
+   "backend": "fem",
+   "case": "rod 1000/30/h=5",
+   "value": 0.006298514322230275,
+   "bound": 0.03
   },
   {
    "benchmark": "B6",
    "backend": "image_2layer",
    "case": "ring 1000/30/h=10",
-   "value": 0.0,
+   "value": 4.440892098500626e-16,
    "bound": 0.01
   },
   {
    "benchmark": "B6",
    "backend": "mom_sommerfeld",
    "case": "ring 1000/30/h=10",
-   "value": 1.3822720745793049e-11,
+   "value": 1.3823386879607824e-11,
    "bound": 1e-07
+  },
+  {
+   "benchmark": "B6",
+   "backend": "fem",
+   "case": "ring 1000/30/h=10",
+   "value": 0.012319340986509664,
+   "bound": 0.03
   },
   {
    "benchmark": "B6",
@@ -236,6 +257,13 @@
   },
   {
    "benchmark": "B6",
+   "backend": "fem",
+   "case": "rod 1000/30/h=10",
+   "value": 0.006212068115398539,
+   "bound": 0.03
+  },
+  {
+   "benchmark": "B6",
    "backend": "image_2layer",
    "case": "ring 1000/30/h=30",
    "value": 6.661338147750939e-16,
@@ -250,17 +278,31 @@
   },
   {
    "benchmark": "B6",
+   "backend": "fem",
+   "case": "ring 1000/30/h=30",
+   "value": 0.011636738596388918,
+   "bound": 0.03
+  },
+  {
+   "benchmark": "B6",
    "backend": "image_2layer",
    "case": "rod 1000/30/h=30",
-   "value": 0.0035909302937060517,
+   "value": 0.0035909302937062737,
    "bound": 0.01
   },
   {
    "benchmark": "B6",
    "backend": "mom_sommerfeld",
    "case": "rod 1000/30/h=30",
-   "value": 7.354117315117037e-13,
+   "value": 7.351896869067787e-13,
    "bound": 1e-07
+  },
+  {
+   "benchmark": "B6",
+   "backend": "fem",
+   "case": "rod 1000/30/h=30",
+   "value": 0.006144938565845415,
+   "bound": 0.03
   },
   {
    "benchmark": "B6",
@@ -273,8 +315,15 @@
    "benchmark": "B6",
    "backend": "mom_sommerfeld",
    "case": "ring 30/200/h=5",
-   "value": 2.624599426681584e-09,
+   "value": 2.624599870770794e-09,
    "bound": 1e-07
+  },
+  {
+   "benchmark": "B6",
+   "backend": "fem",
+   "case": "ring 30/200/h=5",
+   "value": 0.008537718789163762,
+   "bound": 0.03
   },
   {
    "benchmark": "B6",
@@ -287,8 +336,15 @@
    "benchmark": "B6",
    "backend": "mom_sommerfeld",
    "case": "rod 30/200/h=5",
-   "value": 5.62353941191418e-10,
+   "value": 5.623537191468131e-10,
    "bound": 1e-07
+  },
+  {
+   "benchmark": "B6",
+   "backend": "fem",
+   "case": "rod 30/200/h=5",
+   "value": 0.005745719618394318,
+   "bound": 0.03
   },
   {
    "benchmark": "B6",
@@ -306,9 +362,16 @@
   },
   {
    "benchmark": "B6",
+   "backend": "fem",
+   "case": "ring 100/400/h=2",
+   "value": 0.007490807691947987,
+   "bound": 0.03
+  },
+  {
+   "benchmark": "B6",
    "backend": "image_2layer",
    "case": "rod 100/400/h=2",
-   "value": 0.0025283802488305085,
+   "value": 0.0025283802488302864,
    "bound": 0.01
   },
   {
@@ -321,69 +384,6 @@
   {
    "benchmark": "B6",
    "backend": "fem",
-   "case": "ring 1000/30/h=5",
-   "value": 0.013446883615958916,
-   "bound": 0.03
-  },
-  {
-   "benchmark": "B6",
-   "backend": "fem",
-   "case": "rod 1000/30/h=5",
-   "value": 0.006298514322230275,
-   "bound": 0.03
-  },
-  {
-   "benchmark": "B6",
-   "backend": "fem",
-   "case": "ring 1000/30/h=10",
-   "value": 0.012319340986509664,
-   "bound": 0.03
-  },
-  {
-   "benchmark": "B6",
-   "backend": "fem",
-   "case": "rod 1000/30/h=10",
-   "value": 0.006212068115398539,
-   "bound": 0.03
-  },
-  {
-   "benchmark": "B6",
-   "backend": "fem",
-   "case": "ring 1000/30/h=30",
-   "value": 0.011636738596388918,
-   "bound": 0.03
-  },
-  {
-   "benchmark": "B6",
-   "backend": "fem",
-   "case": "rod 1000/30/h=30",
-   "value": 0.006144938565845415,
-   "bound": 0.03
-  },
-  {
-   "benchmark": "B6",
-   "backend": "fem",
-   "case": "ring 30/200/h=5",
-   "value": 0.008537718789163762,
-   "bound": 0.03
-  },
-  {
-   "benchmark": "B6",
-   "backend": "fem",
-   "case": "rod 30/200/h=5",
-   "value": 0.005745719618394318,
-   "bound": 0.03
-  },
-  {
-   "benchmark": "B6",
-   "backend": "fem",
-   "case": "ring 100/400/h=2",
-   "value": 0.007490807691947987,
-   "bound": 0.03
-  },
-  {
-   "benchmark": "B6",
-   "backend": "fem",
    "case": "rod 100/400/h=2",
    "value": 0.005929084789200845,
    "bound": 0.03
@@ -392,28 +392,28 @@
    "benchmark": "B7",
    "backend": "mom_sommerfeld",
    "case": "1000/30",
-   "value": 4.4107273389215607e-11,
+   "value": 4.410039000646293e-11,
    "bound": 1e-07
   },
   {
    "benchmark": "B7",
    "backend": "mom_sommerfeld",
    "case": "100/1000",
-   "value": 1.433730911770681e-10,
+   "value": 1.4337264708785824e-10,
    "bound": 1e-07
   },
   {
    "benchmark": "B7",
    "backend": "image_2layer",
    "case": "1000/30",
-   "value": 0.0038161173590578468,
+   "value": 0.003816117359058069,
    "bound": 0.02
   },
   {
    "benchmark": "B7",
    "backend": "image_2layer",
    "case": "100/1000",
-   "value": 0.0002157081586351417,
+   "value": 0.00021570815863491966,
    "bound": 0.02
   },
   {
@@ -427,7 +427,7 @@
    "benchmark": "B7",
    "backend": "fem",
    "case": "100/1000",
-   "value": 0.011221075291358407,
+   "value": 0.011221075291358629,
    "bound": 0.03
   },
   {
@@ -448,7 +448,7 @@
    "benchmark": "B8",
    "backend": "image_2layer",
    "case": "cross_layer",
-   "value": 7.307406235668168e-09,
+   "value": 7.3079622353589e-09,
    "bound": 1e-07
   },
   {
@@ -462,7 +462,7 @@
    "benchmark": "B8",
    "backend": "cim",
    "case": "cross_layer",
-   "value": 7.307406235668168e-09,
+   "value": 7.3079622353589e-09,
    "bound": 1e-07
   },
   {
@@ -476,7 +476,7 @@
    "benchmark": "B8",
    "backend": "mom",
    "case": "cross_layer",
-   "value": 7.2150578844798474e-09,
+   "value": 7.2149626273443346e-09,
    "bound": 1e-07
   },
   {
@@ -490,7 +490,7 @@
    "benchmark": "B8",
    "backend": "bem",
    "case": "cross_layer",
-   "value": 7.2150578844798474e-09,
+   "value": 7.2149626273443346e-09,
    "bound": 1e-07
   },
   {
@@ -504,14 +504,14 @@
    "benchmark": "B8",
    "backend": "mom_sommerfeld",
    "case": "cross_layer",
-   "value": 0.0,
+   "value": 3.3306690738754696e-16,
    "bound": 1e-07
   },
   {
    "benchmark": "B9",
    "backend": "equal_rho_integral",
    "case": "image_2layer TwoLayer(100,100,h=0.5)",
-   "value": 0.0,
+   "value": 4.440892098500626e-16,
    "bound": 1e-10
   },
   {
@@ -525,7 +525,7 @@
    "benchmark": "B9",
    "backend": "equal_rho_integral",
    "case": "cim TwoLayer(100,100,h=0.5)",
-   "value": 0.0,
+   "value": 4.440892098500626e-16,
    "bound": 1e-10
   },
   {
@@ -607,48 +607,6 @@
   },
   {
    "benchmark": "B9",
-   "backend": "layer_limit_integral",
-   "case": "image_2layer h1=0.004",
-   "value": 0.0005051156607269736,
-   "bound": 0.001
-  },
-  {
-   "benchmark": "B9",
-   "backend": "layer_limit_integral",
-   "case": "mom h1=0.004",
-   "value": 0.0005051156607267515,
-   "bound": 0.001
-  },
-  {
-   "benchmark": "B9",
-   "backend": "layer_limit_integral",
-   "case": "mom_sommerfeld h1=0.004",
-   "value": 0.0005051155941384611,
-   "bound": 0.001
-  },
-  {
-   "benchmark": "B9",
-   "backend": "layer_limit_integral",
-   "case": "image_2layer h1=4000",
-   "value": 0.00020420534915166488,
-   "bound": 0.001
-  },
-  {
-   "benchmark": "B9",
-   "backend": "layer_limit_integral",
-   "case": "mom h1=4000",
-   "value": 0.00020420534915144284,
-   "bound": 0.001
-  },
-  {
-   "benchmark": "B9",
-   "backend": "layer_limit_integral",
-   "case": "mom_sommerfeld h1=4000",
-   "value": 0.00020420534912046762,
-   "bound": 0.001
-  },
-  {
-   "benchmark": "B9",
    "backend": "equal_rho_fem",
    "case": "fem TwoLayer(100,100,h=0.5)",
    "value": 0.0,
@@ -670,9 +628,51 @@
   },
   {
    "benchmark": "B9",
+   "backend": "layer_limit_integral",
+   "case": "image_2layer h1=0.004",
+   "value": 0.0005051156607271956,
+   "bound": 0.001
+  },
+  {
+   "benchmark": "B9",
+   "backend": "layer_limit_integral",
+   "case": "mom h1=0.004",
+   "value": 0.0005051156607271956,
+   "bound": 0.001
+  },
+  {
+   "benchmark": "B9",
+   "backend": "layer_limit_integral",
+   "case": "mom_sommerfeld h1=0.004",
+   "value": 0.0005051155941404595,
+   "bound": 0.001
+  },
+  {
+   "benchmark": "B9",
    "backend": "layer_limit_fem",
    "case": "fem h1=0.004",
    "value": 0.000495948328866902,
+   "bound": 0.001
+  },
+  {
+   "benchmark": "B9",
+   "backend": "layer_limit_integral",
+   "case": "image_2layer h1=4000",
+   "value": 0.00020420534915188693,
+   "bound": 0.001
+  },
+  {
+   "benchmark": "B9",
+   "backend": "layer_limit_integral",
+   "case": "mom h1=4000",
+   "value": 0.00020420534915166488,
+   "bound": 0.001
+  },
+  {
+   "benchmark": "B9",
+   "backend": "layer_limit_integral",
+   "case": "mom_sommerfeld h1=4000",
+   "value": 0.00020420534912024557,
    "bound": 0.001
   },
   {
@@ -686,14 +686,14 @@
    "benchmark": "B10",
    "backend": "image",
    "case": "HomogeneousSoil",
-   "value": 0.014309060168248955,
+   "value": 0.01430906016824851,
    "bound": 0.03
   },
   {
    "benchmark": "B10",
    "backend": "image",
    "case": "TwoLayerSoil",
-   "value": 0.0282607129394572,
+   "value": 0.028260712939457422,
    "bound": 0.03
   },
   {
@@ -707,28 +707,28 @@
    "benchmark": "B11",
    "backend": "image_2layer",
    "case": "2.5->1.25",
-   "value": 0.0035142524763910332,
+   "value": 0.0035142524763915883,
    "bound": 0.006
   },
   {
    "benchmark": "B11",
    "backend": "mom",
    "case": "5->2.5",
-   "value": 0.008617171962286951,
+   "value": 0.008617171962287395,
    "bound": 0.01
   },
   {
    "benchmark": "B11",
    "backend": "mom",
    "case": "2.5->1.25",
-   "value": 0.0013681533059801687,
+   "value": 0.0013681533059803908,
    "bound": 0.01
   },
   {
    "benchmark": "B11",
    "backend": "mom_sommerfeld",
    "case": "ds=5",
-   "value": 7.485589925693148e-10,
+   "value": 7.485585484801049e-10,
    "bound": 1e-07
   },
   {
@@ -749,35 +749,35 @@
    "benchmark": "B12",
    "backend": "mom_sommerfeld",
    "case": "matrix ds=1.25",
-   "value": 6.937115326621779e-09,
+   "value": 6.937114549465662e-09,
    "bound": 1e-06
   },
   {
    "benchmark": "B12",
    "backend": "mom_sommerfeld",
    "case": "Z ds=1.25",
-   "value": 1.5251555574025133e-10,
+   "value": 1.5251588880715872e-10,
    "bound": 1e-06
   },
   {
    "benchmark": "B13",
    "backend": "image_vs_mom",
    "case": "worst row",
-   "value": 0.009964886629142838,
+   "value": 0.00996456173944289,
    "bound": 0.05
   },
   {
    "benchmark": "B13",
    "backend": "pollaczek_x",
    "case": "X' 1 kHz",
-   "value": 8.288173556358913e-06,
+   "value": 9.033850317141656e-06,
    "bound": 0.005
   },
   {
    "benchmark": "B13",
    "backend": "pollaczek_r",
    "case": "R' 1 kHz",
-   "value": 0.010518509408525056,
+   "value": 0.010556953248378687,
    "bound": 0.02
   }
  ],
@@ -789,17 +789,17 @@
    "resistance": 33.09561912715751,
    "reference": 33.4997455763075,
    "deviation": -0.012063567713654577,
-   "thin_wire_reference": 33.19568686747876,
-   "thin_wire_deviation": -0.003014480185957069
+   "thin_wire_reference": 33.195686867478756,
+   "thin_wire_deviation": -0.003014480185956847
   },
   {
    "case": "rod",
    "kernel": "point",
    "ds": 0.25,
-   "resistance": 32.987395458111784,
+   "resistance": 32.98739545811178,
    "reference": 33.4997455763075,
-   "deviation": -0.015294149534021195,
-   "thin_wire_reference": 33.19568686747876,
+   "deviation": -0.015294149534021417,
+   "thin_wire_reference": 33.195686867478756,
    "thin_wire_deviation": -0.006274652794458047
   },
   {
@@ -809,38 +809,38 @@
    "resistance": 32.932708847497494,
    "reference": 33.4997455763075,
    "deviation": -0.016926598069778698,
-   "thin_wire_reference": 33.19568686747876,
-   "thin_wire_deviation": -0.007922053881008972
+   "thin_wire_reference": 33.195686867478756,
+   "thin_wire_deviation": -0.00792205388100875
   },
   {
    "case": "rod",
    "kernel": "line",
    "ds": 0.5,
-   "resistance": 33.49971101404006,
+   "resistance": 33.49973341802077,
    "reference": 33.4997455763075,
-   "deviation": -1.0317173113616462e-06,
-   "thin_wire_reference": 33.19568686747876,
-   "thin_wire_deviation": 0.009158543631737404
+   "deviation": -3.6293668859155304e-07,
+   "thin_wire_reference": 33.195686867478756,
+   "thin_wire_deviation": 0.009159218538113079
   },
   {
    "case": "rod",
    "kernel": "line",
    "ds": 0.25,
-   "resistance": 33.499706561078945,
+   "resistance": 33.499718930719276,
    "reference": 33.4997455763075,
-   "deviation": -1.1646425333022847e-06,
-   "thin_wire_reference": 33.19568686747876,
-   "thin_wire_deviation": 0.009158409488975616
+   "deviation": -7.953967340323942e-07,
+   "thin_wire_reference": 33.195686867478756,
+   "thin_wire_deviation": 0.009158782116913455
   },
   {
    "case": "rod",
    "kernel": "line",
    "ds": 0.125,
-   "resistance": 33.499807021827735,
+   "resistance": 33.49971188045985,
    "reference": 33.4997455763075,
-   "deviation": 1.8342085643663353e-06,
-   "thin_wire_reference": 33.19568686747876,
-   "thin_wire_deviation": 0.009161435808304086
+   "deviation": -1.0058538376656045e-06,
+   "thin_wire_reference": 33.195686867478756,
+   "thin_wire_deviation": 0.009158569732109934
   },
   {
    "case": "ring",
@@ -854,57 +854,57 @@
    "case": "ring",
    "kernel": "point",
    "ds": 0.25,
-   "resistance": 12.334722488706632,
+   "resistance": 12.334722488706635,
    "reference": 12.481609853335305,
-   "deviation": -0.011768302835505007
+   "deviation": -0.011768302835504785
   },
   {
    "case": "ring",
    "kernel": "point",
    "ds": 0.125,
-   "resistance": 12.334772214747778,
+   "resistance": 12.334772214747773,
    "reference": 12.481609853335305,
-   "deviation": -0.01176431889098739
+   "deviation": -0.011764318890987835
   },
   {
    "case": "ring",
    "kernel": "line",
    "ds": 0.5,
-   "resistance": 12.451077317842108,
+   "resistance": 12.45107371024166,
    "reference": 12.481609853335305,
-   "deviation": -0.002446201720128105
+   "deviation": -0.0024464907533930935
   },
   {
    "case": "ring",
    "kernel": "line",
    "ds": 0.25,
-   "resistance": 12.473984607028978,
+   "resistance": 12.473962757344482,
    "reference": 12.481609853335305,
-   "deviation": -0.0006109184949639745
+   "deviation": -0.0006126690451535577
   },
   {
    "case": "ring",
    "kernel": "line",
    "ds": 0.125,
-   "resistance": 12.479799334929393,
+   "resistance": 12.479750743935147,
    "reference": 12.481609853335305,
-   "deviation": -0.00014505487891280922
+   "deviation": -0.00014894788589003838
   },
   {
    "case": "strip",
    "kernel": "point",
    "ds": 2.0,
-   "resistance": 15.06006110650965,
+   "resistance": 15.060061106509647,
    "reference": 14.941105815970007,
-   "deviation": 0.007961612212965985
+   "deviation": 0.007961612212965763
   },
   {
    "case": "strip",
    "kernel": "point",
    "ds": 0.5,
-   "resistance": 14.798310924481834,
+   "resistance": 14.798310924481836,
    "reference": 14.941105815970007,
-   "deviation": -0.009557183601199282
+   "deviation": -0.00955718360119917
   },
   {
    "case": "strip",
@@ -926,17 +926,17 @@
    "case": "strip",
    "kernel": "line",
    "ds": 0.5,
-   "resistance": 14.941080038827057,
+   "resistance": 14.94109339526841,
    "reference": 14.941105815970007,
-   "deviation": -1.7252500094100398e-06
+   "deviation": -8.313107309199097e-07
   },
   {
    "case": "strip",
    "kernel": "line",
    "ds": 0.125,
-   "resistance": 14.941116205969745,
+   "resistance": 14.941094452674339,
    "reference": 14.941105815970007,
-   "deviation": 6.953969717837793e-07
+   "deviation": -7.605391333376232e-07
   },
   {
    "case": "strip_2l",
@@ -950,9 +950,9 @@
    "case": "strip_2l",
    "kernel": "point",
    "ds": 0.5,
-   "resistance": 128.51520822838398,
+   "resistance": 128.51520822838395,
    "reference": 129.94639008448326,
-   "deviation": -0.01101363304643399
+   "deviation": -0.011013633046434212
   },
   {
    "case": "strip_2l",
@@ -966,25 +966,25 @@
    "case": "strip_2l",
    "kernel": "line",
    "ds": 2.0,
-   "resistance": 129.95427174464234,
+   "resistance": 129.9463612972698,
    "reference": 129.94639008448326,
-   "deviation": 6.065316746362015e-05
+   "deviation": -2.2153145962100496e-07
   },
   {
    "case": "strip_2l",
    "kernel": "line",
    "ds": 0.5,
-   "resistance": 129.9428993718362,
+   "resistance": 129.94626924640315,
    "reference": 129.94639008448326,
-   "deviation": -2.6862713498831958e-05
+   "deviation": -9.299071719315322e-07
   },
   {
    "case": "strip_2l",
    "kernel": "line",
    "ds": 0.125,
-   "resistance": 129.94628935622322,
+   "resistance": 129.94624620765202,
    "reference": 129.94639008448326,
-   "deviation": -7.751524299104418e-07
+   "deviation": -1.1072014477475633e-06
   }
  ],
  "field": [
@@ -993,53 +993,53 @@
    "backend": "image",
    "kernel": "point",
    "impedance": 2.360637556335385,
-   "touch": 0.9855577829068709,
-   "step": 0.3255504597163674,
-   "mesh": 0.5628983768695315
+   "touch": 0.9855577829068707,
+   "step": 0.3255504597163663,
+   "mesh": 0.5628983768695308
   },
   {
    "case": "grid",
    "backend": "image",
    "kernel": "line",
-   "impedance": 2.3735077507592943,
-   "touch": 0.9976063342312973,
-   "step": 0.32447990707576646,
-   "mesh": 0.5760509776319045
+   "impedance": 2.3735083816952622,
+   "touch": 0.9976068531997107,
+   "step": 0.32447975415399877,
+   "mesh": 0.5760520888679141
   },
   {
    "case": "grid",
    "backend": "mom",
    "kernel": "point",
-   "impedance": 2.3472875256659638,
-   "touch": 0.9377473675462527,
-   "step": 0.36635390750188934,
-   "mesh": 0.5304891693230598
+   "impedance": 2.347287525665964,
+   "touch": 0.9377473675462531,
+   "step": 0.36635390750188823,
+   "mesh": 0.5304891693230607
   },
   {
    "case": "star",
    "backend": "image",
    "kernel": "point",
-   "impedance": 5.561885931261594,
-   "touch": 3.7276582013177135,
-   "step": 0.6093711453046802,
+   "impedance": 5.561885931261593,
+   "touch": 3.7276582013177126,
+   "step": 0.6093711453046806,
    "mesh": null
   },
   {
    "case": "star",
    "backend": "image",
    "kernel": "line",
-   "impedance": 5.610352078003639,
-   "touch": 3.773246235774904,
-   "step": 0.6071802458971256,
+   "impedance": 5.610355811097858,
+   "touch": 3.7732497164082046,
+   "step": 0.607180245897126,
    "mesh": null
   },
   {
    "case": "star",
    "backend": "mom",
    "kernel": "point",
-   "impedance": 5.378437382008337,
+   "impedance": 5.378437382008336,
    "touch": 3.4270704738777944,
-   "step": 0.7857578946060153,
+   "step": 0.7857578946060166,
    "mesh": null
   },
   {
@@ -1047,25 +1047,25 @@
    "backend": "image",
    "kernel": "point",
    "impedance": 6.359639731667953,
-   "touch": 2.972951332666417,
-   "step": 1.0492688489224045,
+   "touch": 2.9729513326664168,
+   "step": 1.0492688489224031,
    "mesh": null
   },
   {
    "case": "ring",
    "backend": "image",
    "kernel": "line",
-   "impedance": 6.4155540265290805,
-   "touch": 3.027822897524822,
-   "step": 1.049325167350275,
+   "impedance": 6.415555469838257,
+   "touch": 3.027823393752582,
+   "step": 1.0493246228198534,
    "mesh": null
   },
   {
    "case": "ring",
    "backend": "mom",
    "kernel": "point",
-   "impedance": 6.35963973166795,
-   "touch": 2.972951332666414,
+   "impedance": 6.359639731667951,
+   "touch": 2.9729513326664145,
    "step": 1.0492688489224045,
    "mesh": null
   }

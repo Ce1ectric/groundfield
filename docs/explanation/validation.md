@@ -4,9 +4,9 @@
 
 !!! info "Generated page"
 
-    Every number on this page comes from one run of the engine benchmark suite, measured on 2026-11-14 with groundfield 2026.11.0 (Python 3.12.3, NumPy 2.5.4, SciPy 1.18.1, numba installed: yes; Linux x86_64), and from the bounds in `tests/benchmarks/tolerances.py`. The page is written by `python scripts/generate_validation_page.py`; `tests/test_validation_page.py` checks that it matches the stored measurements and, with `--run-benchmark`, that a fresh run reproduces them.
+    Every number on this page comes from one run of the engine benchmark suite, measured on 2026-11-16 with groundfield 2026.11.0 (Python 3.12.16, NumPy 2.4.4, SciPy 1.17.1, numba installed: yes; Darwin arm64), and from the bounds in `tests/benchmarks/tolerances.py`. The page is written by `python scripts/generate_validation_page.py`; `tests/test_validation_page.py` checks that it matches the stored measurements and, with `--run-benchmark`, that a fresh run reproduces them.
 
-Suite result of that run: **69 passed, 7 skipped** (`pytest tests/benchmarks --run-benchmark`; the skipped tests are combinations a benchmark does not apply to).
+Suite result of that run: **71 passed, 7 skipped** (`pytest tests/benchmarks --run-benchmark`; the skipped tests are combinations a benchmark does not apply to).
 
 ## What is compared with what
 
@@ -45,7 +45,7 @@ The cross-checks between backends run the image family with `kernel="point"`, th
 | B8 Two-port reciprocity | abs(Z_AB/Z_BA - 1) | 1e-10 | 0 | 1 | pass |  |
 | B10 Ring with three bonded rods | abs(Z/Z_ref - 1) | 3 % | 2.8 % | 2 | pass | uniform current per straight wire (10.22); target 2 % |
 | B13 Ring with an inductive 400 m line (`image_vs_mom`) | compare_engines row deviation (Re and Im) | 5 % | 1.0 % | 1 | pass | inductive branch shared; galvanic part differs by the ansatz |
-| B13 Ring with an inductive 400 m line (`pollaczek_x`) | abs(X'/X'_P - 1), X' = Im(Z_1600 m - Z_800 m) / 800 m at 1 kHz | 0.5 % | 8.3e-6 | 1 | pass | the two-length difference cancels the end effects; the 400 m line itself is 3.7 % (1 kHz) and 10.8 % (50 Hz) below l X'_P (finite length, l / delta = 2.5 and 0.56) |
+| B13 Ring with an inductive 400 m line (`pollaczek_x`) | abs(X'/X'_P - 1), X' = Im(Z_1600 m - Z_800 m) / 800 m at 1 kHz | 0.5 % | 9.0e-6 | 1 | pass | the two-length difference cancels the end effects; the 400 m line itself is 3.7 % (1 kHz) and 10.8 % (50 Hz) below l X'_P (finite length, l / delta = 2.5 and 0.56) |
 | B13 Ring with an inductive 400 m line (`pollaczek_r`) | abs(R'/R'_P - 1), same difference | 2 % | 1.1 % | 1 | pass | converges from below with the length (-4.5 % for 400/800 m); the 400 m line is 34 % (1 kHz) and 17 % (50 Hz) below l R'_P |
 
 ### `image_2layer`
@@ -55,7 +55,7 @@ The cross-checks between backends run the image family with `kernel="point"`, th
 | B6 Top-layer electrodes, two-layer soil | abs(Z/Z_ref - 1) | 1 % | 0.37 % | 10 | pass | uniform-current ansatz |
 | B7 Rod through the layer interface | abs(Z/Z_ref - 1) | 2 % | 0.38 % | 2 | pass | one uniform current across the interface (F02); bound met since the fix of 10.15 |
 | B8 Two-port reciprocity | abs(Z_AB/Z_BA - 1) | 1e-7 | 7.3e-9 | 2 | pass |  |
-| B9 Limits of the layered kernels (`equal_rho_integral`) | abs(Z/Z_ref - 1) | 1e-10 | 0 | 2 | pass | image_2layer, mom, mom_sommerfeld, cim, bem |
+| B9 Limits of the layered kernels (`equal_rho_integral`) | abs(Z/Z_ref - 1) | 1e-10 | 4.4e-16 | 2 | pass | image_2layer, mom, mom_sommerfeld, cim, bem |
 | B9 Limits of the layered kernels (`layer_limit_integral`) | abs(Z/Z_ref - 1) | 0.1 % | 5.1e-4 | 2 | pass | physical limit |
 | B11 Grid refinement | abs(Z(ds)/Z(ds/2) - 1) | 0.6 % | 0.54 % | 2 | pass | not monotone (point kernel); 0.43 % / 0.39 % with one owner for the grid before user decision Q30 |
 
@@ -76,7 +76,7 @@ The cross-checks between backends run the image family with `kernel="point"`, th
 | Benchmark | Measure | Bound | Worst measured | Cases | Status | Note |
 |---|---|---|---|---|---|---|
 | B4 Two-layer Sommerfeld kernel | rel. kernel error, or SommerfeldConvergenceWarning | 1e-9 | 2.0e-10 | 1 | pass | never silent (10.47); no warning for h_1 >= 0.2 m |
-| B5 Three-layer Sommerfeld kernel | rel. kernel error | 1e-10 | 2.7e-13 | 2 | pass |  |
+| B5 Three-layer Sommerfeld kernel | rel. kernel error | 1e-10 | 2.3e-13 | 2 | pass |  |
 | B6 Top-layer electrodes, two-layer soil | abs(Z/Z_ref - 1) | 1e-7 | 1.2e-8 | 10 | pass | kernel check |
 | B7 Rod through the layer interface | abs(Z/Z_ref - 1) | 1e-7 | 1.4e-10 | 2 | pass | kernel check |
 | B8 Two-port reciprocity | abs(Z_AB/Z_BA - 1) | 1e-7 | 4.4e-16 | 2 | pass |  |
@@ -108,7 +108,7 @@ The cross-checks between backends run the image family with `kernel="point"`, th
 | Benchmark | Measure | Bound | Worst measured | Cases | Status | Note |
 |---|---|---|---|---|---|---|
 | B8 Two-port reciprocity | abs(Z_AB/Z_BA - 1) | 1e-7 | 7.3e-9 | 2 | pass |  |
-| B9 Limits of the layered kernels (`equal_rho_integral`) | abs(Z/Z_ref - 1) | 1e-10 | 0 | 3 | pass | image_2layer, mom, mom_sommerfeld, cim, bem |
+| B9 Limits of the layered kernels (`equal_rho_integral`) | abs(Z/Z_ref - 1) | 1e-10 | 4.4e-16 | 3 | pass | image_2layer, mom, mom_sommerfeld, cim, bem |
 
 `bem` (runs `mom`):
 
@@ -124,13 +124,13 @@ The image family assumes a uniform current per unit length on each straight wire
 | Case | Exact uniform-current R | Kernel | ds = 2 m | ds = 0.5 m | ds = 0.25 m | ds = 0.125 m |
 |---|---|---|---|---|---|---|
 | rod 3 m from the surface, a = 8 mm, 100 Ω·m (B2 world) | 33.4997 Ω | `point` |  | −1.2 % | −1.5 % | −1.7 % |
-|  |  | `line` |  | −1.0e-6 | −1.2e-6 | +1.8e-6 |
+|  |  | `line` |  | −3.6e-7 | −8.0e-7 | −1.0e-6 |
 | ring r = 2 m at 0.8 m, a = 8 mm, 100 Ω·m (B3 world) | 12.4816 Ω | `point` |  | −1.2 % | −1.2 % | −1.2 % |
 |  |  | `line` |  | −0.24 % | −6.1e-4 | −1.5e-4 |
 | strip 10 m at 0.5 m, a = 5 mm, 100 Ω·m | 14.9411 Ω | `point` | +0.80 % | −0.96 % |  | −1.2 % |
-|  |  | `line` | −1.1e-16 | −1.7e-6 |  | +7.0e-7 |
+|  |  | `line` | −1.1e-16 | −8.3e-7 |  | −7.6e-7 |
 | strip 10 m at 0.5 m, a = 5 mm, two-layer 1000/30 Ω·m, h₁ = 5 m | 129.9464 Ω | `point` | +0.88 % | −1.1 % |  | −1.3 % |
-|  |  | `line` | +6.1e-5 | −2.7e-5 |  | −7.8e-7 |
+|  |  | `line` | −2.2e-7 | −9.3e-7 |  | −1.1e-6 |
 
 Against the thin-wire solution of the same rod (33.1957 Ω, the B2 reference, which lets the current vary along the rod) the line kernel stays at +0.92 % for every segment length: that is the error of the uniform-current *ansatz*, not of the kernel. The point kernel lies at −0.79 % … −0.30 %, closer by accident — its kernel error has the opposite sign and partly cancels the ansatz error.
 
@@ -155,8 +155,8 @@ Impedances average the potential over the electrode, so the uniform-current ansa
 | | `image` (`point`) | +3.4 % | +8.8 % | −22 % | — |
 | | `image` (`line`) | +4.3 % | +10 % | −23 % | — |
 | ring r = 5 m at 0.5 m | `mom` (reference) | 6.3596 Ω | 2.9730 V/A | 1.0493 V/A | — |
-| | `image` (`point`) | +6.7e-16 | +1.1e-15 | 0 | — |
-| | `image` (`line`) | +0.88 % | +1.8 % | +5.4e-5 | — |
+| | `image` (`point`) | +4.4e-16 | +6.7e-16 | −1.2e-15 | — |
+| | `image` (`line`) | +0.88 % | +1.8 % | +5.3e-5 | — |
 
 The safety helpers emit `UniformCurrentFieldWarning` when a result of the image family is evaluated within 5 m of such a shape; see [the image engine](engines/image.md#field-quantities-and-the-uniform-current-ansatz).
 
@@ -187,37 +187,37 @@ The safety helpers emit `UniformCurrentFieldWarning` when a result of the image 
     | B3 | `fem` | ds=0.25 | 5.7e-5 | 5e-4 |
     | B3 | `fem` | ds=0.125 | 5.7e-5 | 5e-4 |
     | B4 | `mom_sommerfeld` | max silent error | 2.0e-10 | 1e-9 |
-    | B5 | `mom_sommerfeld` | duplicated stacks | 2.7e-13 | 1e-10 |
-    | B5 | `mom_sommerfeld` | genuine three layers | 7.7e-16 | 1e-10 |
-    | B6 | `image_2layer` | ring 1000/30/h=5 | 4.4e-16 | 1 % |
+    | B5 | `mom_sommerfeld` | duplicated stacks | 2.3e-13 | 1e-10 |
+    | B5 | `mom_sommerfeld` | genuine three layers | 5.8e-16 | 1e-10 |
+    | B6 | `image_2layer` | ring 1000/30/h=5 | 6.7e-16 | 1 % |
     | B6 | `mom_sommerfeld` | ring 1000/30/h=5 | 3.0e-11 | 1e-7 |
+    | B6 | `fem` | ring 1000/30/h=5 | 1.3 % | 3 % |
     | B6 | `image_2layer` | rod 1000/30/h=5 | 0.37 % | 1 % |
     | B6 | `mom_sommerfeld` | rod 1000/30/h=5 | 4.5e-12 | 1e-7 |
-    | B6 | `image_2layer` | ring 1000/30/h=10 | 0 | 1 % |
+    | B6 | `fem` | rod 1000/30/h=5 | 0.63 % | 3 % |
+    | B6 | `image_2layer` | ring 1000/30/h=10 | 4.4e-16 | 1 % |
     | B6 | `mom_sommerfeld` | ring 1000/30/h=10 | 1.4e-11 | 1e-7 |
+    | B6 | `fem` | ring 1000/30/h=10 | 1.2 % | 3 % |
     | B6 | `image_2layer` | rod 1000/30/h=10 | 0.36 % | 1 % |
     | B6 | `mom_sommerfeld` | rod 1000/30/h=10 | 2.2e-12 | 1e-7 |
+    | B6 | `fem` | rod 1000/30/h=10 | 0.62 % | 3 % |
     | B6 | `image_2layer` | ring 1000/30/h=30 | 6.7e-16 | 1 % |
     | B6 | `mom_sommerfeld` | ring 1000/30/h=30 | 4.4e-12 | 1e-7 |
+    | B6 | `fem` | ring 1000/30/h=30 | 1.2 % | 3 % |
     | B6 | `image_2layer` | rod 1000/30/h=30 | 0.36 % | 1 % |
     | B6 | `mom_sommerfeld` | rod 1000/30/h=30 | 7.4e-13 | 1e-7 |
+    | B6 | `fem` | rod 1000/30/h=30 | 0.61 % | 3 % |
     | B6 | `image_2layer` | ring 30/200/h=5 | 6.7e-16 | 1 % |
     | B6 | `mom_sommerfeld` | ring 30/200/h=5 | 2.6e-9 | 1e-7 |
+    | B6 | `fem` | ring 30/200/h=5 | 0.85 % | 3 % |
     | B6 | `image_2layer` | rod 30/200/h=5 | 0.33 % | 1 % |
     | B6 | `mom_sommerfeld` | rod 30/200/h=5 | 5.6e-10 | 1e-7 |
+    | B6 | `fem` | rod 30/200/h=5 | 0.57 % | 3 % |
     | B6 | `image_2layer` | ring 100/400/h=2 | 4.4e-16 | 1 % |
     | B6 | `mom_sommerfeld` | ring 100/400/h=2 | 1.2e-8 | 1e-7 |
+    | B6 | `fem` | ring 100/400/h=2 | 0.75 % | 3 % |
     | B6 | `image_2layer` | rod 100/400/h=2 | 0.25 % | 1 % |
     | B6 | `mom_sommerfeld` | rod 100/400/h=2 | 2.8e-9 | 1e-7 |
-    | B6 | `fem` | ring 1000/30/h=5 | 1.3 % | 3 % |
-    | B6 | `fem` | rod 1000/30/h=5 | 0.63 % | 3 % |
-    | B6 | `fem` | ring 1000/30/h=10 | 1.2 % | 3 % |
-    | B6 | `fem` | rod 1000/30/h=10 | 0.62 % | 3 % |
-    | B6 | `fem` | ring 1000/30/h=30 | 1.2 % | 3 % |
-    | B6 | `fem` | rod 1000/30/h=30 | 0.61 % | 3 % |
-    | B6 | `fem` | ring 30/200/h=5 | 0.85 % | 3 % |
-    | B6 | `fem` | rod 30/200/h=5 | 0.57 % | 3 % |
-    | B6 | `fem` | ring 100/400/h=2 | 0.75 % | 3 % |
     | B6 | `fem` | rod 100/400/h=2 | 0.59 % | 3 % |
     | B7 | `mom_sommerfeld` | 1000/30 | 4.4e-11 | 1e-7 |
     | B7 | `mom_sommerfeld` | 100/1000 | 1.4e-10 | 1e-7 |
@@ -235,10 +235,10 @@ The safety helpers emit `UniformCurrentFieldWarning` when a result of the image 
     | B8 | `bem` | top_layer | 6.7e-16 | 1e-7 |
     | B8 | `bem` | cross_layer | 7.2e-9 | 1e-7 |
     | B8 | `mom_sommerfeld` | top_layer | 4.4e-16 | 1e-7 |
-    | B8 | `mom_sommerfeld` | cross_layer | 0 | 1e-7 |
-    | B9 | `equal_rho_integral` | image_2layer TwoLayer(100,100,h=0.5) | 0 | 1e-10 |
+    | B8 | `mom_sommerfeld` | cross_layer | 3.3e-16 | 1e-7 |
+    | B9 | `equal_rho_integral` | image_2layer TwoLayer(100,100,h=0.5) | 4.4e-16 | 1e-10 |
     | B9 | `equal_rho_integral` | image_2layer TwoLayer(100,100,h=30) | 0 | 1e-10 |
-    | B9 | `equal_rho_integral` | cim TwoLayer(100,100,h=0.5) | 0 | 1e-10 |
+    | B9 | `equal_rho_integral` | cim TwoLayer(100,100,h=0.5) | 4.4e-16 | 1e-10 |
     | B9 | `equal_rho_integral` | cim TwoLayer(100,100,h=30) | 0 | 1e-10 |
     | B9 | `equal_rho_integral` | cim MultiLayer([100]*3) | 0 | 1e-10 |
     | B9 | `equal_rho_integral` | mom TwoLayer(100,100,h=0.5) | 0 | 1e-10 |
@@ -250,16 +250,16 @@ The safety helpers emit `UniformCurrentFieldWarning` when a result of the image 
     | B9 | `equal_rho_integral` | mom_sommerfeld TwoLayer(100,100,h=0.5) | 0 | 1e-10 |
     | B9 | `equal_rho_integral` | mom_sommerfeld TwoLayer(100,100,h=30) | 0 | 1e-10 |
     | B9 | `equal_rho_integral` | mom_sommerfeld MultiLayer([100]*3) | 0 | 1e-10 |
-    | B9 | `layer_limit_integral` | image_2layer h1=0.004 | 5.1e-4 | 0.1 % |
-    | B9 | `layer_limit_integral` | mom h1=0.004 | 5.1e-4 | 0.1 % |
-    | B9 | `layer_limit_integral` | mom_sommerfeld h1=0.004 | 5.1e-4 | 0.1 % |
-    | B9 | `layer_limit_integral` | image_2layer h1=4000 | 2.0e-4 | 0.1 % |
-    | B9 | `layer_limit_integral` | mom h1=4000 | 2.0e-4 | 0.1 % |
-    | B9 | `layer_limit_integral` | mom_sommerfeld h1=4000 | 2.0e-4 | 0.1 % |
     | B9 | `equal_rho_fem` | fem TwoLayer(100,100,h=0.5) | 0 | 1e-12 |
     | B9 | `equal_rho_fem` | fem TwoLayer(100,100,h=30) | 0 | 1e-12 |
     | B9 | `equal_rho_fem` | fem MultiLayer([100]*3) | 0 | 1e-12 |
+    | B9 | `layer_limit_integral` | image_2layer h1=0.004 | 5.1e-4 | 0.1 % |
+    | B9 | `layer_limit_integral` | mom h1=0.004 | 5.1e-4 | 0.1 % |
+    | B9 | `layer_limit_integral` | mom_sommerfeld h1=0.004 | 5.1e-4 | 0.1 % |
     | B9 | `layer_limit_fem` | fem h1=0.004 | 5.0e-4 | 0.1 % |
+    | B9 | `layer_limit_integral` | image_2layer h1=4000 | 2.0e-4 | 0.1 % |
+    | B9 | `layer_limit_integral` | mom h1=4000 | 2.0e-4 | 0.1 % |
+    | B9 | `layer_limit_integral` | mom_sommerfeld h1=4000 | 2.0e-4 | 0.1 % |
     | B9 | `layer_limit_fem` | fem h1=4000 | 2.0e-4 | 0.1 % |
     | B10 | `image` | HomogeneousSoil | 1.4 % | 3 % |
     | B10 | `image` | TwoLayerSoil | 2.8 % | 3 % |
@@ -273,7 +273,7 @@ The safety helpers emit `UniformCurrentFieldWarning` when a result of the image 
     | B12 | `mom_sommerfeld` | matrix ds=1.25 | 6.9e-9 | 1e-6 |
     | B12 | `mom_sommerfeld` | Z ds=1.25 | 1.5e-10 | 1e-6 |
     | B13 | `image_vs_mom` | worst row | 1.0 % | 5 % |
-    | B13 | `pollaczek_x` | X' 1 kHz | 8.3e-6 | 0.5 % |
+    | B13 | `pollaczek_x` | X' 1 kHz | 9.0e-6 | 0.5 % |
     | B13 | `pollaczek_r` | R' 1 kHz | 1.1 % | 2 % |
 
 ## Regenerating this page
