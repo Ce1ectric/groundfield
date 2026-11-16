@@ -70,4 +70,4 @@ reverse. The notebook:
 
 It explains why the touch voltages near a grid come from `mom`, not from
 `image_2layer`. It also shows how the layer contrast moves the impedance and
-the touch voltage in opposite directions. It runs in about 75 s.
+the touch voltage in opposite directions. It runs in about a minute.
