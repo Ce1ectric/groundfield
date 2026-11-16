@@ -4980,10 +4980,10 @@ determinism of W4B-07 and the memory keys hold.
   beside each other where a point of one lies within 1.5 R of the side of
   the other and the two run within 30° of parallel, or where the whole of
   one lies within 1.5 R of another it does not meet; junctions, crossings
-  at more than 30°, a rod on a ring and collinear pieces are left alone.
+  at more than 30°, a rod on a ring and collinear pieces that meet are left alone.
   The model keeps such wires 1.5 R apart by a smaller source radius for the
-  whole world and refuses them below 2.2 bare wire radii (3.3 wire radii,
-  axis to axis) before meshing, naming the wires, their distance, `mom` and
+  whole world and refuses them below 2.2 radii of the thickest bare wire of
+  the world (3.3 such radii, axis to axis) before meshing, naming the wires, their distance, `mom` and
   `image`. Coaxial rings 4.5 … 10 cm apart lie within 1.72e-3 of the solid
   tori in every port entry and the bonded value, inside the estimate; 3 cm
   is refused by the node limit, the diagonal rings of W4R2A-01 and the ring
@@ -4996,12 +4996,13 @@ determinism of W4B-07 and the memory keys hold.
   the cross product (the 20 m oblique strip matches its closed form to
   4e-16); the own polyline counts whole only where it has turned by less
   than 120° (the tilted hairpin −1.9e-4, `mom` −2.0e-4; the jump at the
-  threshold 1.5e-4; the auditor's axis-line rule moved rings away from the
+  threshold 1.5e-4 for 4 m arms, −1.26e-3 for 0.5 m arms, replaced in
+  round 3 by a blend in the accumulated turn; the auditor's axis-line rule moved rings away from the
   solid torus and was not taken).
 - **`fw4r2b`, the rest (W4R2B-04 … -07, W4R2A-07):** resolved concrete with
   a thin cover is refused before meshing; the new
-  `fem_error_estimate_transfer` (6.3 times the transfer error on the
-  coaxial analogue of B8); the B8 note says that `mom` at 0.5 m is not
+  `fem_error_estimate_transfer` (1.06 … 6.3 times the transfer error where
+  the model holds; 6.3 on the coaxial analogue of B8); the B8 note says that `mom` at 0.5 m is not
   converged; the level ratios (rods 3.3 … 4.4, rings 3.0 … 3.4) and the CG
   refusal corrected; the W4B-01 tests fail on their base by assertion;
   `solid_earth` defaults to 2 million nodes. The AP1 station and the house
@@ -5028,4 +5029,79 @@ determinism of W4B-07 and the memory keys hold.
   silently, 6809 Ω instead of 647 Ω; features within 1e-12 were one line,
   since audit W4R3A-01 within 1e-9 of max(1 m, x).
 - **Golden:** 563 of 563 quantities identical in both streams; full suite
-  after the merge in the release section.
+  after the merge: 6137 passed, 0 failed.
+
+### Audits W4R3A and W4R3B: round 3 on the wave-4 fixes
+
+A short round on the round-2 fixes (snapshot `b727b0b`), with the boundary
+elements of rounds 1 and 2, the axisymmetric model, `mom` refined, `image`
+and closed forms. Findings:
+
+- W4R3B-01 (medium): two collinear wires of different ports with a small
+  end gap ("stacked rods") were left alone, and an end gap up to the wire
+  radius counted as meeting: rods 2 mm … 3 cm apart read +5.1e-2 …
+  +6.4e-3 in a port entry and −20 % … −2.9 % in the transfer entry, far
+  outside both estimates, without a message.
+- W4R3B-02, W4R3B-03 (low–medium): wires that meet at less than 30° (a V,
+  a branch) were refused with the distance of a sample point; the 120°
+  rule tested a piece's direction, not the turn along the chain (an arm
+  turned by 360° counted whole, a spiral as one polyline +2.08e-3 against
+  its windings, the jump at 120° up to −1.26e-3 for short arms).
+- W4R3B-04, W4R3B-05 (low): wires met at an axis distance of the smaller
+  radius, not where their surfaces touch (a 2 m cross jumped by −7.5e-4);
+  the refusal radius is that of the thickest bare wire of the world.
+- W4R3A-01 (low): mesh features merged only within the snap tolerance, so a
+  ring axis a few picometres off an interface still read +35 … +44 % or
+  failed, silently.
+- W4R3A-02 (low): the resistive side of the reach table had been measured
+  above the wire for a thin ring only; a 55 mm wire under a 33 times more
+  resistive layer read +1.72 % at 1.3 radii, unreported.
+
+Confirmed: the graded ring block (the 113-case sweep bit for bit, 26 more
+worlds against the boundary elements, the estimate above every port
+entry), the rod-end warning once per solve, `diagnose()`, the costs, the
+cross-product axis distance, the 1.5 R and 30° switches for wires that do
+not meet, the thin-cover limit, the transfer estimate wherever the model
+holds (1.06 … 6.3 times the error), and the AP1 station and house mesh
+bit-identical in their radius correction.
+
+### Streams `fw4r3a` and `fw4r3b`: fixes of audits W4R3A and W4R3B
+
+- **`fw4r3b`, wires end to end (W4R3B-01):** pieces in line with a gap
+  below 5 R run beside each other with the gap as their distance: a smaller
+  R (gap / 5), or a refusal before meshing (stacked 8 mm rods up to 8.8 cm
+  apart). Collinear pieces meet only without a gap, and a collinear piece
+  of another port counts only where the wires meet. The coordinator first
+  took the stream's factor 3; at 10 … 18 cm it left the transfer entry
+  1.15 … 1.18 times its estimate, so the factor is 5: 10 … 30 cm apart every
+  entry lies within its estimate (R12 −2.6e-3 … −3.7e-3, 10 cm 0.47 million
+  nodes). A rod cut into touching pieces is bit-identical.
+- **`fw4r3b`, wires that meet (W4R3B-02, -04):** wires meet where their
+  surfaces touch, with flat ends (crossings within a1 + a2; an encased wire
+  by its shell radius), and the window fades out to a surface gap of
+  a1 + a2 (the cross continuous, −2.4e-5 against `mom` −1.6e-5). Wires that
+  meet at 10° or more are left alone (a V of 10 … 35° on the trend of `mom`,
+  polyline and two strips alike to 2e-5). The literal rule of the brief
+  would have made wires touching along their length one conductor, with
+  port entries that are not physical, and would have reached the D9
+  service drops of the generators; the coordinator set a minimum angle of
+  10°, below which such wires are refused as before.
+- **`fw4r3b`, the own chain (W4R3B-03):** counted whole up to a turn of 90°
+  accumulated along it, fading linearly to 0 at 150° (the meander −1.24e-4,
+  the spiral +5.9e-5, the 0.5 m V across 120° +3.30e-4, each next to `mom`;
+  rings move by −6.9e-6 / −4.4e-7).
+- **`fw4r3a`, mesh features (W4R3A-01):** within 1e-9 of max(1 m, x) they are
+  one line, keeping the coordinate of the physical feature (a ring touching
+  a 1000 times more conductive layer moves by 2.6e-3 per nanometre of the
+  interface); interfaces are cut at their own line; a zero-area triangle is
+  an internal error. 276 gap solves lie within 1.7e-6; the 113-case sweep
+  is bit-identical.
+- **`fw4r3a`, the reach (W4R3A-02):** the resistive side re-measured above
+  and below the wire of five geometries with the converged thin wire (1.3 /
+  1.9 / 2.2 / 2.2 / 2.3 a at 3 / 10 / 33 / 100 / 1000); the conductive node
+  at 1000 is 4.3 a; cut wires are reported from 1.3; no false positive over
+  727 tests, T01–T10 and 48 golden cases. The conductive nodes stay as
+  measured at one segment length; converged, every distance lies inside
+  them (by 0.004 … 0.17 a), so the coordinator kept the table.
+- **Golden:** 563 of 563 quantities identical in both streams; the AP1
+  station, the house mesh and the bonded L / T bit-identical.

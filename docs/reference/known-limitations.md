@@ -303,14 +303,25 @@ shows what agrees with independent references and how well.
   correction: uniform around the wire, no end faces), the soil an isotropic
   tetrahedral mesh with immersed layer interfaces. Away from layer
   interfaces it agrees with the axisymmetric model to 2e-3 for rods and
-  rings in one to three layers. Wires that run beside each other (side by
-  side within 30° of parallel, a folded arm, a small ring around a rod head)
-  are kept at least $1.5\,R$ apart ($R$ = `source_radius`, 6 cm): the model
-  takes a smaller $R$ for the whole world (the nodes grow as $1/R$; coaxial
-  rings 4.5 cm apart need 1.0 million nodes) and refuses wires closer than
-  3.3 wire radii, axis to axis, before meshing (`BackendCapabilityError`;
-  audits W4R2B-03, W4R2A-01); coaxial rings 4.5 … 10 cm apart lie within
-  1.8e-3 of the solid tori. Its two mesh levels are not asymptotic for every
+  rings in one to three layers. Wires that do not meet but run beside each
+  other (side by side within 30° of parallel, a folded arm, a small ring
+  around a rod head) are kept at least $1.5\,R$ apart ($R$ =
+  `source_radius`, 6 cm), two wires end to end in line with a gap, such as
+  stacked rods of two electrodes, at least $5\,R$ (their transfer entry's
+  error falls with $R$ / gap; at $3\,R$ it was still up to 1.18 times its
+  estimate). The model takes a smaller $R$ for the whole world (the nodes
+  grow as $1/R$; coaxial rings 4.5 cm apart need 1.0 million nodes, stacked
+  8 mm rods 10 cm apart 0.47 million) and refuses before meshing wires
+  closer than 3.3 radii of the thickest bare wire of the world, axis to
+  axis (end to end 11, so stacked 8 mm rods up to 8.8 cm apart;
+  `BackendCapabilityError`; audits W4R2B-03, W4R2A-01, W4R3B-01, W4R3B-05).
+  Coaxial rings 4.5 … 10 cm apart lie within 1.8e-3 of the solid tori.
+  Wires that meet at 10° or more are left alone, so a V or a branch of
+  10 … 30° is solved; wires that meet at less than 10°, nearly parallel or
+  touching along their length, count as running beside each other (audit
+  W4R3B-02). Two encased wires of different ports whose shells touch count
+  as one conductor in the radius correction, so their separate port
+  entries are not resolved. Its two mesh levels are not asymptotic for every
   geometry (error ratios 3.0 … 4.4): the reported error estimate (3 … 5e-3;
   `fem_error_estimate_transfer` for the transfer entries) bounds the error
   while the ratio is at least 2.5 (for rings it is 2.1 … 4.4 times the

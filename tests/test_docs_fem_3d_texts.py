@@ -230,3 +230,12 @@ def test_w4r3b_decisions_the_texts_state_the_in_line_factor_the_angle_and_shells
         assert "gap over 3" not in text and "gap / 3)" not in text
     for text in (wires, solid):
         assert "IN_LINE_FACTOR" in text and "10°" in text
+
+
+def test_w4r3b_05_known_limitations_name_the_thickest_bare_wire() -> None:
+    """The 3-D refusal radius is 2.2 radii of the thickest bare wire of the
+    world, not of the wires concerned (audit W4R3B-05, test of auditor
+    W4R3B)."""
+    kl = (ROOT / "docs/reference/known-limitations.md").read_text(encoding="utf-8")
+    assert not re.search(r"refuses wires closer than\s+3\.3 wire radii", kl)
+    assert "thickest bare wire" in kl

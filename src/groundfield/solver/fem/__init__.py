@@ -296,11 +296,15 @@ def solve_fem(
         of a rod's end edge); ``model="auto"`` solves these worlds with the
         three-dimensional model.
         3-D model, before meshing: a wire too close to the soil surface or
-        an interface for its smoothed source; wires that run beside each
-        other (side by side within 30° of parallel, a folded arm, a small
-        ring around a rod head) closer than 1.5 times the smallest source
-        radius their wire radius allows (3.3 wire radii, axis to axis);
-        resolved concrete around a wire that is not straight along x, y or
+        an interface for its smoothed source; wires that do not meet but
+        run beside each other (side by side within 30° of parallel, a
+        folded arm, a small ring around a rod head, two wires that meet at
+        less than 10° or touch along their length) closer than 1.5 times
+        the smallest source radius, and wires end to end in line with a
+        gap, such as stacked rods, closer than 5 times it (the smallest
+        source radius is 2.2 radii of the thickest bare wire of the world,
+        so 3.3 and 11 such radii, axis to axis); wires that meet at 10° or
+        more are left alone; resolved concrete around a wire that is not straight along x, y or
         z, or whose cover is so thin that the smoothed source does not
         reach beyond the metal. After meshing: conjugate gradients that do
         not converge (layer contrasts above about 300). The message names

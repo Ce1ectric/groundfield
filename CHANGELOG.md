@@ -132,6 +132,7 @@ reproduces 0.15.0, it is named.
 | W4A-01, W4B-01 (wave 4, streams `fw4axi`, `fw4fem3d`) | `fem`: the mesh block of a ring at an interface refined; the 3-D radius correction counts only the near parts of other wires | rings within 1.05 radii of an interface up to 6.0e-3 (towards the reference; a ring 0.01 a from a 30 Ω·m layer under 1000 Ω·m +1.83e-3 → −2.7e-5); 3-D: rods and rings 0.5 … 0.8 m deep ≤ 3e-5, the AP1 station −0.9e-4 … −1.1e-4, a ring 6 cm deep −1.9e-3, two rings 10 cm apart −5.8e-3, the house mesh with bare braces −3.4e-4 / −5.8e-4 (brace effect +49.14 / +318.23 %), a galvanic chain −2.5e-4; no golden case | users of `fem` |
 | W4R2A-01, -02, W4R2B-01 … -03 (wave 4, round 2, streams `fw4r2a`, `fw4r2b`) | `fem`: the ring block at an interface graded towards the contact points; 3-D: wires that run beside each other kept 1.5 source radii apart, the axis distance of oblique pieces, the own polyline whole only below a turn of 120° | axisymmetric: rings within 1.05 radii of an interface towards the reference, by up to 1.6e-2 touching a 1000 times more conductive layer (within the earlier estimates below a contrast of 33); 3-D: coaxial rings 4.5 … 7.5 cm apart in a port entry +1.99e-2 … +4.35e-3 → −8e-5 … −1.25e-3, rings diagonal to each other 1.3 … 3.8 mm apart refused (+11 … +14 % before), a 20 m oblique strip +3.78e-4, small rings and folded arms −9e-6 … −2.0e-3; the AP1 station and the house mesh unchanged to 7 digits; no golden case | users of `fem` |
 | W4R3A-01 (wave 4, round 3, stream `fw4r3a`) | `fem` (axisymmetric): mesh features within 1e-9 of max(1 m, x) are one line, the physical feature keeping its coordinate | worlds with a ring axis or rod end picometres off an interface that read +35 … +44 %, −2.7 % or failed are now within 1.7e-6 of the world on the interface; features that close move by at most 1e-9 m (a ring touching a 1000 times more conductive layer changes by 2.6e-3 per nanometre); no golden case | studies placing electrodes at interfaces with computed depths |
+| W4R3B-01 … -04 (wave 4, round 3, stream `fw4r3b`) | `fem` 3-D: wires end to end kept 5 R apart; wires that meet at 10° or more left alone, below 10° beside each other; the own chain blended in its accumulated turn; the touching distance with flat ends and a fading window | stacked rods 1 cm apart R11 +1.57e-2 → refused (up to 8.8 cm for 8 mm rods), 10 cm R12 within its estimate at R 2 cm (−2.6e-3); a V of 10 … 30° refused → solved; meander tilt +4.65e-4 → −1.24e-4; spiral representations +2.08e-3 → +5.9e-5; a 2 m cross at the switch −7.5e-4 → −2.4e-5; rings r = 0.3 / 1 m −6.9e-6 / −4.4e-7; the AP1 station, the house mesh and bonded L / T bit-identical; no golden case | users of the 3-D `fem` |
 | roadmap *Vectorise the ADR-0007 path* (wave 3) | spectral amplitudes in closed form | round-off: ≤ 2.5e-16 (golden), ≤ 4.3e-16 (station Z) | cross-layer worlds, `two_layer_probe_matrix`, every backend through `layered_green` |
 | Q34 (wave 3, stream `w3perf`) | `sommerfeld` self terms and close pairs | lumped 1 km PEN 4.9e-7; segments of 5–20 m 1e-9 … 2e-8; a lumped 2 km conductor 1e-4 of the earth-return part; golden `cond_lumped_long_pen_sommerfeld`, `cond_isolated_pen_sommerfeld_two_layer`, `cond_overhead_lead_over_pen_carson_series`, `cond_galvanic_neumann_sommerfeld`, `defaults_mixed_cluster_inductive` 8e-10 … 4.9e-7 | every world with `sommerfeld` or the Sommerfeld fallback of `carson_series` |
 | audit W1R3-07 (wave 3, stream `w3perf`) | `carson_series`: tilted pairs that come close tiled per stretch | up to 5e-2 of X for a core crossing its shield at 4e-2 rad; generated networks up to 3e-7 (the 10-house star with sites 2.8e-7, the 80-house radial 3.4e-8; audit W3B-07) | worlds with tilted near-parallel pairs that touch or cross, under `carson_series` |
@@ -555,9 +556,12 @@ reproduces 0.15.0, it is named.
   penalised immersed layer interfaces, conjugate gradients with an algebraic
   multigrid, two nested levels extrapolated; within 2e-3 of the axisymmetric
   model for rods and rings in one to three layers away from interfaces;
-  wires that run beside each other are kept at least 1.5 source radii apart
-  by a smaller source radius, and refused closer than 3.3 wire radii, axis
-  to axis (audits W4B-01, W4B-02, W4R2B-03, W4R2A-01); the AP1 station in the
+  wires that do not meet but run beside each other are kept at least 1.5
+  source radii apart by a smaller source radius, wires end to end at least
+  5, and refused closer than 3.3 radii of the thickest bare wire of the
+  world, axis to axis (11 end to end); wires that meet at 10° or more are
+  one conductor (audits W4B-01, W4B-02, W4R2B-03, W4R2A-01, W4R3B-01,
+  W4R3B-02, W4R3B-05); the AP1 station in the
   corner soils of the AP1 grid lies between `image_2layer` (+0.7 … +3.0 %) and
   `mom` (−0.4 … −0.9 %), at 1.5 … 3 minutes and 4.1 … 4.3 GB per solve. It
   needs the optional extra `fem3d` (scikit-fem, BSD-3; pyamg, MIT;
@@ -1865,7 +1869,8 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
   before (a touching ring 151 807 nodes, 1.8 s). With `model="auto"` a
   ring without room for its mesh block (diagonal to a rod's end edge)
   ended in a bare `ValueError`; it goes to the 3-D model, which solves it
-  or refuses wires closer than 3.3 wire radii (audit W4R2A-01), and
+  or refuses wires closer than 3.3 radii of the thickest bare wire of the
+  world (audit W4R2A-01), and
   `model="axisymmetric"` refuses with `BackendCapabilityError` (W4A-03).
   The node guard estimate was 1.5 … 2.3 % low for a ring; it now bounds the
   mesh (W4A-10). Test: `tests/test_fem.py`.
@@ -1940,7 +1945,8 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
     1.8e-3 of the solid tori); below 2.2 bare wire radii the solve raises
     `BackendCapabilityError` before meshing, naming the wires, their
     distance, `mom` and `image`. Junctions, crossings at more than 30°, a
-    rod on a ring and collinear pieces are left alone. The radius correction
+    rod on a ring and collinear pieces that meet are left alone (round 3:
+    see below). The radius correction
     counts a wire of another port only where it meets the observer's wire
     (audits W4R2B-03, W4R2A-01).
   - The own piece of a long oblique wire was clipped from about 7 m on
@@ -1957,6 +1963,45 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
     of `max_nodes_3d` (W4R2A-07).
   - B8 note: `mom` at its 0.5 m segments is not converged; `fem`'s Z_BA lies
     0.15 … 0.21 % below `mom` at 1/32 m, which is still falling (W4R2B-05).
+  Test: `tests/test_fem_3d.py`, `tests/test_docs_fem_3d_texts.py`.
+- `fem`, 3-D model, round 3 of the wave-4 audits (W4R3B).
+  - Stacked rods of two electrodes with an end gap below the source radius
+    ran without a message: at 1 cm they read +1.57e-2 in a port entry and
+    −7.34e-2 in the transfer entry, the other rod counting whole with the
+    observer's current. Wires end to end in line now keep their gap at 5
+    source radii, by a smaller source radius, or `BackendCapabilityError`
+    before meshing (stacked 8 mm rods up to 8.8 cm apart are refused). The
+    error of their transfer entry falls with R / gap: at 3 radii it was
+    still up to 1.18 times its estimate; 10 … 30 cm apart every entry lies
+    within its estimate (R12 −2.6e-3 … −3.7e-3; 10 cm costs 0.47 million
+    nodes). A collinear piece of another port counts only where the wires
+    meet (W4R3B-01).
+  - Two wires meeting at less than 30° — a V, a branch — were refused before
+    meshing with the distance of the sample point nearest the apex (0.65 mm
+    for 10°). From 10° on they are solved: a V of 10 … 35° lies +3.35e-3 …
+    +5.02e-3 above `mom` at ds 0.0125 m, as a polyline and as two strips
+    alike to 2e-5. Below 10°, and for wires touching along their length (two
+    strips 8 mm apart, the service drops of `TnNetworkGenerator` in a row),
+    they are refused, naming their distance and angle (W4R3B-02).
+  - The 120° rule tested a piece's direction: the third arm of an
+    S-meander, turned by 360°, counted whole when tilted (+4.65e-4 in Z,
+    `mom` −1.3e-4), a spiral as one polyline read +2.08e-3 against its
+    bonded windings, and a V of 0.5 m arms jumped by −1.26e-3 across a turn
+    of 120°. The own polyline now counts whole up to a turn of 90°
+    accumulated along the wire, by a weight falling linearly to 0 at 150°,
+    and like another wire of the electrode beyond (now −1.24e-4, +5.9e-5 and
+    +3.30e-4 against `mom` −1.26e-4, 0 and +3.44e-4; W4R3B-03).
+  - Wires meet where their surfaces touch, with flat wire ends: crossing
+    wires within a1 + a2, axis to axis (up to now within the smaller
+    radius); a wire where its end face reaches the other's surface; wires
+    end to end on one axis only without a gap; an encased wire by its shell
+    radius. The window term of a wire that has just stopped touching fades
+    out to a surface gap of a1 + a2, so a 2 m cross no longer jumps by
+    −7.5e-4 between axis gaps of 4.9 and 5.1 mm (now −2.4e-5, `mom`
+    −1.6e-5; W4R3B-04).
+  - Texts: the refusal radius is 3.3 radii of the thickest bare wire of the
+    world; the transfer estimate's margin is 1.06 … 6.3 where the model
+    holds (W4R3B-05).
   Test: `tests/test_fem_3d.py`, `tests/test_docs_fem_3d_texts.py`.
 
 ### Corrections to the 0.15.0 release notes
