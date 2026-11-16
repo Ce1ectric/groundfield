@@ -160,8 +160,8 @@ Limit checks (built into the test suite)
 - $\\sigma_e\\to\\infty$, buried pair: $e^{-\\gamma R} \\to 0$ — the
   conductor is screened by the surrounding medium.
 - Long parallel buried wires: the per-metre limit reproduces
-  Pollaczek's $\\frac{j\\omega\\mu_0}{2\\pi}\\bigl[K_0(\\gamma d)
-  - K_0(\\gamma D') + J_P\\bigr]$.
+  Pollaczek's
+  $\\frac{j\\omega\\mu_0}{2\\pi}\\bigl[K_0(\\gamma d) - K_0(\\gamma D') + J_P\\bigr]$.
 - A three-layer earth with $\\rho_2 = \\rho_3$ reproduces the
   two-layer result.
 

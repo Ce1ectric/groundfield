@@ -325,7 +325,7 @@ def compare_engines(
             \\frac{\\max_k c_k - \\min_k c_k}
                   {\\max(\\min_k |c_k|,\\;
                          \\eta\\, \\min_k |Z_k|)}
-            \\;\\le\\; \\texttt{rel_tolerance}
+            \\;\\le\\; \\texttt{rel\\_tolerance}
 
         over the engines :math:`k`, where :math:`c_k` is the real or
         imaginary part of the complex value :math:`Z_k` and

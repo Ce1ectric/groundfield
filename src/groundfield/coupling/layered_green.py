@@ -2286,9 +2286,9 @@ def two_layer_layered_correction_real_space(
        integrator returns 0 to machine precision (no spurious
        diagonal contribution from finite-Sommerfeld-quadrature
        error at $z = z_s$).
-    2. The kernel difference $(a_1 - a_1^{\\text{hom}})e^{\\lambda z}
-       + (b_1 - b_1^{\\text{hom}})e^{-\\lambda z}$ has no
-       $1/(2\\lambda)$ piece, so the small-$\\lambda$ region is
+    2. The kernel difference
+       $(a_1 - a_1^{\\text{hom}})e^{\\lambda z} + (b_1 - b_1^{\\text{hom}})e^{-\\lambda z}$
+       has no $1/(2\\lambda)$ piece, so the small-$\\lambda$ region is
        finite and easy to integrate.
 
     The caller adds this correction on top of the homogeneous

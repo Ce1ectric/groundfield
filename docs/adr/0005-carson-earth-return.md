@@ -123,7 +123,7 @@ section III of the original paper.
 The functions $P, Q$ are evaluated by selecting one of three
 expansions according to the magnitude of $a$:
 
-#### Regime 1 — small $a$ ($a \le 0.25$, leading-term form)
+#### Regime 1 — small a (a ≤ 0.25, leading-term form)
 
 Carson eqs. 34–35:
 
@@ -141,7 +141,7 @@ Q_\text{small}(a,\theta) \;=\; -0.0386
 \;+\; \frac{a}{3\sqrt{2}}\cos\theta.
 $$
 
-#### Regime 2 — intermediate $a$ ($0.25 < a \le 5$, direct quadrature)
+#### Regime 2 — intermediate a (0.25 < a ≤ 5, direct quadrature)
 
 *(Rewritten after the 2026-07-08 audit, WP-B2. The originally
 planned $\sigma_i$-series implementation was never built; the code
@@ -168,7 +168,7 @@ $q = a\sin\theta$:
   composite per-half-period Gauss rule with Euler acceleration
   (``tests/test_audit_quadratures.py``).
 
-#### Regime 3 — large $a$ ($a > 5$, asymptotic expansion)
+#### Regime 3 — large a (a > 5, asymptotic expansion)
 
 Carson eqs. 36–37:
 
