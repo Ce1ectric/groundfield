@@ -390,22 +390,45 @@ integral of the reduced kernel $1/\sqrt{d^2 + c^2}$ over piece $k$ (closed
 form) and $r_\eta = 0.5442\,R$ the energy radius of the bump. The sum runs
 over what the mesh does not resolve:
 
-- the observer's own wire whole: its polyline through every corner where
-  it has turned by less than 120° (a ring's polygon, a strip, the corners
-  of a loop), and every piece on the same axis line — the next piece of a
-  galvanic conductor, the surface image of a rod whose head reaches the
-  surface;
+- the observer's own wire whole: its polyline as far as it has turned by
+  at most 90° along the wire (a ring's polygon, a strip, the corners of a
+  loop), and every piece on the same axis line that belongs to the
+  observer's port or to a wire that meets it — the next piece of a
+  galvanic conductor, a rod cut into touching pieces, the surface image of
+  a rod whose head reaches the surface;
 - of the rest of its electrode — a part of the own polyline that has
-  turned by 120° or more (an arm folded back, the far side of a narrow loop
-  or a small ring, the other arm of a narrow V) or runs parallel beside the
-  point, the other wires of a mesh or a star — and of every other surface
-  image only the part within $1.5\,R$ of the point;
-- of a wire of another port the part within $1.5\,R$ only where the two
-  wires meet (a rod on a ring, a T-joint, a crossing, a galvanic conductor
-  and the electrode it is attached to): wires that touch are one conductor
-  and carry about the same current where they meet; any other wire of
-  another port carries its own current, which the observer's correction
-  cannot know, and counts nothing.
+  turned by 150° or more along the wire (an arm folded back, the far side
+  of a narrow loop or a small ring, the other arm of a narrow V, the next
+  arm of a meander or the next winding of a spiral, which run the same way
+  again after a full turn), the other wires of a mesh or a star — and of
+  every other surface image only the part within $1.5\,R$ of the point;
+  between 90° and 150° of turn the own polyline counts by the weight
+  $(150° - T)/60°$ whole and by the rest of the weight within $1.5\,R$;
+- of a wire of another port the part within $1.5\,R$ (on the observer's
+  axis line the whole piece) only where the two wires meet, that is, where
+  their surfaces touch: a rod on a ring, a T-joint, a crossing, a galvanic
+  conductor and the electrode it is attached to. Wires that touch are one
+  conductor and carry about the same current where they meet. Where two
+  wires have just stopped touching, this window term fades out linearly
+  with the gap between their surfaces, from 1 at contact to 0 at a gap of
+  $a_1 + a_2$, so the correction is continuous. Any other wire of another
+  port carries its own current, which the observer's correction cannot
+  know, and counts nothing.
+
+Each wire reaches its radius from its axis perpendicular to it, up to a
+flat end. Two wires that cross therefore touch where their axes come
+within $a_1 + a_2$ (the window fades out between $a_1 + a_2$ and
+$2(a_1 + a_2)$); a wire that ends at another touches it where its end face
+reaches the other's surface; two wires end to end on one axis touch only
+where the gap between their ends is zero (to 1e-9 m). Auditor W4A's small
+ring 0.75 radii above a rod's head stays 0.49 mm from the rod's end face
+although the axes are 15.2 mm apart, within $a_1 + a_2$ = 16 mm. Up to
+audits W4R3B-01 and W4R3B-04 the axes had to come within the smaller wire
+radius. Two crossing strips whose surfaces still overlapped stopped meeting,
+so a 2 m cross jumped by −7.5e-4 in $Z$ between axis gaps of 4.9 and
+5.1 mm (`mom` −1.6e-5); it now moves by −2.4e-5. And two stacked rods with
+an end gap below the radius met, so the other rod counted whole with the
+observer's current.
 
 Farther than $1.5\,R$ the disc average of a smoothed line is its line field
 (the 2-D mean-value property of the radial bump), so the mesh already gives
@@ -422,18 +445,31 @@ difference $|\mathbf r|^2 - (\mathbf r\cdot\mathbf e)^2$ cancelled on long
 pieces off the coordinate axes and clipped the observer's own piece from
 about 7 m on (audit W4R2B-01: a 20 m oblique strip read −3.8e-4).
 
-The 120° rule replaces an exact-parallel test (audit W4R2B-02): a folded
-arm tilted by 1e-6 rad counted whole, so a hairpin's impedance jumped by
-+1.41e-3 for a tilt of 1e-4 rad (`mom` −2.0e-4; now −1.9e-4), and a V as
-one polyline read +8.5e-4 against the same V as two bonded strips (auditor
-W4R2B). A rule that clipped the own polyline by its distance from the
-observer's axis line, continuous in the angle, also clipped the curved
-continuation of a ring and moved rings away from the solid torus: −1.19e-3
-for $r$ = 0.3 m and −2.0e-3 for $r$ = 1 m, against −3.6e-4 / −1.83e-3 with
-the exact-parallel test. The 120° rule leaves an L corner and a square loop
-unchanged, moves rings of $r$ = 1 / 0.3 m by −9e-6 / −1.3e-4 in $Z$ (to
-−1.84e-3 / −4.9e-4 against the torus), and a V whose turn crosses 120°
-jumps by 1.5e-4 of its impedance (evidence `g01`, `g02` of stream fw4r2b).
+The turn $T$ is the sum of the angles at the corners passed along the
+chain from the observer's piece, along a closed chain the shorter way
+round. It replaces two earlier rules. Up to audit W4R2B-02 an exactly
+parallel test was used: a folded arm tilted by 1e-6 rad counted whole, so a
+hairpin's impedance jumped by +1.41e-3 for a tilt of 1e-4 rad. Up to audit
+W4R3B-03 a piece counted whole where its direction was within 120° of the
+observer's: the third arm of an S-meander, which runs the same way as the
+first, 0.20 m beside it, counted whole as soon as it was tilted, and a V
+jumped where its turn crossed 120°. The blend makes the correction
+continuous in the turn (evidence `h00` of stream fw4r3b, one run each,
+another agent running):
+
+| world | base (120° direction rule) | now | `mom` (ds 0.025 m) | `image` |
+|---|---|---|---|---|
+| S-meander, third arm tilted by 1e-4 rad, $Z$ | +4.65e-4 | −1.24e-4 | −1.26e-4 | −1.19e-4 |
+| spiral of 3 windings (pitch 0.15 m), one polyline / bonded windings − 1 | +2.08e-3 | +5.9e-5 | 0 | 0 |
+| V of 0.5 m arms, turn 119.9° → 120.1°, $Z$ | −1.26e-3 | +3.30e-4 | +3.44e-4 | +3.48e-4 |
+
+An L corner (turn 90°) and a square loop are unchanged to the last bit.
+The far chords of a ring now count by their weight: rings of $r$ = 1 /
+0.3 m move by −4.4e-7 / −6.9e-6 in $Z$ (to −1.839e-3 / −5.00e-4 against the
+solid torus, from −1.839e-3 / −4.93e-4). A rule that clipped the own polyline by its distance from the
+observer's axis line also clipped the curved continuation of a ring and
+moved rings away from the solid torus (−1.19e-3 for $r$ = 0.3 m, −2.0e-3
+for $r$ = 1 m; evidence `g02` of stream fw4r2b), so it was not taken.
 
 ### Wires beside each other
 
@@ -450,22 +486,85 @@ wires run beside each other where
 - a point of one lies within $1.5\,R$ of the *side* of the other (its
   nearest point is not an end of that wire) and the two run within 30° of
   parallel: wires side by side, concentric or diagonal rings, an arm of the
-  same polyline folded back beside the point, the arms of a V narrower than
-  30°, a galvanic conductor in the trench of an earthing strip; or
+  same polyline folded back beside the point, a galvanic conductor in the
+  trench of an earthing strip; or
 - the whole of one electrode's wire lies within $1.5\,R$ of another wire it
-  does not meet (a small ring around a rod's head).
+  does not meet (a small ring around a rod's head); or
+- two wires that do not meet lie in line, end to end, with a gap below
+  $1.5\,R$ that runs within 30° of both axes: stacked rods of two
+  electrodes (audit W4R3B-01; such rods 1 cm apart read +1.57e-2 in a port
+  entry and −7.3e-2 in the transfer entry, against estimates of 4.9e-3 /
+  4.5e-3).
 
-Left alone are the collinear pieces of a galvanic conductor and stacked
-rods, and wires that meet or cross at more than 30° — a rod on a ring, a
-T-joint, a corner, a crossing, a conductor's attachment: near them a point
-is close to the other wire's end, or crosses it within a few $R$. One $R$
-serves the whole world (the disc quadrature, the energy radius and the mesh
-size around the wires use it), so the closest pair refines the whole mesh:
-the nodes grow as $1/R$. Where $R$ would fall below 2.2 bare wire radii
-(the energy radius must exceed 1.2 wire radii), the solve is refused before
-meshing with `BackendCapabilityError` naming the distance and the integral
-engines; where the finer mesh exceeds `max_nodes_3d`, `ResourceLimitError`
-says why $R$ is small.
+Stacked rods ($a$ = 8 mm, 1.5 m each, 100 Ω·m) against the axisymmetric
+model, two ports (evidence `h07`, `h09` of stream fw4r3b; base 4f443f5 in
+brackets):
+
+| gap | $R$ | $R_{11}$ | $R_{12}$ | bonded | estimate (diagonal / transfer) |
+|---|---|---|---|---|---|
+| 2 mm, 5 mm, 1 cm | refused (below 17.6 mm) | (2 mm / 1 cm: +5.1e-2 / +1.6e-2) | (−2.0e-1 / −7.3e-2) | | |
+| 3 cm | 2 cm | −1.3e-4 (+6.35e-3) | −6.04e-3 (−2.88e-2) | −1.06e-3 | 6.1e-3 / 4.2e-3 |
+| 6 cm | 4 cm | +1.5e-3 | −8.8e-3 | +3e-5 | 5.4e-3 / 4.5e-3 |
+| 10 cm | 6 cm | +2.7e-3 | −8.6e-3 | +1.2e-3 | 5.0e-3 / 4.5e-3 |
+| 30 cm | 6 cm | +2.3e-3 | −3.7e-3 | +1.7e-3 | 5.2e-3 / 4.7e-3 |
+| 1 m | 6 cm | +2.1e-3 | −1.8e-3 | +1.9e-3 | 4.6e-3 / 4.8e-3 |
+
+Every diagonal entry and the bonded value lie within the estimate. The
+transfer entry of wires end to end lies within its estimate only where $R$
+is at most a third of the gap: −2.7e-3 … −3.7e-3 at $R$ / gap = 1/3 … 1/5
+for wire radii of 2, 4 and 8 mm, against −5.5e-3 … −8.8e-3 at 1/2 … 2/3.
+The rule keeps the gap at $1.5\,R$, as for wires side by side; where the
+transfer entry of wires end to end matters, set `FemOptions.source_radius`
+to at most a third of their gap.
+
+The distance is that of the two wire axes, independent of how the check
+samples them. Left alone are wires that meet, at any angle: the collinear
+pieces of a galvanic conductor, a rod cut into touching pieces, a rod on a
+ring, a T-joint, a corner, a crossing, a conductor's attachment, and a V or
+a branch narrower than 30°. Two straight wires that meet at an angle
+$\theta$ come within $1.5\,R$ of each other only within $1.5\,R/\sin\theta$
+of where they meet, and there the window term counts the other wire, whose
+current agrees with the observer's (up to audit W4R3B-02 a V narrower than
+30° was refused, with the distance of the sample point nearest the apex,
+0.65 mm for 10°). Wires whose surfaces touch along their length, such as a
+cable laid on a strip, are one conductor in the same way; their port
+entries are not physical, only their sum (two bonded 4 m strips 8 mm
+apart, $a$ = 5 mm, against one strip of the pair's mean radius
+$\sqrt{aD}$: −1.30e-2, `image` −1.16e-2; evidence `h05` of stream
+fw4r3b). Crossings at more than 30° are
+left alone as well: near them a point crosses the other wire within a few
+$R$. A V whose arms do not touch (a rounded apex, a second strip starting
+beside the first) still runs beside: a V of 10° whose second arm starts
+3 cm beside the apex takes $R$ = 2 cm.
+
+A V of two 4 m arms meeting at the apex (5 mm wire, 0.8 m deep), as two
+bonded strips (two ports) and as one polyline, against `mom` and `image`
+(evidence `h03` of stream fw4r3b):
+
+| angle | fem [Ω] | estimate | polyline / two strips − 1 | fem / `mom` (ds 0.0125 m) − 1 | fem / `mom` (0.025 m) − 1 | fem / `image` − 1 |
+|---|---|---|---|---|---|---|
+| 10° | 21.199700 | 4.2e-3 | −7.0e-6 | +3.35e-3 | +7.36e-3 | −1.47e-2 |
+| 20° | 19.942955 | 4.4e-3 | −1.7e-5 | +4.43e-3 | +9.15e-3 | −1.38e-2 |
+| 25° | 19.538485 | 4.4e-3 | +8.9e-6 | +4.63e-3 | +9.54e-3 | −1.35e-2 |
+| 29° | 19.271152 | 4.5e-3 | −1.4e-5 | +4.80e-3 | +9.82e-3 | −1.33e-2 |
+| 31° | 19.151321 | 4.5e-3 | −1.4e-5 | +4.86e-3 | +9.93e-3 | −1.32e-2 |
+| 35° | 18.935410 | 4.5e-3 | +2.2e-6 | +5.02e-3 | +1.02e-2 | −1.29e-2 |
+
+The ratios continue the trend of 25 … 35° down to 10°, the two
+representations agree to 2e-5, and up to audit W4R3B-02 the worlds below
+30° were refused. (`mom` is not converged at these segment lengths: from
+ds = 0.025 to 0.0125 m it moves by +0.40 … +0.51 %.)
+
+One $R$ serves the whole world (the disc quadrature, the energy radius and
+the mesh size around the wires use it), so the closest pair refines the
+whole mesh: the nodes grow as $1/R$. The smallest $R$ is 2.2 radii of the
+thickest bare wire of the world, wherever that wire lies (the energy radius
+must exceed 1.2 of its radii): wires closer than 3.3 such radii, axis to
+axis, are refused before meshing with `BackendCapabilityError` naming the
+distance and the integral engines. Two 4 mm strips 4 cm apart are refused
+next to a rod of 20 mm radius elsewhere in the world, and solved at
+$R$ = 2.67 cm without it (audit W4R3B-05). Where the finer mesh exceeds
+`max_nodes_3d`, `ResourceLimitError` says why $R$ is small.
 
 Two coaxial rings ($r$ = 1 m and 1 m + $D$, 5 mm wire, 0.8 m deep, two
 ports) against the solid tori of the axisymmetric model (evidence `g04` of
@@ -560,12 +659,19 @@ fw4fem3d, the ratios recomputed in `g05` of stream fw4r2b).
 `metadata["fem_error_estimate_transfer"]` is the same for the transfer
 resistances, the largest relative difference of an off-diagonal entry
 (`NaN` for one port or one level; audit W4R2B-05: the estimate covered the
-diagonal only). On the coaxial analogue of benchmark B8 (rod 0 … 3 m on
-the axis, ring $r$ = 2.5 m at 0.8 m, 1000 / 30 Ω·m with $h_1$ = 5 m) it is
-3.1e-3 against an error of $R_{12}$ of −4.9e-4 (6.3 times); in B8 itself
-2.9e-3, with `mom` refined to ds = 1/32 m 1.5e-3 above `fem` and still
-falling; for two coaxial rings 4.5 … 10 cm apart 3.9 … 4.1e-3 against
-errors of $R_{12}$ of up to 1.72e-3 (evidence `g04` of stream fw4r2b). Resolved concrete converges at
+diagonal only). Where the model holds it bounds the error of the
+transfer entries with a margin of 1.06 … 6.3: two 3 m rods 10 m apart
+1.06 against `image` and 1.8 … 1.9 against `mom`, 30 m apart 1.7 / 1.8,
+two coaxial rings 4.5 … 10 cm apart 2.3 … 2.6, and 6.3 on the coaxial
+analogue of benchmark B8 (rod 0 … 3 m on the axis, ring $r$ = 2.5 m at
+0.8 m, 1000 / 30 Ω·m with $h_1$ = 5 m: 3.1e-3 against an error of $R_{12}$
+of −4.9e-4; evidence `g04` of stream fw4r2b, `h00`, `h07`, `h11` of stream
+fw4r3b). In B8 itself it is 2.9e-3, with `mom` refined to ds = 1/32 m
+1.5e-3 above `fem` and still falling. It is no bound for two wires end to
+end closer than about $3\,R$ (see *Wires beside each other*: stacked rods
+read −5.5e-3 … −8.8e-3 in $R_{12}$ against 4.1 … 4.7e-3 where $R$ is 1/2
+… 2/3 of their gap; up to audit W4R3B-01, at $R$ = 6 cm for a gap of 3 cm,
+−2.9e-2). Resolved concrete converges at
 first order ($r \approx 2$): there the estimate is no bound. Next to a
 strongly contrasting interface the two levels can lie on either side of the
 solid wire's value, and the estimate does not see the thin-wire error (see
@@ -590,10 +696,10 @@ are in GiB.
 - `ImportError` naming the `fem3d` extra if it is missing.
 - `BackendCapabilityError` before meshing: a wire so close to the soil
   surface or a layer interface that its disc cannot lie in the soil and in
-  one layer; wires that run beside each other closer than 1.5 times the
-  smallest source radius their wire radius allows (3.3 wire radii; see
-  *Wires beside each other*), naming the wires, their distance and the
-  integral engines; resolved concrete around a wire that is not straight
+  one layer; wires that run beside each other or lie end to end without
+  touching closer than 1.5 times the smallest source radius (3.3 radii of
+  the thickest bare wire of the world, axis to axis; see *Wires beside each
+  other*), naming the wires, their distance and the integral engines; resolved concrete around a wire that is not straight
   along x, y or z (rings, oblique strips), whose concrete would reach the
   surface, or whose cover is so thin that the smoothed source does not
   reach beyond the metal (a 5 mm bar with 5 mm cover; audit W4R2B-04),

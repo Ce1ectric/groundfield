@@ -196,18 +196,25 @@ applies (bit for bit) and takes the 3-D model otherwise; `"3d"` forces it,
   and the correction $\Delta C$ = the difference between the reduced
   thin-wire kernel of radius $a$ and that of the smoothed source (energy
   radius $0.5442\,R$), integrated in closed form over what the mesh does
-  not resolve: the observer's own wire whole (its polyline through every
-  corner where it has turned by less than 120°, and every piece on its axis
-  line — the next piece of a galvanic conductor, the surface image of a rod
-  reaching the surface); of the rest of its electrode (a part of the
-  polyline turned back by 120° or more or running parallel beside the
-  point), of a wire of another port that meets the observer's wire (a rod
-  on a ring, a T-joint, a crossing: one conductor) and of every other
-  surface image only the part within $1.5\,R$ of the point; any other wire
-  of another port nothing, since it carries its own current (audit
-  W4R2B-03; an exact-parallel test of folded arms switched at a tilt of
-  1e-6 rad, audit W4R2B-02, and the axis distance from the cross product
-  keeps long oblique pieces whole, W4R2B-01). Beyond that the disc
+  not resolve: the observer's own wire whole (its polyline as far as it
+  has turned by at most 90° along the wire, by a weight falling linearly to
+  0 at 150°, and every piece on its axis line that belongs to its port or
+  to a wire that meets it — the next piece of a galvanic conductor, the
+  surface image of a rod reaching the surface); of the rest of its
+  electrode (the own polyline beyond, by the rest of the weight), of a wire
+  of another port that meets the observer's wire (their surfaces touch: a
+  rod on a ring, a T-joint, a crossing; one conductor), fading out with the
+  surface gap where two wires have just stopped touching, and of every
+  other surface image only the part within $1.5\,R$ of the point; any other
+  wire of another port nothing, since it carries its own current (audit
+  W4R2B-03). An exact-parallel test of folded arms switched at a tilt of
+  1e-6 rad (audit W4R2B-02), a test of the direction within 120° counted a
+  meander's arm whole after a full turn and made a V jump at 120°, a
+  meeting distance of the smaller radius made two crossing strips jump
+  where their surfaces still overlapped, and a collinear rod of another
+  electrode counted whole across an end gap (audits W4R3B-01, -03, -04);
+  the axis distance from the cross product keeps long oblique pieces whole
+  (W4R2B-01). Beyond that the disc
   average of a smoothed line is its line field (2-D mean-value property of
   the radial bump), so the mesh is exact there: for two parallel wires
   the exact correction is below $10^{-3}$ of the self term from $1.5\,R$ on (evidence `f01` of stream
@@ -218,16 +225,19 @@ applies (bit for bit) and takes the 3-D model otherwise; `"3d"` forces it,
   $\frac{\rho}{2\pi}\ln(r_\eta/a)$. The result depends little on $R$
   (evidence `e07` of stream w4fem3d, re-measured as `f05` of stream
   fw4fem3d: a 3 m rod and a ring at $R$ = 4, 6 and 10 cm against part A).
-  Default $R$ = 6 cm. Wires that run beside each other (side by side
-  within 30° of parallel, a folded arm, a wire within reach of another over
-  its whole length) are kept at least $1.5\,R$ apart: $R$ becomes their axis
-  distance over 1.5 for the whole world, and below 2.2 bare wire radii the
-  solve is refused before meshing (`BackendCapabilityError`, naming the
-  distance and the integral engines); junctions, corners, crossings at more
-  than 30° and collinear pieces are left alone (audits W4R2B-03, W4R2A-01;
-  up to then two coaxial rings 7.5 cm apart read +4.35e-3 in a port entry
-  and two rings diagonal to each other, surface gaps 1.3 … 3.8 mm,
-  +11 … +14 %).
+  Default $R$ = 6 cm. Wires that do not meet but run beside each other
+  (side by side within 30° of parallel, a folded arm, a wire within reach
+  of another over its whole length, two wires end to end in line with a
+  gap) are kept at least $1.5\,R$ apart: $R$ becomes their axis distance
+  over 1.5 for the whole world, and below 2.2 radii of the thickest bare
+  wire of the world the solve is refused before meshing
+  (`BackendCapabilityError`, naming the distance and the integral engines);
+  wires that meet at any angle (junctions, corners, a V or a branch
+  narrower than 30°) and crossings at more than 30° are left alone (audits
+  W4R2B-03, W4R2A-01, W4R3B-01, W4R3B-02; up to then two coaxial rings
+  7.5 cm apart read +4.35e-3 in a port entry, two rings diagonal to each
+  other, surface gaps 1.3 … 3.8 mm, +11 … +14 %, two stacked rods 1 cm
+  apart +1.6e-2, and a V narrower than 30° was refused).
 - **Isotropic mesh, deterministic bisection.** A coarse grid of
   $8 \times 8 \times 4$ cubes (six Kuhn tetrahedra each) on the box is
   refined by conforming longest-edge bisection (own implementation with
@@ -284,7 +294,8 @@ applies (bit for bit) and takes the 3-D model otherwise; `"3d"` forces it,
   $r \ge 2.5$, 2.1 … 4.4 times the error for rings. The same level
   difference of the transfer entries is reported as
   `metadata["fem_error_estimate_transfer"]` (audit W4R2B-05: the
-  estimate covered the diagonal only). This holds away from layer
+  estimate covered the diagonal only; where the model holds it is
+  1.06 … 6.3 times the error of the transfer entries, not for wires end to end closer than about $3\,R$). This holds away from layer
   interfaces and other wires — the model keeps wires that run beside each
   other at least $1.5\,R$ apart, and two coaxial rings 4.5 … 10 cm apart lie
   within 1.8e-3 of the solid tori in every port entry. Next to a strongly
