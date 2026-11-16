@@ -71,19 +71,22 @@ half-plane $(s, z)$ with the weight $2\pi s$:
   the other electrodes and every interface more than $1.05\,a$ from the
   wire axis; a nearer interface (a ring on it, or within its radius) is
   cut into the block's elements, so every element lies in one layer. Such
-  a block has 64 instead of 8 tensor intervals per side: the gap between
-  the wire and the interface, and the narrow wedge where the interface
+  a block is finer: the gap between the wire and the interface, and the narrow wedge where the interface
   cuts the wire near its edge, make the field vary over
   $\sqrt{2a\,|d - a|}$ ($0.14\,a$ at $d = 1.01\,a$). With the default
   block the levels converged at first order and not monotonically there
   (up to −6.0e-3 next to a layer 33 times more conductive, the error
-  estimate below the error in 7 of 14 cases, audit W4A-01); refined, the
-  default lies within 3.3e-4 of auditor W4A's boundary elements of the
-  solid torus at $d = 0.95 \ldots 1.05\,a$ and the estimate exceeds the
-  error in all 14 cases, at about four times the ring's nodes (evidence
-  `e06` of stream fw4axi). Neither a graded O-grid nor a block shrunk
-  clear of the interface alone resolves this: the interface cuts a wire
-  with $d < a$, and a shrunk block keeps the coarse lateral spacing.
+  estimate below the error in 7 of 14 cases, audit W4A-01); refined to 64
+  intervals the default lay within 3.3e-4 at contrast 33 (stream fw4axi),
+  but beyond it the levels converged at first order again (touching a 1000
+  times more conductive layer −1.6e-2, estimate 1.1e-2; audit W4R2A-02). A
+  refinement alone does not resolve this: the field is singular where the
+  interface cuts the wire at a narrow angle or touches it, on a scale that
+  shrinks with the contrast. The block's O-grid is graded towards those
+  points in angle and radius (32 intervals, cells of 1e-3 wire radii),
+  which resolves them at fewer nodes: within 5.1e-5 of the boundary
+  elements up to a contrast of 1000, the estimate above the error in all
+  113 cases of the audit's sweep (evidence `e05` of stream fw4r2a).
 - **Truncation.** A box at `r_far_factor` (1000) characteristic lengths —
   the electrodes' size, or the depth of the deepest interface times the
   layer contrast if larger (a resistive bottom keeps the current in the
@@ -103,7 +106,8 @@ half-plane $(s, z)$ with the weight $2\pi s$:
   extrapolates the port conductance matrix with the observed second order
   (Richardson); the relative difference between the extrapolated and the
   finer level is reported as `metadata["fem_error_estimate"]` (about the
-  finer level's error, 0.88 … 0.99 of it in 36 cases of auditor W4A; NaN
+  finer level's error, 0.88 … 0.99 of it in 36 cases of auditor W4A and
+  0.94 … 1.07 in 60 cases of a ring at an interface, audit W4R2A-02; NaN
   with `extrapolate=False`, audit W4A-02).
 - **Resource guard.** `FemOptions.max_nodes` (2 million nodes of the finer
   mesh, about 8 GB: the axisymmetric solve needs about 4 GB per million
@@ -294,8 +298,9 @@ applies (bit for bit) and takes the 3-D model otherwise; `"3d"` forces it,
   (+9.2e-3 against the solid torus for a ring 3 radii above a 1000 / 30
   Ω·m interface, beyond its estimate; evidence `f10` of stream fw4fem3d,
   audit W4B-02). The dispatch therefore emits `InterfaceContactWarning`
-  for a horizontal wire within the reach of an interface (3.5 radii at a
-  contrast of 33; the table of the reach is in the warnings reference)
+  for a horizontal wire within the reach of an interface (3.9 radii at a
+  contrast of 33, audit W4R2A-04; the table of the reach is in the
+  warnings reference)
   before the 3-D model runs, as the integral engines do (audit W4A-07);
   the axisymmetric model resolves the wire and does not warn. The 3-D
   model's own guard refuses bare wires closer than about 2.8 radii (the
@@ -355,8 +360,8 @@ applies (bit for bit) and takes the 3-D model otherwise; `"3d"` forces it,
 
 - Every `fem` number changes (both stored golden cases by −4.6 %; the
   benchmark tables of the fem page). `fem` agrees with independent
-  references to about 1e-4 (3.3e-4 for a ring wire within 1.05 radii of an
-  interface) at a cost of a second per solve
+  references to about 1e-4 (within 5.1e-5 for a ring wire within 1.05
+  radii of an interface, up to a contrast of 1000) at a cost of a second per solve
   ([fem page](../explanation/engines/fem.md#validation)).
 - `fem` solves every world again: the axisymmetric model where it applies
   (about 1e-4), the 3-D model otherwise (with the optional `fem3d` extra;

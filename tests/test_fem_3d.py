@@ -1192,8 +1192,8 @@ def test_the_3d_model_warns_once_for_a_wire_next_to_a_contrasting_interface() ->
     hits = _interface_warnings(record)
     assert len(hits) == 1, [str(h.message) for h in hits]
     text = str(hits[0].message)
-    assert "'g1'" in text and "3 wire radii" in text and "reach 3.5 radii" in text
-    # 3 cm (6 radii) lies outside the reach of 3.5 radii at contrast 33
+    assert "'g1'" in text and "3 wire radii" in text and "reach 3.9 radii" in text
+    # 3 cm (6 radii) lies outside the reach of 3.9 radii at contrast 33
     with warnings.catch_warnings(record=True) as record:
         warnings.simplefilter("always")
         with pytest.raises(ResourceLimitError):

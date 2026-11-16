@@ -213,21 +213,25 @@ shows what agrees with independent references and how well.
   1.5, +32 % at 1.1 and +89 % when the interface cuts the wire at 0.99 radii;
   over a more resistive layer at most +1.4 %. The 3-D `fem` is a thin wire
   too: a ring ($r$ = 1 m) with its axis 1.5 cm above 1000 / 30 Ω·m reads
-  +9.2e-3 against the solid torus, above its error estimate. Within the reach
-  below the solve warns (`InterfaceContactWarning`, `diagnose()` category
-  `interface_contact`; audits W4A-07, W4B-02); the reach is where the thin
-  wire is 1 % off, the largest of four geometries (rings of 1, 2, 5 m at 0.8
-  and 2 m, $a$ = 5 and 55 mm), rounded up:
+  +9.2e-3 against the solid torus, above its error estimate, and a rod tip
+  on such an interface +43 %. Within the reach below the solve warns
+  (`InterfaceContactWarning`, `diagnose()` category `interface_contact`;
+  audits W4A-07, W4B-02, W4R2A-03, W4R2A-04); the reach is the largest
+  distance at which the thin wire is 1 % off in six ring geometries
+  ($r_0/a$ = 18 … 400), rounded up to 0.1 a, plus 0.1 a between the nodes:
 
-  | contrast | 2 | 3 | 10 | 33 | 100 | 1000 |
-  |---|---|---|---|---|---|---|
-  | more conductive beyond | 1.0 a | 1.5 a | 2.9 a | 3.5 a | 3.8 a | 3.9 a |
-  | more resistive beyond | 1.0 a | 1.0 a | 1.0 a | 1.2 a | 1.25 a | 1.25 a |
+  | contrast | 1.4 | 2 | 3 | 5.5 | 10 | 18 | 33 | 100 | 1000 |
+  |---|---|---|---|---|---|---|---|---|---|
+  | more conductive beyond | 1.0 a | 1.3 a | 1.9 a | 2.7 a | 3.3 a | 3.7 a | 3.9 a | 4.1 a | 4.2 a |
+  | more resistive beyond | 1.0 a | | 1.0 a (3) | | 1.2 a | | 1.3 a | | 1.4 a |
 
-  (1.0 a: only a wire the interface cuts; below a contrast of 2 nothing is
-  reported.) No generated network and no world of the AP1 soils is
-  reported. The axisymmetric `fem` solves rings as solid tori (to 3.3e-4 down
-  to contact).
+  (1.0 a: only a wire the interface cuts; below a contrast of 1.4 nothing is
+  reported, a cut wire is within 0.77 % there.) Measured on rings with
+  $r_0/a \ge 18$; a thicker wire on a smaller ring, and straight wires
+  against a solid reference, are not covered. No generated network and no
+  world of the AP1 soils is reported. The axisymmetric `fem` solves rings
+  as solid tori (within 5.1e-5 of a boundary-element model down to
+  contact, up to a contrast of 1000).
 - **High layer contrast.** The Tagg/Sunde series converges like
   $\lvert K\rvert^n$; the default cap of 300 terms covers
   $\lvert K\rvert = 0.94$ and warns (`SeriesTruncationWarning`) beyond.
@@ -278,10 +282,11 @@ shows what agrees with independent references and how well.
   (user decision Q37). *Axisymmetric* — rods on one vertical axis and
   horizontal rings centred on it, solved as the solid bodies they are in any
   horizontally layered soil, bare or encased: port resistances agree with
-  independent references to about 1e-4 at the default (3.3e-4 for a ring
-  wire within 1.05 radii of an interface; audit W4A-01); the error estimate
-  is about the finer level's error and 10 … 130 times that of the
-  extrapolated value. A concrete shell enters as
+  independent references to about 1e-4 at the default (within 5.1e-5 for a
+  ring wire within 1.05 radii of an interface up to a contrast of 1000,
+  −8.5e-4 at 10 000; audits W4A-01, W4R2A-02); the error estimate is about
+  the finer level's error (0.94 … 1.07 of it next to an interface) and
+  10 … 130 times that of the extrapolated value. A concrete shell enters as
   the surface conductance $1/(2\pi r_b C)$ (exact for a cylindrical shell). A
   ring wire must lie 5 % of its radius below the surface (the thin-wire
   engines accept $2z > a$). Eight rings with a central rod need about a

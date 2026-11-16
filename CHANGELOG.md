@@ -129,6 +129,7 @@ reproduces 0.15.0, it is named.
 | W3R2A-01, W3R2A-03 (wave 3, stream `fw3r2a`) | `image_far_field="point"` on the cross-layer path keeps the near pairs of every image; the image blend near the interface over a/10 | point form, long segments below the interface: the 75 m strip −58 % → −3e-7 against its exact value (37.5 m pieces), −1.0e-3 → −1.3e-6 (2.5 m); networks with long pieces −1.1 %; TN40 1000/30 (transformer rods below h₁) +2.3e-4; wires 0 < g < a/2 from the interface up to −18 % (the ring 1.75 mm above 1000/30, 7.319 → 5.985 Ω); the default form beyond a/2 and the series path unchanged | point-form results with a wire at or below h₁; line-kernel results with a wire within half a radius of the interface |
 | Q37, Q40 (wave 4, streams `w4axi`, `w4fem3d`) | `fem` conforming (axisymmetric and 3-D) instead of the equivalent hemisphere | every `fem` result: the stored 3 m rods −4.65 % / −4.57 %, the B2 rod / B3 ring −0.70 % / −0.35 %, a ring with a bonded central rod +20 %, a ring 1 cm above a conductive layer −67 %, a rod 2 cm into a conductive top layer +164 %; worlds refused before (strips, grids, meshes, the AP1 station, several clusters, galvanic conductors) are solved; golden `fem_rod_hom`, `fem_rod_two_layer_deep` | anyone using `fem` as a check |
 | W4A-01, W4B-01 (wave 4, streams `fw4axi`, `fw4fem3d`) | `fem`: the mesh block of a ring at an interface refined; the 3-D radius correction counts only the near parts of other wires | rings within 1.05 radii of an interface up to 6.0e-3 (towards the reference; a ring 0.01 a from a 30 Ω·m layer under 1000 Ω·m +1.83e-3 → −2.7e-5); 3-D: rods and rings 0.5 … 0.8 m deep ≤ 3e-5, the AP1 station −0.9e-4 … −1.1e-4, a ring 6 cm deep −1.9e-3, two rings 10 cm apart −5.8e-3, the house mesh with bare braces −3.4e-4 / −5.8e-4 (brace effect +49.14 / +318.23 %), a galvanic chain −2.5e-4; no golden case | users of `fem` |
+| W4R2A-01, -02, W4R2B-01 … -03 (wave 4, round 2, streams `fw4r2a`, `fw4r2b`) | `fem`: the ring block at an interface graded towards the contact points; 3-D: wires that run beside each other kept 1.5 source radii apart, the axis distance of oblique pieces, the own polyline whole only below a turn of 120° | axisymmetric: rings within 1.05 radii of an interface towards the reference, by up to 1.6e-2 touching a 1000 times more conductive layer (within the earlier estimates below a contrast of 33); 3-D: coaxial rings 4.5 … 7.5 cm apart in a port entry +1.99e-2 … +4.35e-3 → −8e-5 … −1.25e-3, rings diagonal to each other 1.3 … 3.8 mm apart refused (+11 … +14 % before), a 20 m oblique strip +3.78e-4, small rings and folded arms −9e-6 … −2.0e-3; the AP1 station and the house mesh unchanged to 7 digits; no golden case | users of `fem` |
 | roadmap *Vectorise the ADR-0007 path* (wave 3) | spectral amplitudes in closed form | round-off: ≤ 2.5e-16 (golden), ≤ 4.3e-16 (station Z) | cross-layer worlds, `two_layer_probe_matrix`, every backend through `layered_green` |
 | Q34 (wave 3, stream `w3perf`) | `sommerfeld` self terms and close pairs | lumped 1 km PEN 4.9e-7; segments of 5–20 m 1e-9 … 2e-8; a lumped 2 km conductor 1e-4 of the earth-return part; golden `cond_lumped_long_pen_sommerfeld`, `cond_isolated_pen_sommerfeld_two_layer`, `cond_overhead_lead_over_pen_carson_series`, `cond_galvanic_neumann_sommerfeld`, `defaults_mixed_cluster_inductive` 8e-10 … 4.9e-7 | every world with `sommerfeld` or the Sommerfeld fallback of `carson_series` |
 | audit W1R3-07 (wave 3, stream `w3perf`) | `carson_series`: tilted pairs that come close tiled per stretch | up to 5e-2 of X for a core crossing its shield at 4e-2 rad; generated networks up to 3e-7 (the 10-house star with sites 2.8e-7, the 80-house radial 3.4e-8; audit W3B-07) | worlds with tilted near-parallel pairs that touch or cross, under `carson_series` |
@@ -583,14 +584,17 @@ reproduces 0.15.0, it is named.
 
 - `InterfaceContactWarning` (and the `diagnose()` category
   `interface_contact`) also for horizontal wires next to a contrasting layer
-  interface (audits W4A-07, W4B-02): every electrode but a rod and the
-  leaking pieces of galvanic distributed conductors, within the reach where
-  the thin wire deviates from the solid wire by more than about 1 % — 3.5
-  wire radii over a layer 33 times more conductive (+3.6 % at 2 radii,
-  +8.6 % at 1.5, +89 % when the interface cuts the wire), 1.2 … 1.25 radii
-  over a much more resistive one, nothing below a contrast of 2. Emitted by
-  the image family, `mom`, `mom_sommerfeld`, `solve_mutual_*` and the 3-D
-  `fem`; the axisymmetric `fem` resolves the wire. No generated network and
+  interface (audits W4A-07, W4B-02, W4R2A-04): every electrode but a rod
+  and the leaking pieces of galvanic distributed conductors, within the
+  reach where the thin wire deviates from the solid wire by more than about
+  1 % in six ring geometries — 3.9 wire radii over a layer 33 times more
+  conductive (+3.6 % at 2 radii, +8.6 % at 1.5, +89 % when the interface
+  cuts the wire), 1.3 … 1.4 radii over a much more resistive one, a wire
+  the interface cuts from a contrast of 1.4, nothing below. Emitted by the
+  image family, `mom`, `mom_sommerfeld`, `solve_mutual_*` and the 3-D
+  `fem`, which also warns for rod ends at an interface (audit W4R2A-03);
+  the axisymmetric `fem` resolves the wire and `diagnose()` with an `fem`
+  engine reports nothing for a world it takes (audit W4R2A-05). No generated network and
   no world of the AP1 soils is reported. Test: `tests/test_wire_interface_contact.py`.
 
 ### Changed
@@ -1791,8 +1795,10 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
   conductive top layer (−44 … −78 %, warning), a ring exactly on an interface
   (−21 … +30 %), rods through an interface, clusters with several electrodes
   (radii summed, −35 %) and several clusters (no coupling) are solved within
-  1e-4 (axisymmetric; 3.3e-4 for a ring wire at an interface, audit W4A-01)
-  or 2e-3 (3-D, away from interfaces and other wires, audit W4B-02) of
+  1e-4 (axisymmetric; within 5.1e-5 for a ring wire at an interface up to a
+  contrast of 1000, audits W4A-01, W4R2A-02) or 2e-3 (3-D, away from
+  interfaces, wires beside each other kept 1.5 source radii apart, audits
+  W4B-02, W4R2B-03) of
   independent references (user decision Q37). Tests: `tests/test_fem.py`, `tests/test_fem_3d.py`.
 
 - The D9 rows held only to 1e-11 m: any placement jitter put the drops back
@@ -1845,10 +1851,18 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
 
 - `fem`: a ring wire within 1.05 radii of an interface to a more conductive
   layer was off by up to 6.0e-3, its estimate below the error in 7 of 14
-  cases; its mesh block is refined, now within 3.3e-4 of an independent
-  boundary-element model, the estimate above the error (audit W4A-01). With
-  `model="auto"` a ring without room for its mesh block (diagonal to a rod's
-  end edge) ended in a bare `ValueError`; it is solved by the 3-D model, and
+  cases (audit W4A-01); refined to 64 intervals it still converged at first
+  order beyond a contrast of 33 (touching a 1000 times more conductive
+  layer −1.6e-2 with an estimate of 1.1e-2, audit W4R2A-02). Its mesh
+  block is now graded towards the points where the interface cuts the wire
+  at a narrow angle or comes closest to it: within 5.1e-5 of an independent
+  boundary-element model up to a contrast of 1000 (3.2e-5 at 100;
+  `refinement=1` within 1.9e-5), the estimate above the error in all 113
+  cases of the audit's sweep at both refinements, at fewer nodes than
+  before (a touching ring 151 807 nodes, 1.8 s). With `model="auto"` a
+  ring without room for its mesh block (diagonal to a rod's end edge)
+  ended in a bare `ValueError`; it goes to the 3-D model, which solves it
+  or refuses wires closer than 3.3 wire radii (audit W4R2A-01), and
   `model="axisymmetric"` refuses with `BackendCapabilityError` (W4A-03).
   The node guard estimate was 1.5 … 2.3 % low for a ring; it now bounds the
   mesh (W4A-10). Test: `tests/test_fem.py`.
@@ -1871,6 +1885,33 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
 - Stale descriptions of the equivalent-hemisphere `fem` in docstrings, the
   JSON schema text of `concrete_shell_coefficient_ohm_m`, the reference pages
   and tutorial T09 (audits W4A-04, W4B-10). Test: `tests/test_fem.py`.
+- `fem`, axisymmetric model and warnings, round 2 of the wave-4 audits
+  (W4R2A).
+  - A ring with its axis exactly on an interface at 0.3 m could fail with
+    `RuntimeError: Factor is exactly singular`, and a rod tip written as
+    0.1 + 0.2 m at an interface at 0.3 m read 6809 Ω instead of 647 Ω,
+    silently: two mesh lines 5.6e-17 m apart. They are one line now (found
+    by stream fw4r2a).
+  - The 3-D model did not report a rod end within one wire radius of an
+    interface (a rod tip on 1000 / 30 Ω·m read +43 % against the solid rod
+    with an estimate of 6e-3); it warns with `InterfaceContactWarning` like
+    the integral engines (W4R2A-03).
+  - The reach of `InterfaceContactWarning` for horizontal wires was 0.2 …
+    0.4 wire radii short for a thick wire on a short ring (a 55 mm wire on
+    a 1 m ring +1.09 % at 3.6 radii over a 33 times more conductive layer,
+    unreported), and nothing was reported below a contrast of 2, where a
+    cut wire reads up to −1.46 %. The table is re-measured on six ring
+    geometries and cut wires are reported from a contrast of 1.4; none of
+    2348 measured points 1 % or more off lies outside it, and no generated
+    network, AP1 soil, golden case or tutorial world is reported (W4R2A-04).
+  - `diagnose(world, engine)` with an `fem` engine listed
+    `interface_contact` for a world that the axisymmetric model solves with
+    the solid bodies, without a warning (W4R2A-05).
+  - `fem` refused a ring of radius 1.2 wire radii (a solid torus with a
+    small hole) with the thin-wire `ValueError` of its result's point
+    sources; the axisymmetric model solves it, within 7e-5 of a
+    boundary-element model (W4R2A-07).
+  Test: `tests/test_fem.py`, `tests/test_wire_interface_contact.py`.
 - `fem`, 3-D model, round 2 of the wave-4 audits (W4R2B, W4R2A-01).
   - Two coaxial rings 7.5 cm apart read +4.35e-3 in a port entry, above
     their estimate, and rings diagonal to each other 1.3 … 3.8 mm apart,

@@ -4976,4 +4976,55 @@ determinism of W4B-07 and the memory keys hold.
 
 ### Streams `fw4r2a` and `fw4r2b`: fixes of audits W4R2A and W4R2B
 
-Filled in at the release.
+- **`fw4r2b`, wires beside each other (W4R2A-01, W4R2B-03):** two wires run
+  beside each other where a point of one lies within 1.5 R of the side of
+  the other and the two run within 30° of parallel, or where the whole of
+  one lies within 1.5 R of another it does not meet; junctions, crossings
+  at more than 30°, a rod on a ring and collinear pieces are left alone.
+  The model keeps such wires 1.5 R apart by a smaller source radius for the
+  whole world and refuses them below 2.2 bare wire radii (3.3 wire radii,
+  axis to axis) before meshing, naming the wires, their distance, `mom` and
+  `image`. Coaxial rings 4.5 … 10 cm apart lie within 1.72e-3 of the solid
+  tori in every port entry and the bonded value, inside the estimate; 3 cm
+  is refused by the node limit, the diagonal rings of W4R2A-01 and the ring
+  at a rod head before meshing. The window term of another port counts
+  only where the two wires meet; the coordinator kept this against the
+  literal brief, since dropping it would put an L of two bonded strips
+  6.3e-4 below the same L as one polyline (1.0e-4 with it) without fixing
+  any audited case.
+- **`fw4r2b`, the own wire (W4R2B-01, -02):** the axis distance comes from
+  the cross product (the 20 m oblique strip matches its closed form to
+  4e-16); the own polyline counts whole only where it has turned by less
+  than 120° (the tilted hairpin −1.9e-4, `mom` −2.0e-4; the jump at the
+  threshold 1.5e-4; the auditor's axis-line rule moved rings away from the
+  solid torus and was not taken).
+- **`fw4r2b`, the rest (W4R2B-04 … -07, W4R2A-07):** resolved concrete with
+  a thin cover is refused before meshing; the new
+  `fem_error_estimate_transfer` (6.3 times the transfer error on the
+  coaxial analogue of B8); the B8 note says that `mom` at 0.5 m is not
+  converged; the level ratios (rods 3.3 … 4.4, rings 3.0 … 3.4) and the CG
+  refusal corrected; the W4B-01 tests fail on their base by assertion;
+  `solid_earth` defaults to 2 million nodes. The AP1 station and the house
+  mesh are unchanged to 7 digits.
+- **`fw4r2a`, the ring block (W4R2A-02):** graded towards the points where
+  the interface cuts the wire at a narrow angle or comes closest to it, in
+  angle and radius, from cells of 1e-3 wire radii, with 32 instead of 64
+  intervals. The estimate bounds the error in all 113 cases of the
+  auditor's sweep at the default and at `refinement=1`; the default lies
+  within 5.1e-5 of the boundary elements up to a contrast of 1000 (3.2e-5
+  at 100), at fewer nodes than before (a touching ring 151 807 nodes,
+  1.8 s, 0.76 GB).
+- **`fw4r2a`, the warnings (W4R2A-03 … -05):** the 3-D dispatch warns for
+  rod ends at an interface; the reach table is re-measured on six ring
+  geometries and covers all 2348 measured points that are 1 % off (34 lay
+  outside the old one); cut wires are reported from a contrast of 1.4; no
+  false positive over 741 tests, T01–T10 and 48 golden cases; `diagnose()`
+  with a `fem` engine is silent for a world the axisymmetric model takes.
+- **`fw4r2a`, the rest (W4R2A-06, -07):** texts; a ring of radius 1.2 wire
+  radii is solved (−7e-5 against the boundary elements) instead of
+  refused, since no backend could otherwise.
+- **New, found by `fw4r2a`:** two mesh lines 5.6e-17 m apart (an interface
+  at 0.3 m and a ring or rod tip at 0.1 + 0.2 m) gave a singular factor or,
+  silently, 6809 Ω instead of 647 Ω; features within 1e-12 are one line.
+- **Golden:** 563 of 563 quantities identical in both streams; full suite
+  after the merge in the release section.

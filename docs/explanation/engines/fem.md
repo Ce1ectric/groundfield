@@ -6,7 +6,7 @@
     |---|---|
     | Soil | any number of horizontal layers |
     | Electrodes | every kind, bare or encased (ADR-0012); rods on one vertical axis and rings around it by the axisymmetric model, every other world by the three-dimensional model (the optional `fem3d` extra) |
-    | Axisymmetric model | the electrodes as they are (solid cylinders and tori), linear triangles on a graded tensor mesh conforming to every surface and interface; port resistance within about 1e-4 of independent references (3.3e-4 for a ring wire within 1.05 radii of an interface) |
+    | Axisymmetric model | the electrodes as they are (solid cylinders and tori), linear triangles on a graded tensor mesh conforming to every surface and interface; port resistance within about 1e-4 of independent references (within 5.1e-5 for a ring wire within 1.05 radii of an interface, up to a layer contrast of 1000) |
     | 3-D model | thin wires as smoothed line sources with an analytic radius correction, linear tetrahedra on an isotropic bisection mesh, layer interfaces (and resolved concrete) as partially penalised immersed elements; within about 2e-3 of the axisymmetric model away from layer interfaces and other wires — it keeps wires that run beside each other at least $1.5\,R$ apart ($R$ = `source_radius`, 6 cm by default; a smaller $R$ for closer wires, `BackendCapabilityError` where none fits); next to a strongly contrasting interface the thin-wire error applies |
     | Far field | exact monopole Dirichlet-to-Neumann (Robin) condition on a box 1000 lengths away |
     | Extrapolation | Richardson over two nested levels, error estimate reported |
@@ -100,22 +100,33 @@ as in `mom`.
   axis, the other electrodes and of every interface more than $1.05\,a$
   from the wire axis; a nearer interface — a ring on it or within its
   radius — is cut into the block's elements, so every element lies in one
-  layer. A ring wire within $1.05\,a$ of an interface has 64 instead of 8
-  tensor intervals per side of its block: the gap between the wire and the
-  interface, and the narrow wedge where the interface cuts the wire near
-  its edge, make the field vary over $\sqrt{2a\,|d - a|}$ ($0.14\,a$ at
-  $d = 1.01\,a$, $d$ the distance of the wire axis from the interface).
-  With the default block the levels converged at first order and not
-  monotonically there (up to −6.0e-3 next to a layer 33 times more
-  conductive, the error estimate below the error in 7 of 14 cases; audit
-  W4A-01). Now the default lies within 3.3e-4 of an independent
-  boundary-element model of the solid torus (auditor W4A) at
-  $d = 0.95 \ldots 1.05\,a$ in all 14 cases and the estimate
-  (7.5e-4 … 1.9e-3) exceeds the error in each, at about four times the
-  ring's nodes (46 203 / 182 605 at levels 0 / 1) and 2.4 … 3.5 s
-  (evidence `e06` of stream fw4axi); a ring on the interface ($d = 0$)
-  reads −1.1e-5 … −1.2e-5 against the same model (evidence `e05` of
-  stream fw4int).
+  layer. A ring wire within $1.05\,a$ of an interface gets a finer block:
+  the gap between the wire and the interface, and the narrow wedge where
+  the interface cuts the wire near its edge, make the field vary over
+  $\sqrt{2a\,|d - a|}$ ($0.14\,a$ at $d = 1.01\,a$, $d$ the distance of
+  the wire axis from the interface). With the default block the levels
+  converged at first order and not monotonically there (up to −6.0e-3 next
+  to a layer 33 times more conductive, the error estimate below the error
+  in 7 of 14 cases; audit W4A-01). With 64 intervals per side the default
+  lay within 3.3e-4 at contrast 33, but not beyond it: touching a 1000
+  times more conductive layer it read −1.6e-2 with an estimate of 1.1e-2,
+  the levels converged at about first order (audit W4R2A-02). The
+  interface cuts the wire at an edge of the conductor on a material
+  interface, or touches it in a contact zone that shrinks with the
+  contrast. The O-grid of such a block is therefore graded towards the
+  points where the interface cuts the wire at a narrow angle (0.7 a or
+  farther from the axis) or comes closest to it — the rays geometrically
+  in angle, the first layers geometrically in radius, from cells of 1e-3
+  wire radii, both bisected with the level — and the block has 32
+  intervals per side. The default lies within 5.1e-5 of the auditor's
+  boundary elements at contrasts 3 … 1000 on either side, cut or touching
+  (60 cases; 3.2e-5 at 100), `refinement=1` within 1.9e-5, the estimate
+  (3.9e-4 … 1.5e-3) above the error in all 113 cases of audit W4R2A's
+  sweep at both refinements; a ring touching a 1000 times more conductive
+  layer takes 38 317 / 151 807 nodes, 1.8 s and 0.76 GB (`refinement=1`:
+  604 307 nodes, 11 s, 2.8 GB) — fewer than the 64-interval block
+  (evidence `e05`, `e07` of stream fw4r2a). A ring on the interface
+  ($d = 0$) reads −1.2e-5 against the same model.
 - **Truncation.** A box at `r_far_factor` = 1000 characteristic lengths
   (the electrodes' depth and radius, or the depth of the deepest interface
   times the layer contrast $\max\rho/\min\rho$ if larger, since a
@@ -137,20 +148,22 @@ as in `mom`.
   $G = G_1 + (G_1 - G_0)/3$); `metadata["fem_error_estimate"]` is the
   largest relative difference of a port's resistance between the
   extrapolated and the finer level — about the finer level's error (0.88
-  … 0.99 of it in 36 cases of auditor W4A, 0.80 … 1.0 next to an
-  interface cut into a ring's block) and 10 … 130 times the error of the
+  … 0.99 of it in 36 cases of auditor W4A, 0.94 … 1.07 for a ring that an
+  interface cuts or comes within 1.05 radii of, 60 cases of audit W4R2A)
+  and 10 … 130 times the error of the
   extrapolated value, which it bounds while both levels lie on the same
   side of the converged value and the finer level's error is at most
-  1/2.5 of the coarser one's (1/3.9 observed). `FemOptions(refinement=k)`
+  1/2.5 of the coarser one's (1/3.9 observed; 1/3.9 … 1/4.0 for a ring
+  touching a 100 or 1000 times more conductive layer). `FemOptions(refinement=k)`
   starts at level $k$; `extrapolate=False` solves one level, usually
   below the converged value, and reports `fem_error_estimate` as NaN
   (audit W4A-02).
 
 Convergence (one level without extrapolation; deviation from the
 independent reference; time on an M1 Pro core with other jobs running;
-the ring on $h_1$ re-measured with its refined block of audit W4A-01,
-evidence `e05` of stream fw4int: 45 360 … 2 875 264 nodes at levels 0 … 3,
-the level 3 in 156 s and 8.2 GB):
+the ring on $h_1$ re-measured with its graded block of audit W4R2A-02,
+the script `e05` of stream fw4int on the merged fixes: 24 488 … 1 543 200
+nodes at levels 0 … 3, the level 3 in 30 s and 6.4 GB):
 
 | World | level 0 | level 1 | level 2 | level 3 | observed order | default (0/1 extrapolated) |
 |---|---|---|---|---|---|---|
@@ -158,7 +171,7 @@ the level 3 in 156 s and 8.2 GB):
 | rod 0.5 … 3.5 m, $a$ = 8 mm, 100 Ω·m (solid-rod FV) | −0.42 % | −0.11 % | −0.027 % | −0.0069 % | 1.98 / 1.99 | −1.4e-5 |
 | the rod through $h_1$ = 2 m, 30 / 1000 Ω·m (FV) | −0.40 % | −0.10 % | −0.025 % | −0.0061 % | 1.98 / 1.99 | −1.0e-5 |
 | rod 0.5 … 5 m with its tip on $h_1$, 1000 / 30 Ω·m (FV) | −0.43 % | −0.11 % | −0.029 % | −0.0075 % | 1.96 / 1.95 | −4.1e-5 |
-| ring ($a$ = 5 mm) on $h_1$ = 2 m, 30 / 1000 Ω·m (solid-torus boundary elements) | −0.44 % | −0.11 % | −0.028 % | −0.0069 % | 1.98 / 2.00 | −1.1e-5 |
+| ring ($a$ = 5 mm) on $h_1$ = 2 m, 30 / 1000 Ω·m (solid-torus boundary elements) | −0.44 % | −0.11 % | −0.028 % | −0.0070 % | 1.98 / 2.00 | −1.1e-5 |
 | the ring 1 cm above $h_1$, 1000 / 30 Ω·m (Hankel ring + proximity) | −0.69 % | −0.18 % | −0.049 % | −0.015 % | 1.98 / 1.96 | −7.0e-5 |
 | ring in three layers 100 / 1000 / 30 Ω·m (Hankel ring) | −0.48 % | −0.12 % | −0.034 % | −0.011 % | 1.97 / 2.00 | −5.2e-5 |
 
@@ -221,7 +234,11 @@ solves projected coordinates in a local frame.
   $\delta$, so the axisymmetric reading is off by $\kappa(\delta/L)^2$:
   $|\kappa| \le$ 6e-4 for $L$ the wire radius and $\le$ 1.1e-2 for $L$ the
   gap (`image` and `mom` on the same discretisations, three worlds), below
-  1e-6 at the tolerance. Up to audit W4A-08 it was 1e-9 of the world's
+  1e-6 at the tolerance; for coaxial rods end to end with a gap $g \le a$
+  the overlap of the end faces changes linearly in $|\delta|$ in the
+  parallel-plate picture, which with $d\ln Z/d\ln g$ = 0.02 … 0.10
+  estimates 6e-6 … 1.3e-5 at the tolerance: below about 1e-5 (an estimate
+  that errs high, the offset being at most 1e-3 g; audit W4R2A-06). Up to audit W4A-08 it was 1e-9 of the world's
   size (3 nm): a rod 1 µm off a ring's axis went to the 3-D model (40.7 s,
   2.35 GB, −1.43e-3; evidence `e01` of stream fw4axi).
 - **Error** (`ValueError`, before anything else): an electrode, driven or
@@ -257,7 +274,7 @@ solves projected coordinates in a local frame.
 | Concrete shells | per-length coefficient on rods and rings | — |
 | Conductors | lumped, inductive, skin effect, isolated distributed chains; galvanic distributed chains in the 3-D model | — |
 | Concrete | per-wire coefficient (both models); resolved prisms in the 3-D model (axis-aligned straight wires) | `BackendCapabilityError` for other wires |
-| Accuracy | axisymmetric: port resistance about 1e-4 at the default (3.3e-4 for a ring wire within 1.05 radii of an interface to a more conductive layer); 3-D: about 2e-3 away from interfaces and other wires (wires beside each other at least $1.5\,R$ apart), the error estimate a bound while the ratio of the two levels' errors is at least 2.5; next to a strongly contrasting interface the thin-wire error (see *Validation of the 3-D model*) | axisymmetric: raise `FemOptions.refinement`; 3-D: a smaller `source_radius` or `growth` with a larger `max_nodes_3d` (`refinement` multiplies its nodes by eight: the AP1 station would need about 11.5 million), or one of the integral engines as the second method |
+| Accuracy | axisymmetric: port resistance about 1e-4 at the default (within 5.1e-5 for a ring wire within 1.05 radii of an interface, up to a contrast of 1000); 3-D: about 2e-3 away from interfaces and other wires (wires beside each other at least $1.5\,R$ apart), the error estimate a bound while the ratio of the two levels' errors is at least 2.5; next to a strongly contrasting interface the thin-wire error (see *Validation of the 3-D model*) | axisymmetric: raise `FemOptions.refinement`; 3-D: a smaller `source_radius` or `growth` with a larger `max_nodes_3d` (`refinement` multiplies its nodes by eight: the AP1 station would need about 11.5 million), or one of the integral engines as the second method |
 | Mesh size | `FemOptions.max_nodes` (axisymmetric), `max_nodes_3d` and `max_ports_3d` (3-D) | `ResourceLimitError` |
 | Frequency | quasi-static soil; conductor branches per frequency | — |
 
@@ -598,7 +615,7 @@ are in GiB.
 - `ValueError`: a `source_radius` that does not reach beyond the bare
   wire (it must be at least 2.2 wire radii).
 - `InterfaceContactWarning` (the solve goes on): a horizontal wire whose
-  axis lies within the reach of a contrasting layer interface (3.5 wire
+  axis lies within the reach of a contrasting layer interface (3.9 wire
   radii at a contrast of 33; the table of the reach is under the
   [warning](../../reference/warnings.md#interfacecontactwarning)). The
   smoothed line source shares the thin-wire error of the integral engines
