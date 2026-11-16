@@ -25,6 +25,7 @@ classes and functions.
 | [Result files](api/results-io.md), [IO and groundinsight](api/io.md) | versioned result files, `BusType` export, CSV, VTK |
 | [Geo / OSM](api/geo.md), [Generators](api/generators.md) | worlds from OpenStreetMap and from parameter sets |
 | [References](api/references.md) | closed-form reference formulas used in the validation (Dwight, IEEE 80, Carson, Pollaczek, Oeding) |
+| [Utilities](api/utils.md) | units, tolerances, logging and small helpers (`groundfield.utils`) |
 
 ## Conventions and catalogues
 

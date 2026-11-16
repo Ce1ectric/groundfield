@@ -5105,3 +5105,61 @@ bit-identical in their radius correction.
   them (by 0.004 … 0.17 a), so the coordinator kept the table.
 - **Golden:** 563 of 563 quantities identical in both streams; the AP1
   station, the house mesh and the bonded L / T bit-identical.
+
+### Final documentation pass (author's request of 2026-11-16)
+
+Before the release the author asked for a documentation that reads well,
+renders every formula on GitHub Pages, documents the whole public API, has
+getting-started examples, explains the physics, mathematics and numerics
+behind the methods, says when which engine is the better choice and where
+its limits are, and carries three case studies. Six streams worked on
+separate files (`docstart`, `doctheory`, `docapi`, `docex1` … `docex3`),
+the coordinator integrated them and checked the formulas.
+
+- **`docstart`:** the home page, getting started (rod, ring, grid in
+  homogeneous and two-layer soil, a fault with touch and step voltage, a
+  profile, plots, every number asserted), concepts, glossary, units, and the
+  decision guide *Choosing an engine* (decision path, accuracy against the
+  benchmarks, cost measured on this machine, one table per engine of where it
+  must not be used). It fixed the stale "uniform per electrode" of the engine
+  table (one current per straight wire since Q30).
+- **`doctheory`:** one skeleton for the five engine pages (what it solves,
+  method, numerics, accuracy, limits, the audit trail collapsed), the theory
+  pages derived step by step, known limitations and warnings as one short
+  entry per limit with the remedy. It found and fixed four errors (the
+  skin-depth range, `fem`'s support for `return_to`, junctions and voltage
+  sources, a stale size notice, the quadrupole bound) and reported four
+  outside its files (ADR-0005's skin depths, a code comment, the `cim` / `bem`
+  names in an error message, the `fem3d` extra on the how-to index), which
+  the coordinator fixed.
+- **`docapi`:** every name of the public `__all__` lists (92 modules, 864
+  entries) is rendered with a docstring summary; 62 were on no page and 77
+  had no summary (constants and type aliases documented only by `#:`
+  comments). `tests/test_docs_api_coverage.py` keeps it so.
+- **`docex1` … `docex3`:** the case studies E01 (secondary substation and
+  its LV network: 9.9 Ω alone, 0.29 Ω with 30 houses), E02 (single-family
+  house: concrete moisture, rod, outer ring, `image` / `mom` / `fem`) and E03
+  (60 m × 40 m substation grid in two-layer soil against EN 50522, with the
+  measures that make it pass). E02 found that a bare ring bonded 1 m outside a
+  foundation mesh reads the touch voltage +5 … +16 % high with the image
+  family (now in the known limitations and the safety docstring); E03 found
+  the corner gap of the touch-voltage envelope below and the larger field
+  errors of `image_2layer` over a resistive bottom (+45 % at mesh centres).
+- **The envelope at the corners (author's decision):** the 24 equally spaced
+  directions of `touch_voltage_envelope` hit the rounded corners of the offset
+  curve only for a square; the 60 m × 40 m grid read 12 % / 28 % low, on the
+  unsafe side. The envelope now also stands on the arc around every corner of
+  the convex hull of the wires (five feet per corner, `corners=True`); on that
+  grid it equals the maximum over 3600 directions to 1e-4. Square grids, rings
+  and rods keep their maximum; `corners=False` reproduces the directions
+  alone; no golden case uses the envelope.
+- **Formulas:** a headless-Chromium render of the built site under the mike
+  version path with the vendored MathJax found three formulas left raw (two
+  docstrings split by a line that Markdown read as a list item), raw TeX in the
+  table of contents of four headings with math, and a `\texttt` with an
+  underscore. All fixed: 99 pages, 4540 formulas typeset, none with an error;
+  `tests/test_docs_math.py` guards the three classes.
+- **On the way:** `ruff format --check`, a blocking CI step, failed on T08
+  and two test files on the base; fixed. The golden rebase (D8) had removed
+  the v0.15.0 world JSON that `tests/test_soil_models.py` read; it is a
+  fixture now. DIN 18014 is cited in its edition 2023-06.

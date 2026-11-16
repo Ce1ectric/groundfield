@@ -1085,6 +1085,37 @@ reproduces 0.15.0, it is named.
   the [roadmap][roadmap]. Versioned with `mike`.
 - Formulas on the documentation site are typeset once; pages that load a TeX
   extension no longer fail.
+- **Final documentation pass (author's request before the release).**
+  - Three case studies under *Examples*, executed with their outputs and
+    checked by `tests/test_examples.py`: E01 a secondary substation with its
+    low-voltage network (the global earthing effect, earth potential rise,
+    transferred potentials, 50 Hz against 1 kHz), E02 a single-family house
+    with a foundation earth electrode in concrete (rod, ring, concrete
+    moisture, touch voltage), E03 the mesh grid of a high-voltage substation
+    in two-layer soil (touch and step voltages against EN 50522 and the
+    measures that make the design pass).
+  - *Choosing an engine* opens the engine family page: a decision path,
+    accuracy against the benchmarks, cost, and where each engine must not
+    be used, with the warning it raises.
+  - Getting started covers a rod, a ring and a grid in homogeneous and
+    two-layer soil, a fault with touch and step voltage, a potential profile
+    and plots; every number is checked.
+  - The engine and theory pages follow one skeleton (what it solves, method,
+    numerics, accuracy, limits) with the equations derived step by step and
+    every symbol defined; measurement lists and the audit trail are
+    collapsed. Known limitations and the warnings catalogue have one short
+    entry per limit with its size and the remedy.
+  - The API reference renders every name of the public `__all__` lists with
+    a docstring summary (62 names were on no page, 77 had no summary; new
+    page *Utilities*); `tests/test_docs_api_coverage.py` keeps it complete.
+  - Every formula renders: a headless-browser check of all 99 pages under the
+    versioned path (4540 formulas typeset, none with an error);
+    `tests/test_docs_math.py` guards against math in headings, inline
+    formulas split by a list marker and underscores in `\texttt`.
+  - Corrected on the way: the skin depths of ADR-0005 (113 m … 5.0 km), the
+    bound of the tapered quadrupole term ($1/(6G^2)$), `fem`'s support for
+    two-terminal and voltage sources in the theory pages, the edition DIN
+    18014:2023-06.
 - Moved pages (no redirects): `api/*` → `reference/api/*`, `examples/*` →
   `tutorials/` and `how-to/`, `engines/*` → `explanation/engines/`,
   `concepts.md` → `explanation/concepts.md`, `performance.md` →
