@@ -191,7 +191,8 @@ Generated from the benchmark run measured on 2026-11-16 with groundfield 2026.11
 The thin-wire limits next to an interface (rod ends, horizontal wires,
 the point form near $h_1$) are those of [`mom`](mom.md#validity-range).
 What to do instead, and the other limits:
-[known limitations](../../reference/known-limitations.md#current-ansatz-and-source-kernels);
+known limitations of the [current ansatz and kernels](../../reference/known-limitations.md#current-ansatz-and-source-kernels)
+and of the [soil layers](../../reference/known-limitations.md#soil-layers);
 the warnings: [warnings reference](../../reference/warnings.md).
 
 ## Literature

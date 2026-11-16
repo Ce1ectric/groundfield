@@ -915,7 +915,7 @@ and the T-joint, and the T-joint and the crossing were not refined
 
 What `fem` accepts, what happens outside, and what to do instead. The same
 limits, with their remedies, are collected in
-[Known limitations](../../reference/known-limitations.md); the warnings and
+[Known limitations](../../reference/known-limitations.md#the-fem-engine); the warnings and
 errors are described in the [warnings reference](../../reference/warnings.md).
 
 | Condition | Limit | Outside | Instead |

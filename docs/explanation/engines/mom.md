@@ -208,7 +208,8 @@ of the interface image needs short segments next to $h_1$, and the thin
 wire has no end face and no current crowding to its near side; they are
 explained on the [`image_2layer`](image_2layer.md#electrodes-that-reach-the-interface)
 page. What to do instead, and the other limits:
-[known limitations](../../reference/known-limitations.md#current-ansatz-and-source-kernels);
+known limitations of the [current ansatz and kernels](../../reference/known-limitations.md#current-ansatz-and-source-kernels)
+and of the [soil layers](../../reference/known-limitations.md#soil-layers);
 the warnings: [warnings reference](../../reference/warnings.md).
 
 ## Literature

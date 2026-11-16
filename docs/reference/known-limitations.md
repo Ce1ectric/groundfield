@@ -21,13 +21,12 @@ solve.
 | [Scope of the physics](#scope-of-the-physics) | frequency range, soil model, what is not computed |
 | [Coordinates](#coordinates) | projected and local coordinates in one world |
 | [Current ansatz and source kernels](#current-ansatz-and-source-kernels) | the image family's uniform current per wire; the point and the line kernel |
-| [Layered soil and layer interfaces](#layered-soil-and-layer-interfaces) | three or more layers, rod ends and wires at an interface, high contrast, effective resistivity |
-| [The `fem` engine](#the-fem-engine) | the axisymmetric and the 3-D model, their accuracy, size and cost |
-| [Concrete shells](#concrete-shells) | overlapping shells at junctions |
+| [Soil layers](#soil-layers) | three or more layers, rod ends and wires at an interface, high contrast, effective resistivity |
+| [Backends](#backends): [the `fem` engine](#the-fem-engine), [concrete shells](#concrete-shells) | the axisymmetric and the 3-D model of `fem`, their accuracy, size and cost; overlapping concrete shells at junctions |
 | [Earth return and conductors](#earth-return-and-conductors) | `carson_series`, `perfect_mirror`, the Sommerfeld rules, skin effect, concentric cables |
 | [Post-processing and export](#post-processing-and-export) | EN 50522 curve, touch-voltage envelope, reduced models |
 | [Generators and OSM](#generators-and-osm) | foundation outlines, service drops, cabinets, Overpass |
-| [Problem size and diagnostics](#problem-size-and-diagnostics) | segment limits, touching electrodes, backend aliases |
+| [Diagnostics and problem size](#diagnostics-and-problem-size) | segment limits, touching electrodes, backend aliases |
 
 ## Scope of the physics
 
@@ -303,7 +302,7 @@ solve.
 
         The blend is user decision D2.
 
-## Layered soil and layer interfaces
+## Soil layers
 
 - **Three or more layers** are solved only by `mom_sommerfeld` (and `fem`).
   `FieldResult.potential` — and with it touch and step voltages, potential
@@ -487,7 +486,14 @@ solve.
 
         Measured in audit W3B-08.
 
-## The `fem` engine
+## Backends
+
+The limits that belong to one backend: the `fem` engine and the concrete
+shells of every backend. The limits of the integral engines' current model
+and kernels are under [current ansatz and source kernels](#current-ansatz-and-source-kernels),
+those at layer interfaces under [soil layers](#soil-layers).
+
+### The `fem` engine
 
 - **`fem` is experimental** (`ExperimentalBackendWarning` once per
   process). It has two conforming models (ADR-0016);
@@ -640,7 +646,7 @@ solve.
         Resolved concrete is user decision Q40; audits W4B-04 (accuracy) and
         W4R2B-04 (thin cover).
 
-## Concrete shells
+### Concrete shells
 
 - **Overlapping shells at junctions.** Concrete shells
   (`concrete_shell_coefficient_ohm_m`) are represented by the image
@@ -1001,7 +1007,7 @@ solve.
 
     **Instead:** expect these steps in a Monte Carlo study over the jitter.
 
-## Problem size and diagnostics
+## Diagnostics and problem size
 
 - **Problem size.** More segments or nodal unknowns than the engine's
   limit (`Engine.max_segments`, default `HARD_LIMIT` = 20 000) raise

@@ -658,7 +658,7 @@ records a different one in `metadata["rho_preset"]`.
 
 **What it means:** the `rho` of the bus then means another resistivity
 than the `rho` of the formula (see the effective resistivity in
-[Known limitations](known-limitations.md#layered-soil-and-layer-interfaces)).
+[Known limitations](known-limitations.md#soil-layers)).
 
 **What to do:** evaluate the BusType with the preset it was fitted over,
 or refit it over the preset of your bus.

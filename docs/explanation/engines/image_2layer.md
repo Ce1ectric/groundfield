@@ -304,7 +304,8 @@ Kernel check — signed deviation from the exact uniform-current resistance:
 
 The two thin-wire limits at the interface and the point-kernel limit are
 explained below. What to do instead, and the other limits of the family:
-[known limitations](../../reference/known-limitations.md#current-ansatz-and-source-kernels);
+known limitations of the [current ansatz and kernels](../../reference/known-limitations.md#current-ansatz-and-source-kernels)
+and of the [soil layers](../../reference/known-limitations.md#soil-layers);
 the warnings and their reach: [warnings reference](../../reference/warnings.md#interfacecontactwarning).
 
 ### Rod ends at the interface: a limit of the thin-wire model
