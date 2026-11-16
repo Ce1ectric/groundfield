@@ -38,32 +38,40 @@ $$
 $$
 
 summed over what the mesh does not already resolve. The observer's own
-wire counts whole: its polyline through every corner where it has turned by
-less than 120° (a ring's polygon, a strip, the corners of a loop) and every
-piece on the same axis line (the next piece of a galvanic conductor, the
-surface image of a rod whose head reaches the surface) — along its own axis
-the mesh sees the smoothed source, not the thin wire, and only the whole
-line integral reproduces the 2-D radial resistance. A piece of the own
-polyline that runs back towards the point (turned by 120° or more: an arm
-folded back, the opposite side of a narrow loop or a small ring, either arm
-of a narrow V) or runs parallel beside it counts like a wire of the same
-electrode (audit W4R2B-02: up to 2026.11 only an exactly parallel arm did,
-so tilting a folded arm by 1e-6 rad added the whole line term). Of every
-other piece of the same electrode, and of every surface image that does not
-continue the observer's axis, only the part within $1.5\\,R$ of the point
-counts (:data:`NEAR_FACTOR`): farther away the disc average of a smoothed
-line is its line field (the 2-D mean-value property of the radial bump), so
-the mesh gives the exact field and the reduced kernels would only add
+wire counts whole: its polyline as far as it has turned by at most 90°
+along the chain (a ring's polygon, a strip, the corners of a loop;
+:data:`TURN_WHOLE`) and every piece on the same axis line that belongs to
+the observer's port or wire system (the next piece of a galvanic conductor,
+the surface image of a rod whose head reaches the surface) — along its own
+axis the mesh sees the smoothed source, not the thin wire, and only the
+whole line integral reproduces the 2-D radial resistance. Where the own
+polyline has turned farther it runs back towards the point (an arm folded
+back, the opposite side of a narrow loop or a small ring, either arm of a
+narrow V) or alongside it after a full turn (the next arm of a meander, the
+next winding of a spiral): from a turn of 150° on it counts like a wire of
+the same electrode, and between 90° and 150° by a weight linear in the turn
+(audits W4R2B-02, W4R3B-03: up to 2026.11 a direction within 120° of the
+observer's counted whole, so the meander's third arm added +6.8e-3 and a V
+jumped at 120°). Of every other piece of the same electrode, and of every
+surface image that does not continue the observer's axis, only the part
+within $1.5\\,R$ of the point counts (:data:`NEAR_FACTOR`): farther away the
+disc average of a smoothed line is its line field (the 2-D mean-value
+property of the radial bump), so the mesh gives the exact field and the
+reduced kernels would only add
 $\\frac{\\rho}{4\\pi}\\ln\\frac{D^2 + r_\\eta^2}{D^2 + a^2}$ per metre with the
-observer's current. A piece of **another port** counts only where it lies on
-the observer's axis line (whole) or belongs to a wire that meets the
-observer's wire (:func:`wire_systems`: a rod on a ring, a T-joint, a
-crossing, the bonded pieces of a galvanic conductor at a bend — wires that
-touch are one conductor and carry about the same current there); elsewhere
-it carries its own current, which the observer's correction cannot know
+observer's current. A piece of **another port** counts only where it
+belongs to a wire that meets the observer's wire (:func:`wire_systems`:
+their surfaces touch — a rod on a ring, a T-joint, a crossing, the pieces of
+a galvanic conductor — wires that touch are one conductor and carry about
+the same current there), whole on the observer's axis line, by its window
+elsewhere, and by a window fading out with the surface gap where the two
+have just stopped touching (:data:`TAPER`, audit W4R3B-04); every other
+piece carries its own current, which the observer's correction cannot know
 (audit W4R2B-03: two coaxial rings 7.5 cm apart read +4.35e-3 in a port
-entry with the window term). The 3-D model keeps such wires at least
-$1.5\\,R$ apart (:func:`beside_wires`), so none of them reaches the window.
+entry with the window term; audit W4R3B-01: a collinear rod of another
+electrode 1 cm below counted whole). The 3-D model keeps wires that do not
+meet but run beside each other or lie end to end at least $1.5\\,R$ apart
+(:func:`beside_wires`), so none of them reaches the window.
 For two parallel lines the exact correction is below $10^{-3}$ of the self
 term from $D = 1.5\\,R$ on (evidence ``f01`` of stream fw4fem3d); the
 surface image of a horizontal wire lies $2z \\ge 2.5\\,R$ away and never
@@ -112,20 +120,43 @@ RING_CHORD_ANGLE = 2.0 * math.pi / 360.0
 #: wire.
 NEAR_FACTOR = 1.5
 
-#: The observer's own polyline counts whole only where it has turned by less
-#: than 120° (``d_obs · e > FOLD_COS``); a piece turned farther runs back
-#: towards the point and counts like a wire of the same electrode (audit
-#: W4R2B-02). A rule that clipped the own chain by its distance from the
-#: observer's axis line, continuous in the angle, also clipped the curved
-#: continuation of a ring: −1.19e-3 against the solid torus for a ring of
-#: r = 0.3 m (−4.9e-4 with this rule), −2.0e-3 for r = 1 m (evidence ``g02`` of
-#: stream fw4r2b).
-FOLD_COS = -0.5
+#: The observer's own polyline counts whole up to the turn ``TURN_WHOLE``
+#: (90°) accumulated along the chain from the observer's piece, like another
+#: wire of the same electrode (its window only) from ``TURN_NONE`` (150°) on,
+#: and in between by the weight $(150° - T)/60°$ of whole and the rest by its
+#: window (audit W4R3B-03). The turn is the sum of the angles at the corners
+#: passed, along a closed chain the shorter way round: an S-meander's third arm
+#: or the next winding of a spiral has turned by 360° although it runs the
+#: same way. (Up to audit W4R3B-03 a piece counted whole where its direction
+#: was within 120° of the observer's, ``d_obs · e > −1/2``: the meander's
+#: third arm, 0.20 m away, added +6.8e-3 of the correction; and the switch at
+#: 120° made a V of 0.5 m arms jump by −1.26e-3 in $Z$.) A rule that clipped
+#: the own chain by its distance from the observer's axis line also clipped
+#: the curved continuation of a ring (−1.19e-3 against the solid torus for
+#: r = 0.3 m; evidence ``g02`` of stream fw4r2b).
+TURN_WHOLE = 0.5 * math.pi
+#: See :data:`TURN_WHOLE`.
+TURN_NONE = 5.0 * math.pi / 6.0
+
+#: Two wires meet where their axes come within the sum of their radii (their
+#: surfaces touch), or, end to end in line, where the gap between their ends
+#: is zero to this round-off tolerance in m (audits W4R3B-01, W4R3B-04).
+TOUCH_TOL = 1e-9
+
+#: The window term of a wire of another port that does not meet the
+#: observer's fades out linearly from an axis distance of $a_1 + a_2$ (where
+#: the surfaces stop touching, weight 1) to ``TAPER`` $(a_1 + a_2)$ (weight 0),
+#: so the correction is continuous where two crossing wires stop meeting
+#: (audit W4R3B-04: a hard switch at the smaller radius made a 2 m cross jump
+#: by −7.5e-4 in $Z$, `mom` −1.6e-5).
+TAPER = 2.0
 
 #: Two wires run *beside each other* where the nearest point of one to a
 #: point of the other lies on its side (not at an end) and the two run within
-#: this angle (sine) of parallel: 30°. Wires that meet or cross at a larger
-#: angle are close only over a few source radii (:func:`beside_wires`).
+#: this angle (sine) of parallel: 30°. Wires that cross at a larger angle are
+#: close only over a few source radii, wires that meet at any angle are one
+#: conductor there (:func:`beside_wires`). Two pieces lie *in line* where the
+#: gap between their nearest ends runs within this angle of both axes.
 BESIDE_SINE = 0.5
 
 
@@ -147,9 +178,10 @@ class WirePiece:
         Concrete-shell coefficient $C$ in Ω·m (``0`` for a bare wire).
     chain
         Index of the wire the piece belongs to (one polyline of one
-        electrode, a ring's polygon); ``None``: a wire of its own. The radius
-        correction counts the observer's own wire whole where it has turned
-        by less than 120° (:data:`FOLD_COS`).
+        electrode, a ring's polygon; its pieces in order along it);
+        ``None``: a wire of its own. The radius correction counts the
+        observer's own wire whole up to a turn of 90° along it
+        (:data:`TURN_WHOLE`).
     """
 
     port: int
@@ -334,6 +366,21 @@ def _segment_distances(
     Closed form of the clamped closest points (Ericson 2005, §5.1.9) for
     arrays of shape ``(n, 3)``; every segment has a positive length.
     """
+    return _closest_points(p0, p1, q0, q1)[0]
+
+
+def _closest_points(
+    p0: np.ndarray, p1: np.ndarray, q0: np.ndarray, q1: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Distance, parameters and gap vector of the closest points of segments.
+
+    Returns
+    -------
+    distance, s, t, gap
+        The smallest distance in m, the parameters ``s`` of ``p0 p1`` and
+        ``t`` of ``q0 q1`` (0 … 1, exactly 0 or 1 at an end) of the closest
+        points, and the vector in m from the first to the second.
+    """
     d1, d2, r = p1 - p0, q1 - q0, p0 - q0
     a = np.einsum("ij,ij->i", d1, d1)
     e = np.einsum("ij,ij->i", d2, d2)
@@ -350,8 +397,8 @@ def _segment_distances(
         s = np.where(low, np.clip(-c / a, 0.0, 1.0), s)
         s = np.where(high, np.clip((b - c) / a, 0.0, 1.0), s)
     t = np.clip(t, 0.0, 1.0)
-    gap = p0 + s[:, None] * d1 - (q0 + t[:, None] * d2)
-    return np.sqrt(np.einsum("ij,ij->i", gap, gap))
+    gap = q0 + t[:, None] * d2 - (p0 + s[:, None] * d1)
+    return np.sqrt(np.einsum("ij,ij->i", gap, gap)), s, t, gap
 
 
 def _chains(model: "WireModel") -> np.ndarray:
@@ -361,55 +408,242 @@ def _chains(model: "WireModel") -> np.ndarray:
     )
 
 
-def wire_systems(model: "WireModel") -> np.ndarray:
+class _Contacts(NamedTuple):
+    """Pairs of pieces ``i < j`` close to each other (:func:`_contacts`)."""
+
+    #: Piece indices of every pair.
+    i: np.ndarray
+    j: np.ndarray
+    #: Distance in m of the two axes (segments).
+    distance: np.ndarray
+    #: Whether the two lie in line: the gap between an end of each runs within
+    #: 30° of both axes (:data:`BESIDE_SINE`) and is not zero.
+    in_line: np.ndarray
+    #: Gap in m between the two wire surfaces (:func:`_surface_gap`).
+    surface_gap: np.ndarray
+    #: 1 where the two meet (the surface gap is zero to :data:`TOUCH_TOL`),
+    #: falling linearly to 0 at a surface gap of $a_i + a_j$
+    #: (:data:`TAPER`); 0 in line with a gap.
+    weight: np.ndarray
+
+
+def _reduce(gap: np.ndarray, e: np.ndarray, a: np.ndarray) -> np.ndarray:
+    """``gap`` (n, 3) less up to ``a`` of its part perpendicular to ``e``."""
+    axial = np.einsum("ij,ij->i", gap, e)[:, None] * e
+    lateral = gap - axial
+    size = np.linalg.norm(lateral, axis=1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        keep = np.where(size > a, (size - a) / size, 0.0)
+    return axial + keep[:, None] * lateral
+
+
+def _surface_gap(
+    gap: np.ndarray, e_i: np.ndarray, a_i: np.ndarray, e_j: np.ndarray, a_j: np.ndarray
+) -> np.ndarray:
+    """Gap in m between two wire surfaces, from the gap of their axes.
+
+    ``gap`` runs from the closest point of one axis to that of the other.
+    Each wire reaches its radius from its axis in the plane perpendicular to
+    it, up to its flat end: the gap less the disc of each wire — exactly
+    $d - a_i - a_j$ where two wires cross (the gap is perpendicular to both),
+    the end gap where two wires lie end to end on one axis, and the gap of a
+    flat end face to the other wire's surface where a wire ends beside
+    another (a rod's head below a small ring: 0.49 mm for auditor W4A's ring
+    0.75 radii above the head, whose axes are 15.2 mm apart, within
+    $a_i + a_j$ = 16 mm). Taken in both orders, the smaller.
+    """
+    one = _reduce(_reduce(gap, e_i, a_i), e_j, a_j)
+    two = _reduce(_reduce(gap, e_j, a_j), e_i, a_i)
+    return np.minimum(np.linalg.norm(one, axis=1), np.linalg.norm(two, axis=1))
+
+
+def _contacts(model: "WireModel", reach: float = 0.0) -> _Contacts:
+    """Every pair of pieces within ``reach`` m or :data:`TAPER` (a_i + a_j).
+
+    The pieces of one chain are included (a polyline's consecutive pieces
+    meet at their common vertex). Two pieces meet where their surfaces
+    touch (:func:`_surface_gap`; audit W4R3B-04): where they cross, their
+    axes come within $a_i + a_j$ (a crossing, a strip on a strip); where one
+    ends at the other, its flat end reaches the other's surface (a rod on a
+    ring, a T-joint); where they lie end to end on one axis (stacked rods,
+    the pieces of a straight galvanic conductor), the gap between their ends
+    is zero to :data:`TOUCH_TOL` (audit W4R3B-01: up to then any gap within
+    the smaller radius met, so the other rod counted whole with the
+    observer's current).
+    """
+    pieces = model.pieces
+    m = len(pieces)
+    empty = np.zeros(0)
+    if m < 2:
+        return _Contacts(
+            empty.astype(int), empty.astype(int), empty, empty > 0, empty, empty
+        )
+    start = np.array([p.start for p in pieces])
+    end = np.array([p.end for p in pieces])
+    radius = np.array([p.radius for p in pieces])
+    margin = np.maximum(TAPER * (radius + radius.max()), float(reach))
+    lo = np.minimum(start, end) - margin[:, None]
+    hi = np.maximum(start, end) + margin[:, None]
+    lo_bare = np.minimum(start, end)
+    hi_bare = np.maximum(start, end)
+    out_i, out_j = [], []
+    for i in range(m - 1):
+        j = np.arange(i + 1, m)
+        j = j[np.all((lo_bare[j] <= hi[i]) & (hi_bare[j] >= lo[i]), axis=1)]
+        if j.size:
+            out_i.append(np.full(j.size, i, dtype=int))
+            out_j.append(j)
+    if not out_i:
+        return _Contacts(
+            empty.astype(int), empty.astype(int), empty, empty > 0, empty, empty
+        )
+    i = np.concatenate(out_i)
+    j = np.concatenate(out_j)
+    d, s, t, gap = _closest_points(start[i], end[i], start[j], end[j])
+    total = radius[i] + radius[j]
+    keep = d <= np.maximum(TAPER * total, float(reach))
+    i, j, d, s, t, gap = i[keep], j[keep], d[keep], s[keep], t[keep], gap[keep]
+    total = total[keep]
+    e_i = (end[i] - start[i]) / np.linalg.norm(end[i] - start[i], axis=1)[:, None]
+    e_j = (end[j] - start[j]) / np.linalg.norm(end[j] - start[j], axis=1)[:, None]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        g = gap / d[:, None]
+    ends = ((s <= 0.0) | (s >= 1.0)) & ((t <= 0.0) | (t >= 1.0))
+    in_line = (
+        (d > TOUCH_TOL)
+        & ends
+        & (np.linalg.norm(np.cross(g, e_i), axis=1) < BESIDE_SINE)
+        & (np.linalg.norm(np.cross(g, e_j), axis=1) < BESIDE_SINE)
+    )
+    surface = _surface_gap(gap, e_i, radius[i], e_j, radius[j])
+    weight = np.clip(1.0 - surface / ((TAPER - 1.0) * total), 0.0, 1.0)
+    # in line with a gap: no window at all (beside_wires keeps such wires
+    # 1.5 R apart, so it would never reach them)
+    weight = np.where(in_line, 0.0, weight)
+    weight = np.where(surface <= TOUCH_TOL, 1.0, weight)
+    return _Contacts(i, j, d, in_line, surface, weight)
+
+
+def _union(n: int, pairs_i: np.ndarray, pairs_j: np.ndarray) -> np.ndarray:
+    """Connected components of ``n`` nodes under the given pairs (labels)."""
+    parent = list(range(n))
+
+    def find(k: int) -> int:
+        while parent[k] != k:
+            parent[k] = parent[parent[k]]
+            k = parent[k]
+        return k
+
+    for a, b in zip(pairs_i.tolist(), pairs_j.tolist(), strict=True):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+    return np.array([find(k) for k in range(n)], dtype=int)
+
+
+def wire_systems(model: "WireModel", contacts: _Contacts | None = None) -> np.ndarray:
     """Label of the connected wire system of every piece.
 
-    Two chains (wires) belong to one system where their axes come within the
-    smaller of their wire radii of each other — they meet: a rod on a ring,
-    a T-joint, a crossing in one plane, a galvanic conductor and the
-    electrode it is attached to, the pieces of a galvanic conductor — and
-    the relation is closed transitively. Wires that touch are one conductor;
-    their currents agree where they meet, so the radius correction may count
-    a piece of another port of the same system with the observer's current
-    (:func:`radius_correction`).
+    Two chains (wires) belong to one system where two of their pieces meet
+    (:func:`_contacts`: their surfaces touch — crossing wires $a_1 + a_2$
+    axis to axis, a flat end at the other's surface, end to end on one axis
+    only without a gap) — a rod on a ring, a T-joint, a crossing, a
+    galvanic conductor and the electrode it is attached to, the pieces of a
+    galvanic conductor — and the relation is closed transitively. Wires
+    that touch are one conductor; their currents agree where they meet, so
+    the radius correction may count a piece of another port of the same
+    system with the observer's current (:func:`radius_correction`). (Up to
+    audits W4R3B-01 and W4R3B-04 the axes had to come within the smaller
+    radius: two crossing strips whose surfaces still overlapped stopped
+    meeting, and two stacked rods with an end gap below the radius met.)
+    """
+    chains = _chains(model)
+    keys = {c: i for i, c in enumerate(dict.fromkeys(chains.tolist()))}
+    col = np.array([keys[int(c)] for c in chains], dtype=int)
+    if contacts is None:
+        contacts = _contacts(model)
+    meet = contacts.weight >= 1.0
+    labels = _union(len(keys), col[contacts.i[meet]], col[contacts.j[meet]])
+    return labels[col]
+
+
+def _system_weights(model: "WireModel", contacts: _Contacts, systems: np.ndarray):
+    """Window weight between wire systems (audit W4R3B-04).
+
+    1 within a system; between two systems the widest path of the tapered
+    contacts (:func:`_contacts`, weights between 0 and 1): two wires that
+    just stopped meeting keep their window term with a weight that fades out
+    with their distance, continuous in the geometry. Returns the compact
+    index of every system (``-1``: no tapered contact) and the weight matrix
+    over the indexed systems.
+    """
+    n_sys = int(systems.max()) + 1 if systems.size else 0
+    index = np.full(n_sys, -1, dtype=int)
+    w = contacts.weight
+    taper = (w > 0.0) & (w < 1.0)
+    si, sj = systems[contacts.i[taper]], systems[contacts.j[taper]]
+    between = si != sj
+    si, sj, wt = si[between], sj[between], w[taper][between]
+    if wt.size == 0:
+        return index, np.zeros((0, 0))
+    involved = np.unique(np.concatenate([si, sj]))
+    index[involved] = np.arange(involved.size)
+    a, b = index[si], index[sj]
+    weights = np.eye(involved.size)
+    members = {k: [k] for k in range(involved.size)}
+    owner = list(range(involved.size))
+    # Kruskal in descending weight: the edge that first joins two groups is
+    # the bottleneck of the widest path between any of their members.
+    for k in np.argsort(-wt, kind="stable"):
+        ga, gb = owner[a[k]], owner[b[k]]
+        if ga == gb:
+            continue
+        ma, mb = members[ga], members.pop(gb)
+        weights[np.ix_(ma, mb)] = wt[k]
+        weights[np.ix_(mb, ma)] = wt[k]
+        for x in mb:
+            owner[x] = ga
+        ma.extend(mb)
+    return index, weights
+
+
+def _turns(model: "WireModel") -> tuple[np.ndarray, np.ndarray]:
+    """Turn accumulated along every chain, and the total of closed chains.
+
+    Returns
+    -------
+    turn, total
+        Radians, per piece: the sum of the angles at the corners from the
+        chain's first piece to this one, and the whole turn of a closed
+        chain (its last piece ends where its first starts, the closing corner
+        included; ``inf`` for an open chain).
     """
     pieces = model.pieces
     m = len(pieces)
     chains = _chains(model)
-    keys = {c: i for i, c in enumerate(dict.fromkeys(chains.tolist()))}
-    parent = list(range(len(keys)))
-
-    def find(i: int) -> int:
-        while parent[i] != i:
-            parent[i] = parent[parent[i]]
-            i = parent[i]
-        return i
-
-    if m > 1:
-        start = np.array([p.start for p in pieces])
-        end = np.array([p.end for p in pieces])
-        radius = np.array([p.radius for p in pieces])
-        lo = np.minimum(start, end) - radius[:, None]
-        hi = np.maximum(start, end) + radius[:, None]
-        for i in range(m - 1):
-            j = np.arange(i + 1, m)
-            j = j[(chains[j] != chains[i])]
-            if j.size == 0:
-                continue
-            j = j[np.all((lo[j] <= hi[i]) & (hi[j] >= lo[i]), axis=1)]
-            if j.size == 0:
-                continue
-            d = _segment_distances(
-                np.broadcast_to(start[i], (j.size, 3)),
-                np.broadcast_to(end[i], (j.size, 3)),
-                start[j],
-                end[j],
-            )
-            for k in j[d <= np.minimum(radius[i], radius[j]) + 1e-12]:
-                a, b = find(keys[int(chains[i])]), find(keys[int(chains[k])])
-                if a != b:
-                    parent[b] = a
-    return np.array([find(keys[int(c)]) for c in chains], dtype=int)
+    direction = np.array([p.direction for p in pieces]).reshape(m, 3)
+    order = np.argsort(chains, kind="stable")
+    ch = chains[order]
+    d = direction[order]
+    same = ch[1:] == ch[:-1]
+    cos = np.clip(np.einsum("ij,ij->i", d[:-1], d[1:]), -1.0, 1.0)
+    angle = np.where(same, np.arccos(cos), 0.0)
+    cum = np.concatenate([[0.0], np.cumsum(angle)])
+    first = np.concatenate([[True], ~same])
+    group = np.cumsum(first) - 1
+    cum = cum - cum[first][group]
+    last = np.concatenate([~same, [True]])
+    turn = np.empty(m)
+    turn[order] = cum
+    total = np.full(m, np.inf)
+    for g0, g1 in zip(np.nonzero(first)[0], np.nonzero(last)[0], strict=True):
+        if g1 == g0:
+            continue
+        a, b = pieces[order[g0]], pieces[order[g1]]
+        if np.linalg.norm(a.start - b.end) <= TOUCH_TOL:
+            closing = math.acos(max(-1.0, min(1.0, float(b.direction @ a.direction))))
+            total[order[g0 : g1 + 1]] = cum[g1] + closing
+    return turn, total
 
 
 class Beside(NamedTuple):
@@ -422,9 +656,25 @@ class Beside(NamedTuple):
     #: Port index of the other wire (the same for a folded arm).
     other: int
     #: ``"beside"`` (side by side within 30° of parallel), ``"folded"`` (an
-    #: arm of the same polyline) or ``"around"`` (the whole wire lies within
-    #: the reach of another wire it does not meet).
+    #: arm of the same polyline), ``"around"`` (the whole wire lies within
+    #: the reach of another wire it does not meet) or ``"in line"`` (end to
+    #: end with a gap, audit W4R3B-01).
     kind: str
+
+
+def _runs(model: "WireModel", contacts: _Contacts) -> np.ndarray:
+    """Label of the straight run of every piece.
+
+    A run is a chain of pieces on one axis line that meet end to end (the
+    pieces of a straight galvanic conductor, a polyline's vertex on a
+    straight stretch); every other piece is a run of its own.
+    """
+    pieces = model.pieces
+    direction = np.array([p.direction for p in pieces]).reshape(len(pieces), 3)
+    i, j = contacts.i, contacts.j
+    parallel = np.linalg.norm(np.cross(direction[i], direction[j]), axis=1) < 1e-6
+    keep = (contacts.distance <= TOUCH_TOL) & parallel
+    return _union(len(pieces), i[keep], j[keep])
 
 
 def beside_wires(model: WireModel, reach: float) -> Beside | None:
@@ -432,35 +682,45 @@ def beside_wires(model: WireModel, reach: float) -> Beside | None:
 
     The 3-D model keeps such wires at least :data:`NEAR_FACTOR` source radii
     apart (:func:`groundfield.solver.fem._solid.source_radius`; audits
-    W4R2B-03, W4R2A-01): closer, the discs of their smoothed sources reach
-    the other wire, the mesh no longer gives the other wire's exact field
-    and the radius correction has no term for it. Two wires run beside each
-    other where
+    W4R2B-03, W4R2A-01, W4R3B-01): closer, the discs of their smoothed
+    sources reach the other wire, the mesh no longer gives the other wire's
+    exact field and the radius correction has no term for it. Two wires run
+    beside each other where
 
     * a point of one lies within ``reach`` of the *side* of a piece of the
       other — the nearest point of that piece is not one of its ends — and
       the two pieces run within 30° of parallel (:data:`BESIDE_SINE`): wires
       side by side, concentric rings, an arm of the same polyline folded back
-      beside the point (kind ``"folded"``), the two arms of a V narrower than
-      30°; or
+      beside the point (kind ``"folded"``), a galvanic conductor in the
+      trench of an earthing strip; or
     * the whole of one electrode's wire lies within ``reach`` of another wire
       that it does not meet (:func:`wire_systems`; kind ``"around"``): a
-      small ring around a rod's head.
+      small ring around a rod's head; or
+    * two wires that do not meet lie in line, end to end with a gap below
+      ``reach`` (kind ``"in line"``: stacked rods of two electrodes, audit
+      W4R3B-01; up to then they were left alone, and rods 1 cm apart read
+      +1.6e-2 in a port entry and −7.3e-2 in the transfer entry).
 
-    Left alone: pieces on one axis line (the collinear pieces of a galvanic
-    conductor, stacked rods), wires that meet or cross at more than 30° (a
-    rod on a ring, a T-joint, a crossing, a corner, the attachment of a
-    galvanic conductor) — near them a point is close to the other wire's end
-    or crosses it within a few source radii — and the consecutive chords of a
-    ring.
+    Left alone: pieces on one axis line that meet (the collinear pieces of a
+    galvanic conductor, a rod cut into touching pieces), and wires that meet
+    at any angle or cross at more than 30° (a rod on a ring, a T-joint, a
+    crossing, a corner, the attachment of a galvanic conductor, a V or a
+    branch narrower than 30°) — two pieces whose straight runs meet at an
+    angle θ come within ``reach`` of each other only within ``reach`` / sin θ
+    of where they meet, where the window term counts the other wire, whose
+    current agrees there (audit W4R3B-02: up to then a V narrower than 30°
+    was refused with the distance of the sample point nearest to the apex)
+    — and the consecutive chords of a ring.
 
     Returns
     -------
     Beside or None
         The configuration with the smallest axis distance below ``reach``
-        (the distance for ``"around"`` is the farthest point of the wire from
-        the other wire, so the whole wire no longer lies within 1.5 radii of
-        the source radius it leads to), ``None`` if there is none.
+        (for ``"beside"``, ``"folded"`` and ``"in line"`` the distance of the
+        two pieces' axes, independent of the sampling; for ``"around"`` the
+        farthest point of the wire from the other wire, so the whole wire no
+        longer lies within 1.5 radii of the source radius it leads to),
+        ``None`` if there is none.
     """
     pieces = model.pieces
     m = len(pieces)
@@ -472,7 +732,23 @@ def beside_wires(model: WireModel, reach: float) -> Beside | None:
     direction = (end - start) / length[:, None]
     ports = np.array([p.port for p in pieces], dtype=int)
     chains = _chains(model)
-    systems = wire_systems(model)
+    contacts = _contacts(model, reach)
+    systems = wire_systems(model, contacts)
+    runs = _runs(model, contacts)
+    meet = contacts.weight >= 1.0
+    n_runs = int(runs.max()) + 1
+    touching = np.unique(
+        np.concatenate(
+            [
+                runs[contacts.i[meet]] * n_runs + runs[contacts.j[meet]],
+                runs[contacts.j[meet]] * n_runs + runs[contacts.i[meet]],
+            ]
+        )
+    )
+    best: Beside | None = None
+    hits_p: list[np.ndarray] = []
+    hits_q: list[np.ndarray] = []
+    hits_d: list[np.ndarray] = []
     # sample points inside every piece, spacing reach / 12
     spacing = reach / 12.0
     pts, owner = [], []
@@ -485,7 +761,6 @@ def beside_wires(model: WireModel, reach: float) -> Beside | None:
     own_all = np.concatenate(owner)
     lo = np.minimum(start, end) - reach
     hi = np.maximum(start, end) + reach
-    best: Beside | None = None
     chunk = max(1, 400_000 // m)
     # the farthest point of every chain from each other chain (row: chain)
     labels = np.unique(chains)
@@ -513,14 +788,14 @@ def beside_wires(model: WireModel, reach: float) -> Beside | None:
         other = (cand[None, :] != own[:, None]) & ~collinear
         tol = 1e-9 * length[cand][None, :]
         side = (tau > tol) & (tau < length[cand][None, :] - tol)
-        hit = other & side & (sine < BESIDE_SINE) & (dist < reach)
+        # pieces whose straight runs meet are left alone (audit W4R3B-02)
+        met = np.isin(runs[own][:, None] * n_runs + runs[cand][None, :], touching)
+        hit = other & side & ~met & (sine < BESIDE_SINE) & (dist < reach)
         if np.any(hit):
-            d = np.where(hit, dist, np.inf)
-            i, j = np.unravel_index(int(np.argmin(d)), d.shape)
-            if best is None or d[i, j] < best.distance:
-                p_, q_ = int(own[i]), int(cand[j])
-                kind = "folded" if chains[p_] == chains[q_] else "beside"
-                best = Beside(float(d[i, j]), int(ports[p_]), int(ports[q_]), kind)
+            i, j = np.nonzero(hit)
+            hits_p.append(own[i])
+            hits_q.append(cand[j])
+            hits_d.append(dist[i, j])
         # the distance of every point from each chain (inf: beyond reach)
         order = np.argsort(col[cand], kind="stable")
         uniq, first_col = np.unique(col[cand][order], return_index=True)
@@ -532,6 +807,38 @@ def beside_wires(model: WireModel, reach: float) -> Beside | None:
         for c1 in np.unique(c_own):
             far = to_chain[c_own == c1].max(axis=0)
             farthest[c1] = np.maximum(farthest[c1], far)
+    if hits_p:
+        # the distance of the two pieces' axes, not of the nearest sample
+        # (audit W4R3B-02); among equal distances the pair of the nearest
+        # sample names the wires
+        pairs, where = np.unique(
+            np.stack([np.concatenate(hits_p), np.concatenate(hits_q)], axis=1),
+            axis=0,
+            return_inverse=True,
+        )
+        sampled = np.full(pairs.shape[0], np.inf)
+        np.minimum.at(sampled, where.ravel(), np.concatenate(hits_d))
+        d = _segment_distances(
+            start[pairs[:, 0]], end[pairs[:, 0]], start[pairs[:, 1]], end[pairs[:, 1]]
+        )
+        tie = d <= d.min() * (1.0 + 1e-9)
+        k = int(np.argmin(np.where(tie, sampled, np.inf)))
+        p_, q_ = int(pairs[k, 0]), int(pairs[k, 1])
+        kind = "folded" if chains[p_] == chains[q_] else "beside"
+        best = Beside(float(d[k]), int(ports[p_]), int(ports[q_]), kind)
+    # wires in line, end to end, that do not meet (audit W4R3B-01)
+    line = (
+        contacts.in_line
+        & (contacts.distance < reach)
+        & (systems[contacts.i] != systems[contacts.j])
+    )
+    if np.any(line):
+        k = int(np.argmin(np.where(line, contacts.distance, np.inf)))
+        if best is None or contacts.distance[k] < best.distance:
+            i, j = int(contacts.i[k]), int(contacts.j[k])
+            best = Beside(
+                float(contacts.distance[k]), int(ports[i]), int(ports[j]), "in line"
+            )
     first = {int(c): k for k, c in reversed(list(enumerate(col)))}
     np.fill_diagonal(farthest, np.inf)
     for c1, c2 in zip(*np.nonzero(farthest < reach), strict=True):
@@ -558,15 +865,20 @@ def radius_correction(
     rho_local
         Resistivity in Ω·m around every axial point.
     near
-        Distance in m (:data:`NEAR_FACTOR` times the source radius). Every
-        piece on the observer's axis line counts whole (the next piece of a
-        galvanic conductor, a rod's surface image). The observer's own
-        polyline counts whole where it has turned by less than 120°
-        (:data:`FOLD_COS`) and is not parallel beside the point; of the rest
-        of its electrode, of a piece of another port whose wire meets the
-        observer's wire (:func:`wire_systems`) and of the surface images only
-        the part within ``near`` of the point counts. Every other piece of
-        another port counts nothing (audit W4R2B-03).
+        Distance in m (:data:`NEAR_FACTOR` times the source radius). A piece
+        on the observer's axis line counts whole where it belongs to the
+        observer's port or wire system (the next piece of a galvanic
+        conductor, a rod's surface image; audit W4R3B-01). The observer's own
+        polyline counts whole up to a turn of 90° along it, by a weight
+        falling linearly to 0 at 150° (:data:`TURN_WHOLE`, audit W4R3B-03),
+        and by its part within ``near`` of the point for the rest of the
+        weight; of the rest of its electrode, of a piece of another port
+        whose wire meets the observer's wire (:func:`wire_systems`) and of
+        the surface images only the part within ``near`` counts, of a piece
+        of another port that has just stopped meeting it that part by a
+        weight fading out to :data:`TAPER` times the touching distance
+        (audit W4R3B-04). Every other piece of another port counts nothing
+        (audit W4R2B-03).
     """
     x = model.points
     n = x.shape[0]
@@ -574,18 +886,38 @@ def radius_correction(
     a_obs = np.array([p.radius for p in pieces])[model.piece]
     chains = _chains(model)
     ports = np.array([p.port for p in pieces], dtype=int)
-    systems = wire_systems(model)
+    contacts = _contacts(model)
+    systems = wire_systems(model, contacts)
+    sys_index, sys_weights = _system_weights(model, contacts, systems)
+    turn, total_turn = _turns(model)
     chain_obs = chains[model.piece]
     port_obs = ports[model.piece]
     system_obs = systems[model.piece]
+    index_obs = sys_index[system_obs]
+    turn_obs = turn[model.piece]
     d_obs = np.array([p.direction for p in pieces])[model.piece]
     on_axis = 1e-6 * near  # m; collinear pieces share the axis to round-off
+    span = TURN_NONE - TURN_WHOLE
     total = np.zeros(n)
     mirror = np.array([1.0, 1.0, -1.0])
     for k, p in enumerate(pieces):
         # the window counts for the observer's electrode and for wires that
-        # meet the observer's wire (one conductor), not for other ports
-        window = (port_obs == ports[k]) | (system_obs == systems[k])
+        # meet the observer's wire (one conductor), fading out for wires
+        # that have just stopped meeting it; not for other ports
+        if sys_index[systems[k]] >= 0:
+            fade = np.where(
+                index_obs >= 0, sys_weights[index_obs, sys_index[systems[k]]], 0.0
+            )
+        else:
+            fade = np.zeros(n)
+        window = np.where(
+            (port_obs == ports[k]) | (system_obs == systems[k]), 1.0, fade
+        )
+        own = chain_obs == chains[k]
+        steps = np.abs(turn[k] - turn_obs)
+        if np.isfinite(total_turn[k]):
+            steps = np.minimum(steps, total_turn[k] - steps)
+        weight = np.where(own, np.clip((TURN_NONE - steps) / span, 0.0, 1.0), 0.0)
         for image in (False, True):
             a, b = (p.start * mirror, p.end * mirror) if image else (p.start, p.end)
             length = float(np.linalg.norm(b - a))
@@ -596,20 +928,28 @@ def radius_correction(
             parallel = np.linalg.norm(np.cross(d_obs, e), axis=1) < 1e-6
             collinear = parallel & (p2 < on_axis**2)
             if image:
-                whole = collinear
-            else:  # own wire, not where it runs back or beside the point
-                whole = collinear | (
-                    (chain_obs == chains[k]) & ~parallel & ((d_obs @ e) > FOLD_COS)
+                f_whole = np.where(collinear, window, 0.0)
+                f_window = np.where(collinear, 0.0, window)
+            else:  # the own wire as far as it has turned by less than 150°
+                f_whole = np.where(collinear, window, weight)
+                f_window = np.where(collinear, 0.0, np.where(own, 1.0 - weight, window))
+            idx = np.nonzero(f_whole > 0.0)[0]
+            if idx.size:
+                xi = x[idx]
+                total[idx] += f_whole[idx] * (
+                    _line_integral(xi, a, b, a_obs[idx], 0.0, length)
+                    - _line_integral(xi, a, b, np.full(idx.size, r_eta), 0.0, length)
                 )
             half = np.sqrt(np.maximum(near * near - p2, 0.0))
-            lo = np.where(whole, 0.0, np.clip(t - half, 0.0, length))
-            hi = np.where(whole, length, np.clip(t + half, 0.0, length))
-            hi = np.where(whole | window, hi, lo)
-            idx = np.nonzero(hi > lo)[0]
-            if idx.size == 0:
-                continue
-            xi = x[idx]
-            total[idx] += _line_integral(
-                xi, a, b, a_obs[idx], lo[idx], hi[idx]
-            ) - _line_integral(xi, a, b, np.full(idx.size, r_eta), lo[idx], hi[idx])
+            lo = np.clip(t - half, 0.0, length)
+            hi = np.clip(t + half, 0.0, length)
+            idx = np.nonzero((f_window > 0.0) & (hi > lo))[0]
+            if idx.size:
+                xi = x[idx]
+                total[idx] += f_window[idx] * (
+                    _line_integral(xi, a, b, a_obs[idx], lo[idx], hi[idx])
+                    - _line_integral(
+                        xi, a, b, np.full(idx.size, r_eta), lo[idx], hi[idx]
+                    )
+                )
     return rho_local / (4.0 * math.pi) * total

@@ -177,15 +177,20 @@ def source_radius(
     every interface it does not cross. Wires that run beside each other
     (:func:`~groundfield.solver.fem._wires3d.beside_wires`: side by side
     within 30° of parallel, an arm of the same polyline folded back, a wire
-    within the reach of another over its whole length) stay at least
+    within the reach of another over its whole length, two wires end to end
+    in line with a gap) stay at least
     :data:`~groundfield.solver.fem._wires3d.NEAR_FACTOR` $= 1.5$ source radii
     apart: $R$ is at most their axis distance over 1.5 (audits W4R2B-03,
-    W4R2A-01). Junctions, corners, crossings at more than 30°, a rod on a
-    ring and collinear pieces are left alone. One $R$ serves the whole
-    world: the disc quadrature, the energy radius of the radius correction
-    and the mesh size around the wires all use it, so the limit of the
-    closest pair refines the mesh everywhere (``notes`` receives the
-    reason).
+    W4R2A-01, W4R3B-01). Wires that meet — junctions, corners, a V or a
+    branch at any angle, a rod on a ring, a rod cut into touching pieces —
+    and crossings at more than 30° are left alone (audit W4R3B-02). One $R$
+    serves the whole world: the disc quadrature, the energy radius of the
+    radius correction and the mesh size around the wires all use it, so the
+    limit of the closest pair refines the mesh everywhere (``notes``
+    receives the reason). The smallest $R$ is 2.2 radii of the thickest bare
+    wire of the world, wherever that wire lies: wires that run beside each
+    other closer than 3.3 such radii, axis to axis, are refused before
+    meshing (audit W4R3B-05).
     """
     bare = [p.radius for p in model.pieces if p.shell == 0.0]
     a_bare = max(bare) if bare else 0.0
@@ -277,6 +282,8 @@ def _beside_text(model: WireModel, close) -> str:
         return f"an arm of {a} runs back beside itself {d} apart, axis to axis"
     if close.kind == "around":
         return f"the whole wire of {a} lies within {d} of {b}, axis to axis"
+    if close.kind == "in line":
+        return f"{a} and {b} lie end to end, {d} apart without touching"
     return f"{a} runs beside {b} {d} apart, axis to axis"
 
 
@@ -551,8 +558,8 @@ def solid_earth(
     BackendCapabilityError
         Before meshing: for a wire too close to the surface or an interface,
         for wires that run beside each other closer than 1.5 times the
-        smallest source radius their wire radius allows
-        (:func:`source_radius`), for resolved concrete around wires that are
+        smallest source radius (2.2 radii of the thickest bare wire of the
+        world; :func:`source_radius`), for resolved concrete around wires that are
         not axis-aligned or whose metal radius the smoothed source would not
         reach beyond (a thin cover). After meshing: when the conjugate
         gradients do not converge (high layer contrast; tested up to about
