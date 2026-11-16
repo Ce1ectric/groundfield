@@ -114,7 +114,10 @@ def test_multi_layer_soils_are_routed_to_mom_sommerfeld() -> None:
     for alias in ("cim", "bem", "image_nlayer"):
         assert f"**`{alias}`**" in index, f"{alias} not explained"
     assert "deprecated" in index and "2027.5" in index
-    choosing = index.split("## Choosing an engine")[1].split("## Literature")[0]
+    # The decision guide opens the page since the final docs pass of 2026.11;
+    # its section runs up to the next level-2 heading.
+    choosing = index.split("## Choosing an engine")[1].split("\n## ")[0]
+    assert "### Decision path" in choosing
     assert not re.search(r"`(cim|bem|image_nlayer)`", choosing)
 
 
