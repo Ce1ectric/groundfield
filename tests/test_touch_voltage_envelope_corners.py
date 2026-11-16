@@ -196,3 +196,25 @@ def test_connection_point_anchor_ignores_corners() -> None:
             res, w, electrode="grid", anchor="connection_point"
         )
     assert a.shape == (24,)
+
+
+@pytest.mark.parametrize("offset", [(0.0, 0.0), (5.0e5, 5.8e6), (3.25e7, 5.8e6)])
+@pytest.mark.parametrize("size", [(20.0, 1.0), (10.0, 3.0), (30.0, 20.0)])
+def test_corner_feet_do_not_depend_on_projected_coordinates(offset, size) -> None:
+    """At an easting of 5e5 m (UTM) or 3.25e7 m (zone-prefixed), a hull
+    tolerance scaled by the absolute coordinates merged a 20 m × 1 m outline
+    into one straight wire: two corners lost their arc and feet came within
+    0.05 m of the wires (audit W5E-01). The hull is built relative to the
+    footprint."""
+    lx, ly = size
+    x0, y0 = offset
+    corners = np.array([[0, 0], [lx, 0], [lx, ly], [0, ly]], dtype=float) + [x0, y0]
+    fp = Footprint(
+        segments=np.stack([corners, np.roll(corners, -1, axis=0)], axis=1),
+        circles=np.empty((0, 3)),
+    )
+    feet = fp.corner_feet(1.0)
+    assert feet.shape == (20, 2)
+    np.testing.assert_allclose(fp.distance(feet), 1.0, rtol=1e-6)
+    local = Footprint(segments=fp.segments - [x0, y0], circles=fp.circles)
+    np.testing.assert_allclose(feet - [x0, y0], local.corner_feet(1.0), atol=1e-6)

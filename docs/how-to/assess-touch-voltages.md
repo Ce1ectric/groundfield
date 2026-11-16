@@ -114,7 +114,7 @@ potential rise is a touch voltage there.
 electrode, all around it — a proxy where the touched parts are not known.
 It walks 24 equally spaced directions from the centre and, by default
 (`corners=True`), five more feet on the arc around every corner of the
-electrode's outline, where the touch voltage is largest: equally spaced
+convex hull of its wires, where the touch voltage is largest: equally spaced
 directions alone miss the corners of a non-square grid (a 60 m × 40 m grid
 read 12 … 28 % low, case study E03).
 By default it samples nothing inside the footprint, because there stands

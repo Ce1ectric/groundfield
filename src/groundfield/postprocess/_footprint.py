@@ -281,11 +281,20 @@ def _convex_hull(points: np.ndarray) -> np.ndarray:
     """Vertices of the convex hull, counter-clockwise, without collinear ones.
 
     Andrew's monotone chain on the distinct points; one point for a single
-    distinct point, the two ends for points on one line.
+    distinct point, the two ends for points on one line. The hull is built
+    relative to the lower-left corner of the points, so that the collinearity
+    tolerance follows the size of the footprint and not its absolute
+    coordinates: at projected coordinates (an easting of 5e5 m, a northing of
+    5.8e6 m) a tolerance scaled by the coordinates would merge a 20 m × 1 m
+    outline into one straight wire (audit W5E-01).
     """
-    pts = np.unique(np.round(np.asarray(points, dtype=float), 12), axis=0)
+    raw = np.asarray(points, dtype=float).reshape(-1, 2)
+    if not len(raw):
+        return raw
+    origin = raw.min(axis=0)
+    pts = np.unique(np.round(raw - origin, 12), axis=0)
     if len(pts) <= 2:
-        return pts
+        return pts + origin
     scale = max(1.0, float(np.abs(pts).max()))
     tol = 1e-12 * scale * scale
 
@@ -303,7 +312,7 @@ def _convex_hull(points: np.ndarray) -> np.ndarray:
             upper.pop()
         upper.append(q)
     hull = np.array(lower[:-1] + upper[:-1])
-    return hull
+    return hull + origin
 
 
 def _outward_normal_angle(a: np.ndarray, b: np.ndarray) -> float:
