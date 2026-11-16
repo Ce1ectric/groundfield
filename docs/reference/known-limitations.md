@@ -211,22 +211,27 @@ shows what agrees with independent references and how well.
   correction agrees to 5e-4) a ring of $a$ = 5 mm over a layer 33 times more
   conductive reads +0.59 % at 4 radii, +1.2 % at 3, +3.6 % at 2, +8.6 % at
   1.5, +32 % at 1.1 and +89 % when the interface cuts the wire at 0.99 radii;
-  over a more resistive layer at most +1.4 %. The 3-D `fem` is a thin wire
+  under a more resistive
+  layer up to +2.6 % (a 55 mm wire on a 1 m ring at 1.01 radii, contrast
+  1000). The 3-D `fem` is a thin wire
   too: a ring ($r$ = 1 m) with its axis 1.5 cm above 1000 / 30 Ω·m reads
   +9.2e-3 against the solid torus, above its error estimate, and a rod tip
   on such an interface +43 %. Within the reach below the solve warns
   (`InterfaceContactWarning`, `diagnose()` category `interface_contact`;
-  audits W4A-07, W4B-02, W4R2A-03, W4R2A-04); the reach is the largest
-  distance at which the thin wire is 1 % off in six ring geometries
-  ($r_0/a$ = 18 … 400), rounded up to 0.1 a, plus 0.1 a between the nodes:
+  audits W4A-07, W4B-02, W4R2A-03, W4R2A-04, W4R3A-02); the reach is the
+  largest distance at which the thin wire is 1 % off in five ring
+  geometries ($r_0/a$ = 18 … 400, the layer beyond below and above the
+  wire), rounded up to 0.1 a, plus 0.1 a between the nodes; no measured
+  point 1 % or more off lies outside it (the thin wire converged in its
+  segment length):
 
   | contrast | 1.4 | 2 | 3 | 5.5 | 10 | 18 | 33 | 100 | 1000 |
   |---|---|---|---|---|---|---|---|---|---|
-  | more conductive beyond | 1.0 a | 1.3 a | 1.9 a | 2.7 a | 3.3 a | 3.7 a | 3.9 a | 4.1 a | 4.2 a |
-  | more resistive beyond | 1.0 a | | 1.0 a (3) | | 1.2 a | | 1.3 a | | 1.4 a |
+  | more conductive beyond | 1.0 a | 1.3 a | 1.9 a | 2.7 a | 3.3 a | 3.7 a | 3.9 a | 4.1 a | 4.3 a |
+  | more resistive beyond | 1.0 a | | 1.3 a (3) | | 1.9 a | | 2.2 a | 2.2 a | 2.3 a |
 
-  (1.0 a: only a wire the interface cuts; below a contrast of 1.4 nothing is
-  reported, a cut wire is within 0.77 % there.) Measured on rings with
+  (1.0 a: only a wire the interface cuts; below a contrast of 1.3 nothing is
+  reported, a cut wire is within 0.96 % there.) Measured on rings with
   $r_0/a \ge 18$; a thicker wire on a smaller ring, and straight wires
   against a solid reference, are not covered. No generated network and no
   world of the AP1 soils is reported. The axisymmetric `fem` solves rings

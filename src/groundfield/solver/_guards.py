@@ -865,7 +865,9 @@ class InterfaceContactWarning(UserWarning):
     a = 5 ... 55 mm; the more conductive layer below the wire, for the 2 m
     ring also above it; the more resistive layer below and above every
     one; the thick wire on the 1 m ring is the widest everywhere), rounded
-    up to 0.1 a, plus 0.1 a for the contrasts between the nodes (audits
+    up to 0.1 a, plus 0.1 a for the contrasts between the nodes (the
+    conductive side from the thin wire at one segment length, its node at
+    1000 raised so that the converged distances lie inside; audits
     W4R2A-04, W4R3A-02; up to W4R2A-04 four geometries, 0.2 ... 0.4 a short
     of the thick wire; up to W4R3A-02 the resistive side measured above
     the wire for the thin ring only, the thick wire 1 % off up to 0.74 a

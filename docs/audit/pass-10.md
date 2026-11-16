@@ -5025,6 +5025,7 @@ determinism of W4B-07 and the memory keys hold.
   refused, since no backend could otherwise.
 - **New, found by `fw4r2a`:** two mesh lines 5.6e-17 m apart (an interface
   at 0.3 m and a ring or rod tip at 0.1 + 0.2 m) gave a singular factor or,
-  silently, 6809 Ω instead of 647 Ω; features within 1e-12 are one line.
+  silently, 6809 Ω instead of 647 Ω; features within 1e-12 were one line,
+  since audit W4R3A-01 within 1e-9 of max(1 m, x).
 - **Golden:** 563 of 563 quantities identical in both streams; full suite
   after the merge in the release section.

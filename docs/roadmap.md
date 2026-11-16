@@ -115,7 +115,10 @@ limits a result, the reference documentation states the limit.
   `InterfaceContactWarning` for horizontal wires is measured on rings with
   $r_0/a \ge 18$ against the solid torus (audit W4R2A-04); straight wires
   against a solid reference and thicker wires on smaller rings are not
-  covered.
+  covered. The conductive nodes come from the thin wire at one segment
+  length; converged in it, the measured distances lie 0.004 … 0.17 a inside
+  the table (the documented rule on converged values would add 0.1 a at
+  contrasts 5.5 … 100).
 - **Converged Q40 junction numbers.** A third level of the prism faces (more
   than 3 million nodes) would settle the sign of the junction effect, today a
   few cm of wire at most (audit W4B-05).

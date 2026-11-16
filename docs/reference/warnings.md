@@ -156,7 +156,10 @@ solid wire next to a layer interface:
   $a$ = 5 … 55 mm; the more conductive layer below the wire, for the 2 m
   ring also above it; the more resistive layer below and above every one;
   a 55 mm wire on a 1 m ring is the widest at every contrast), rounded up
-  to 0.1 $a$, plus 0.1 $a$ for the contrasts between the nodes:
+  to 0.1 $a$, plus 0.1 $a$ for the contrasts between the nodes — the
+  resistive side from the converged thin wire, the conductive side from the
+  thin wire at one segment length, its node at 1000 raised to 4.3 $a$ so
+  that the converged distances lie inside:
 
   | contrast of the layers | 1.4 | 2 | 3 | 5.5 | 10 | 18 | 33 | 100 | 1000 |
   |---|---|---|---|---|---|---|---|---|---|
