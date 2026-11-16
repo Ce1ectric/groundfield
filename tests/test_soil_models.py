@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import math
 import warnings
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -201,10 +202,12 @@ _V0150_WORLD = {
 
 @pytest.mark.finding("10.69")
 def test_world_json_written_by_v0150_loads() -> None:
-    # Homogeneous soil: the canonical world JSON of a v0.15.0 golden case.
-    from tests.golden import harness
-
-    stored = str(harness.load_case("gen_layout_builder")["world/json"])
+    # Homogeneous soil: the canonical world JSON of the golden case
+    # ``gen_layout_builder`` as v0.15.0 wrote it. The golden baseline of
+    # 2026.11.0 (user decision D8) no longer holds it, so it is kept here.
+    stored = (
+        Path(__file__).parent / "data" / "world_v0150_gen_layout_builder.json"
+    ).read_text(encoding="utf-8")
     assert '"resistivity": 100.0' in stored
     with pytest.warns(DeprecationWarning, match="resistivity"):
         world = gf.World.model_validate_json(stored)

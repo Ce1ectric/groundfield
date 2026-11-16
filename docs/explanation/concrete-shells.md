@@ -598,7 +598,7 @@ wire.
 - Fagan, E. J., & Lee, R. H. (1970). The use of concrete-enclosed
   reinforcing rods as grounding electrodes. *IEEE Transactions on Industry
   and General Applications* IGA-6(4), 337–348.
-- DIN 18014:2023-04. *Fundamenterder — Planung, Ausführung und
+- DIN 18014:2023-06. *Fundamenterder — Planung, Ausführung und
   Dokumentation*. DIN, Berlin.
 - Tagg, G. F. (1964). *Earth Resistances*. George Newnes, London, ch. 7.
 

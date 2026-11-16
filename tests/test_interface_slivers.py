@@ -492,6 +492,7 @@ def test_a_rod_split_at_the_interface_has_no_free_end_there(bonded: bool) -> Non
     give each layer its own piece (tutorial T02). The warning concerns free
     rod ends only; a third, unrelated rod ending at h_1 still warns.
     """
+
     # audit A3S-05 (coordinator: no false alarm for joined ends)
     def solve(extra: bool) -> list:
         w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=3.0))
@@ -499,13 +500,22 @@ def test_a_rod_split_at_the_interface_has_no_free_end_there(bonded: bool) -> Non
             w, "rod", name="up", position=(0.0, 0.0, 0.5), length=2.5, wire_radius=0.008
         )
         gf.create_electrode(
-            w, "rod", name="low", position=(0.0, 0.0, 3.0), length=3.5, wire_radius=0.008
+            w,
+            "rod",
+            name="low",
+            position=(0.0, 0.0, 3.0),
+            length=3.5,
+            wire_radius=0.008,
         )
         if bonded:
             gf.create_conductor(w, name="bond", start="up", end="low")
         if extra:
             gf.create_electrode(
-                w, "rod", name="free", position=(5.0, 0.0, 0.5), length=2.5,
+                w,
+                "rod",
+                name="free",
+                position=(5.0, 0.0, 0.5),
+                length=2.5,
                 wire_radius=0.008,
             )
             gf.create_conductor(w, name="b2", start="up", end="free")
@@ -513,7 +523,9 @@ def test_a_rod_split_at_the_interface_has_no_free_end_there(bonded: bool) -> Non
         with warnings.catch_warnings(record=True) as rec:
             warnings.simplefilter("always")
             w.solve(gf.Engine(segment_length=0.5))
-        return [r for r in rec if issubclass(r.category, gf.solver.InterfaceContactWarning)]
+        return [
+            r for r in rec if issubclass(r.category, gf.solver.InterfaceContactWarning)
+        ]
 
     assert solve(extra=False) == []
     hits = solve(extra=True)

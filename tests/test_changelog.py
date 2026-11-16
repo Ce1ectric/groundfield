@@ -68,7 +68,8 @@ def _notes_2026_11() -> str:
     if "\n### " in body:
         return body
     calver = [
-        v for v, _ in _HEADING_RE.findall(_text(CHANGELOG))
+        v
+        for v, _ in _HEADING_RE.findall(_text(CHANGELOG))
         if re.fullmatch(r"20\d\d\.\d+\.\d+", v)
     ]
     return _section(calver[-1])
@@ -195,7 +196,12 @@ def test_the_q41_entry_no_longer_states_the_superseded_rules() -> None:
     import groundfield as gf
 
     text = " ".join(
-        pathlib.Path(gf.__file__).resolve().parents[2].joinpath("CHANGELOG.md").read_text().split()
+        pathlib.Path(gf.__file__)
+        .resolve()
+        .parents[2]
+        .joinpath("CHANGELOG.md")
+        .read_text()
+        .split()
     )
     assert "stays a node that houses may tap" not in text
     assert (

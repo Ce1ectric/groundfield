@@ -134,9 +134,10 @@ User decision D2 of 2026-11-15, audits W2B-01/-02, finding 10.28.
 3. **Far Tagg/Sunde images** carry the quadrupole term (the alternative
    above). On every image it cost 2.2 … 3.9 times the solve of 16 house
    grids; the term is therefore tapered off between 60 and 120 segment
-   lengths of vertical distance between observer and image (below
-   $1/(8\cdot 60^2)$ of the image's point value, the level of the far
-   form's remainder at the switch), a property of the pair, and images
+   lengths of vertical distance between observer and image (at most
+   $1/(6\cdot 60^2)$ of the image's point value, for a vertical wire and
+   its collinear image; $1/(8\cdot 60^2)$ for horizontal wires; the order
+   of the far form's remainder at the switch), a property of the pair, and images
    beyond every observer are skipped: 1.2 … 1.5 times, the impedance
    within 1e-6 of the term on every image. Gain: the strip of the
    alternative within 7.7e-7 instead of 5.1e-4, monotone in the segment

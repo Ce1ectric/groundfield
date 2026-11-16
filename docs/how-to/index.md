@@ -10,7 +10,7 @@ is what CI ran.
 
 | Guide | Task |
 |---|---|
-| [Install the optional extras](install-extras.md) | OpenStreetMap ingest, groundinsight bridge, compiled kernels |
+| [Install the optional extras](install-extras.md) | OpenStreetMap ingest, groundinsight bridge, compiled kernels, the 3-D `fem` model (`fem3d`) |
 | [Run sweeps and Monte Carlo studies](sweeps-and-monte-carlo.md) | parameter grids, stochastic networks, parallel workers |
 | [Speed up large studies](speed-up-large-studies.md) | segment budget, kernel and earth-return choices, many excitations |
 | [Plot results](plot-results.md) | geometry, surface potential, profiles, cross-sections, current sharing, sweeps |

@@ -167,7 +167,9 @@ nav:
       - "T10 Reproducible studies": tutorials/T10_reproducible_studies.ipynb
   - Examples:
       - examples/index.md
+      - "E01 Secondary substation and LV network": examples/E01_secondary_substation_and_lv_network.ipynb
       - "E02 Single-family house": examples/E02_single_family_house.ipynb
+      - "E03 HV substation grid in two-layer soil": examples/E03_hv_substation_grid_two_layer_soil.ipynb
   - How-to guides:
       - how-to/index.md
       - "Install the optional extras": how-to/install-extras.md
@@ -235,6 +237,7 @@ nav:
           - Geo / OSM: reference/api/geo.md
           - Generators: reference/api/generators.md
           - References: reference/api/references.md
+          - Utilities: reference/api/utils.md
       - Glossary (EN / DE): reference/glossary.md
       - Units and conventions: reference/units-and-conventions.md
       - Warnings and errors: reference/warnings.md

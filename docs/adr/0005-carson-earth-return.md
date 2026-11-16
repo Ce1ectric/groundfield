@@ -30,8 +30,8 @@ $$
 
 For the quasi-static frequency window ($f \le 1\,\mathrm{kHz}$) and typical
 soil resistivities ($\rho_\text{earth} \in [50, 5000]\,\Omega\,\mathrm{m}$)
-the skin depth $\delta$ ranges from roughly **350 m** (50 Hz, 50 Ωm)
-to **35 km** (50 Hz, 5000 Ωm). The relevant geometric dimensions of
+the skin depth $\delta$ ranges from roughly **113 m** (1 kHz, 50 Ωm)
+to **5.0 km** (50 Hz, 5000 Ωm); at 50 Hz and 50 Ωm it is 503 m. The relevant geometric dimensions of
 an the TN low-voltage distribution network — house-to-station distance < 200 m, PEN-cable
 length up to 1 km, separation between measurement-lead and current
 injection 10–100 m — are *not always* small compared to $\delta$.

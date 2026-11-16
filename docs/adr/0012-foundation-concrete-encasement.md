@@ -345,7 +345,7 @@ foundation is present.
 - **Tagg, G. F.** (1964). *Earth Resistances*, George Newnes.
   Ch. 7 — foundation earth electrodes, contact-resistance
   contribution.
-- **DIN 18014:2023-04.** *Fundamenterder — Planung, Ausführung
+- **DIN 18014:2023-06.** *Fundamenterder — Planung, Ausführung
   und Dokumentation.* DIN, Berlin. Defines the geometric
   envelope (depth, perimeter, conductor cross section) the
   Sunde shell wraps.

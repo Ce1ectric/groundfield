@@ -355,7 +355,7 @@ layers and can ship as an additive change.
   v1.0.* https://opendatacommons.org/licenses/odbl/1-0/
 - **Overpass API** project documentation.
   https://wiki.openstreetmap.org/wiki/Overpass_API
-- **DIN 18014:2023-04.** *Fundamenterder — Planung, Ausführung
+- **DIN 18014:2023-06.** *Fundamenterder — Planung, Ausführung
   und Dokumentation.* DIN, Berlin. Defines the geometric and
   electrical requirements that the `FoundationElectrodeSpec`
   (perimeter strip at 0.5–1 m depth, ring or mesh) reflects.

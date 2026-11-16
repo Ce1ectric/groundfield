@@ -1185,8 +1185,8 @@ class FieldResult(BaseModel):
             raise NotImplementedError(
                 f"FieldResult.potential: MultiLayerSoil with n={n} ≥ 3 "
                 "layers is not supported on the post-solve potential "
-                "path. The solve itself is correct (use the 'cim', "
-                "'mom_sommerfeld', or 'bem' backend), but a closed-form "
+                "path. The solve itself is correct (use the "
+                "'mom_sommerfeld' or 'fem' backend), but a closed-form "
                 "n-layer Green's-function kernel is not yet wired into "
                 "FieldResult.potential. Access cluster impedances and "
                 "electrode potentials directly via "

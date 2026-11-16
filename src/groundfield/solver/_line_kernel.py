@@ -175,8 +175,9 @@ _SWITCH_U: float = (SWITCH_FACTOR / NEAR_FACTOR) ** 2
 #: Vertical distances between an observer and an image, in units of the
 #: longer segment of the pair, over which the quadrupole term of far images
 #: is tapered off (full below the first, none beyond the second, a C¹ blend
-#: between; a property of the pair alone). The term is below ``1/(8 G²)`` of
-#: the image's point value at ``G`` segment lengths — 3.5e-5 at 60, the level
+#: between; a property of the pair alone). The term is at most ``1/(6 G²)`` of
+#: the image's point value at ``G`` segment lengths (two vertical wires; less
+#: for any other orientation) — 4.6e-5 at 60, the order
 #: of the quadrupole remainder at the switch (2e-5) — while every image costs
 #: the same: the series of 1000 over 30 Ohm m keeps 277 images per sign
 #: pair, of which those within 120 segment lengths of 0.5 m at h_1 = 1.5 m
