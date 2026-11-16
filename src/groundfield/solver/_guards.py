@@ -887,7 +887,7 @@ class InterfaceContactWarning(UserWarning):
     and between them (conductive 1.3 ... 1.9, 2.5, 4, 7, 14, 25, 50, 300;
     resistive 2, 5.5, 18, 300): no thin wire 1 % or more off lies outside
     the reach (2348 conductive points at one segment length, the largest
-    outside +0.94 %; 2453 resistive points converged in it, +0.93 %). The
+    outside +0.94 %; 2470 resistive points converged in it, +0.93 %). The
     thick wire's conductive 1 % distances, converged in the segment length,
     lie 0.004 ... 0.17 a inside the reach; the node at 1000 is 4.3 a (it
     was 4.2) for the 4.15 a at 300. Below a contrast of 1.3 nothing is

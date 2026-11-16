@@ -168,7 +168,7 @@ solid wire next to a layer interface:
   that the interface cuts.) Checked at the nodes and between them
   (conductive 1.3 … 1.9, 2.5, 4, 7, 14, 25, 50, 300; resistive 2, 5.5, 18,
   300): of 2348 conductive distances (the thin wire at one segment length)
-  and 2453 resistive ones (converged in it) none with the thin wire 1 % or
+  and 2470 resistive ones (converged in it) none with the thin wire 1 % or
   more off lies outside the reach, the largest errors outside it are
   +0.94 % and +0.93 %; converged, the thick wire's conductive 1 % distances
   lie 0.004 … 0.17 $a$ inside the reach (the node at 1000 is 4.3 $a$ for
