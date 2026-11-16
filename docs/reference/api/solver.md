@@ -111,7 +111,104 @@ world and the solve time stamp. Results are saved and loaded with
 
 ::: groundfield.solver.mutual
 
-::: groundfield.solver.image
+## Backend solve functions
+
+Each built-in backend is one solve function, `solve_<name>(world, engine)`,
+registered in the [backend registry](registry.md). `Engine.solve` resolves
+the backend name, checks the capabilities against the world, calls the
+function and fills the common metadata of the result
+(`CORE_METADATA_KEYS`); call the functions directly only to bypass that
+dispatch, for example in a test. The theory of each backend is on its
+[engine page](../../explanation/engines/index.md).
+
+::: groundfield.solver.image.solve_image
     options:
-      members:
-        - ShallowSegmentWarning
+      heading_level: 3
+
+::: groundfield.solver.image_2layer.solve_image_2layer
+    options:
+      heading_level: 3
+
+::: groundfield.solver.mom.solve_mom
+    options:
+      heading_level: 3
+
+::: groundfield.solver.mom_sommerfeld.solve_mom_sommerfeld
+    options:
+      heading_level: 3
+
+::: groundfield.solver.mom_sommerfeld.sommerfeld_kernel_value
+    options:
+      heading_level: 3
+
+::: groundfield.solver.fem.solve_fem
+    options:
+      heading_level: 3
+
+## Deprecated backend names
+
+`cim`, `bem` and `image_nlayer` are deprecated names of `image` and `mom`
+(see [Deprecations](../deprecations.md)); their solve functions forward
+to the current backends. The complex-image fit of the `cim` module
+(`fit_complex_images`, `ComplexImageFit`) is a stand-alone tool that no
+backend evaluates. `equivalent_hemisphere_radius` is deprecated: it
+belongs to the hemisphere reduction that `fem` no longer uses.
+
+::: groundfield.solver.cim.solve_cim
+    options:
+      heading_level: 3
+
+::: groundfield.solver.cim.fit_complex_images
+    options:
+      heading_level: 3
+
+::: groundfield.solver.cim.ComplexImageFit
+    options:
+      heading_level: 3
+
+::: groundfield.solver.bem.solve_bem
+    options:
+      heading_level: 3
+
+::: groundfield.solver.image_nlayer.solve_image_nlayer
+    options:
+      heading_level: 3
+
+::: groundfield.solver.fem.equivalent_hemisphere_radius
+    options:
+      heading_level: 3
+
+## Solver warnings
+
+The warning categories of the solve. Each one can be filtered on its
+own, e.g. `warnings.simplefilter("ignore", ShallowSegmentWarning)`;
+[Warnings and errors](../warnings.md) explains what each one means and
+what to do.
+
+::: groundfield.solver.image.ShallowSegmentWarning
+    options:
+      heading_level: 3
+
+::: groundfield.solver.InterfaceContactWarning
+    options:
+      heading_level: 3
+
+::: groundfield.solver.PointKernelInterfaceWarning
+    options:
+      heading_level: 3
+
+::: groundfield.solver.image_2layer.SeriesTruncationWarning
+    options:
+      heading_level: 3
+
+::: groundfield.solver.mom_sommerfeld.SommerfeldConvergenceWarning
+    options:
+      heading_level: 3
+
+::: groundfield.solver.cim.ComplexImageFitWarning
+    options:
+      heading_level: 3
+
+::: groundfield.solver.fem.FemReductionWarning
+    options:
+      heading_level: 3

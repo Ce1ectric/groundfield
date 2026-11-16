@@ -85,3 +85,24 @@ solve.
 ## API reference
 
 ::: groundfield.conductors
+
+## Conductor options and constants
+
+The literal types of the `Conductor` settings that the package namespace
+does not re-export, and the constants of the conductor models.
+
+::: groundfield.conductors.conductor.SoilCoupling
+    options:
+      heading_level: 3
+
+::: groundfield.conductors.conductor.InductanceModel
+    options:
+      heading_level: 3
+
+::: groundfield.conductors.proximity.ProximityKind
+    options:
+      heading_level: 3
+
+::: groundfield.conductors.skin.MU_0
+    options:
+      heading_level: 3

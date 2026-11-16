@@ -380,3 +380,84 @@ up to 0.15.0 (`OrtsnetzLayout`, `kvs`, `KvsConfig`, …) keep working with a
 ## API reference
 
 ::: groundfield.generators
+
+## Materialisation building blocks
+
+`materialise_plan` turns a `NetworkPlan` into the objects of a `World`;
+it is the only place where generated networks become worlds. The
+functions below are its steps, one per kind of object, and are public
+for a custom generator that builds part of a world itself. They draw no
+random numbers: every value of a plan is already concrete.
+
+::: groundfield.generators.materialise.materialise_site
+    options:
+      heading_level: 3
+
+::: groundfield.generators.materialise.materialise_electrode
+    options:
+      heading_level: 3
+
+::: groundfield.generators.materialise.materialise_junction
+    options:
+      heading_level: 3
+
+::: groundfield.generators.materialise.materialise_branch
+    options:
+      heading_level: 3
+
+::: groundfield.generators.materialise.site_anchor_point
+    options:
+      heading_level: 3
+
+::: groundfield.generators.materialise.site_contact_wires
+    options:
+      heading_level: 3
+
+::: groundfield.generators.materialise.clean_polygon
+    options:
+      heading_level: 3
+
+::: groundfield.generators.materialise.concrete_shell
+    options:
+      heading_level: 3
+
+::: groundfield.generators.materialise.MIN_POLYGON_EDGE_M
+    options:
+      heading_level: 3
+
+::: groundfield.generators.layout.penetration.footprint_mask_key
+    options:
+      heading_level: 3
+
+## Plan vocabulary and constants
+
+The literal types of the plan records and the geometric limits the
+generators apply.
+
+::: groundfield.generators.plan.SiteRole
+    options:
+      heading_level: 3
+
+::: groundfield.generators.plan.BranchRole
+    options:
+      heading_level: 3
+
+::: groundfield.generators.plan.CabinetRule
+    options:
+      heading_level: 3
+
+::: groundfield.generators.grounding.FoundationOutline
+    options:
+      heading_level: 3
+
+::: groundfield.generators.grounding.MIN_FOUNDATION_SIDE_M
+    options:
+      heading_level: 3
+
+::: groundfield.generators.measurement.SURFACE_LEAD_HEIGHT_M
+    options:
+      heading_level: 3
+
+::: groundfield.generators.measurement.lead_axis_z
+    options:
+      heading_level: 3
