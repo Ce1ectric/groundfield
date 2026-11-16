@@ -1350,11 +1350,15 @@ def _w4r2b_whole(model, x, r_eta, keep) -> float:
 
 
 def test_w4r2b_02_corners_and_rings_keep_their_own_wire_whole() -> None:
-    """The own polyline counts whole where it has turned by less than 120
-    degrees: an L corner counts both arms whole 0.1 m from the corner; on a
-    ring of r = 1 m every chord within 120 degrees of turn counts whole and
-    the far third (more than 1.7 m away) nothing."""
-    # audit W4R2B-02
+    """The own polyline counts whole where it has turned by at most 90
+    degrees, by a weight falling linearly to 0 at 150 degrees, and beyond
+    only within its window (audit W4R3B-03; up to then whole below 120
+    degrees, nothing beyond): an L corner counts both arms whole 0.1 m from
+    the corner; on a ring of r = 1 m every chord within 90 degrees of turn
+    counts whole, the chords between 90 and 150 degrees by their weight and
+    the far third (more than 1.7 m away) nothing; a square loop counts its
+    adjacent sides whole and the opposite one nothing."""
+    # audits W4R2B-02, W4R3B-03
     z = 0.8
     w = gf.create_world(soil=H100)
     gf.create_electrode(
@@ -1377,14 +1381,30 @@ def test_w4r2b_02_corners_and_rings_keep_their_own_wire_whole() -> None:
     model, dc, r_eta = _w4r2b_correction(ring)
     x = model.points[0]
     d0 = model.pieces[model.piece[0]].direction
-    ahead = [
-        k
-        for k, p in enumerate(model.pieces)
-        if float(d0 @ p.direction) > getattr(wires3, "FOLD_COS", -0.5)
-    ]
-    assert len(ahead) < len(model.pieces)
+    expected = 0.0
+    weighted = 0
+    for k, p in enumerate(model.pieces):
+        turn = math.degrees(math.acos(max(-1.0, min(1.0, float(d0 @ p.direction)))))
+        weight = min(1.0, max(0.0, (150.0 - turn) / 60.0))
+        weighted += 0.0 < weight < 1.0
+        if weight > 0.0:
+            expected += weight * _w4r2b_whole(model, x, r_eta, (k,))
+    assert weighted > 100
+    assert abs(_w4r2b_at(model, dc, x) / expected - 1) < 1e-9
+    loop = gf.create_world(soil=H100)
+    gf.create_electrode(
+        loop,
+        "polyline",
+        name="g",
+        closed=True,
+        wire_radius=0.005,
+        vertices=[(0, 0, z), (0.5, 0, z), (0.5, 0.5, z), (0, 0.5, z)],
+    )
+    model, dc, r_eta = _w4r2b_correction(loop)
+    x = model.points[np.argmin(np.linalg.norm(model.points - [0.25, 0, z], axis=1))]
     assert (
-        abs(_w4r2b_at(model, dc, x) / _w4r2b_whole(model, x, r_eta, ahead) - 1) < 1e-12
+        abs(_w4r2b_at(model, dc, x) / _w4r2b_whole(model, x, r_eta, (0, 1, 3)) - 1)
+        < 1e-12
     )
 
 
@@ -1540,9 +1560,11 @@ def test_w4r2b_03_wires_that_meet_form_one_system() -> None:
 
 def test_w4r2b_03_beside_wires_finds_wires_side_by_side_folded_and_around() -> None:
     """The closest wires that run beside each other: coaxial rings (beside),
-    a hairpin 6 cm wide (folded), a small ring around a rod's head (around),
-    a V of 10 degrees (folded, down to the apex)."""
-    # audits W4R2B-03, W4R2A-01
+    a hairpin 6 cm wide (folded), a small ring around a rod's head (around);
+    not a V of 10 degrees as one polyline, whose arms meet at the apex
+    (audit W4R3B-02: up to then "folded" at the sample point nearest the
+    apex, 0.65 mm)."""
+    # audits W4R2B-03, W4R2A-01, W4R3B-02
     reach = 1.5 * R_SRC
     b = wires3.beside_wires(_w4r2b_model(_w4r2b_rings(1.075)), reach)
     # (the 1 degree chords lie inside the circle by up to 3.8e-5 r)
@@ -1561,8 +1583,7 @@ def test_w4r2b_03_beside_wires_finds_wires_side_by_side_folded_and_around() -> N
         wire_radius=0.005,
         vertices=[(4, 0, 0.8), (0, 0, 0.8), (4 * math.cos(t), 4 * math.sin(t), 0.8)],
     )
-    b = wires3.beside_wires(_w4r2b_model(w), reach)
-    assert b.kind == "folded" and b.distance < 2e-3
+    assert wires3.beside_wires(_w4r2b_model(w), reach) is None
 
 
 def test_w4r2b_03_junctions_crossings_and_collinear_pieces_are_left_alone() -> None:
@@ -1889,3 +1910,582 @@ def test_w4r2a_07_solid_earth_defaults_to_the_3d_node_limit() -> None:
 
     default = inspect.signature(_solid.solid_earth).parameters["max_nodes"].default
     assert default == FemOptions().max_nodes_3d == 2_000_000
+
+
+# ---------------------------------------------------------------------
+# Audit W4R3B (stream fw4r3b): collinear wires of two ports, wires that
+# meet at a small angle, the turn of the own chain, crossings where the
+# surfaces stop touching, the texts
+# ---------------------------------------------------------------------
+
+
+def _w4r3b_until_node_check(world):
+    """The exception of a 3-D solve with ``max_nodes_3d = 1`` (before meshing)."""
+    eng = gf.create_engine(
+        backend="fem",
+        segment_length=0.25,
+        options={"fem": {"model": "3d", "max_nodes_3d": 1}},
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        try:
+            eng.solve(world)
+        except Exception as exc:  # noqa: BLE001
+            return exc
+    raise AssertionError("the solve passed the node check with max_nodes_3d = 1")
+
+
+def _w4r3b_stacked(gap, a=0.008, source=True):
+    """Rod 'g' 0.5 … 2.0 m and rod 'h' of 1.5 m from 2.0 + gap m on the same
+    vertical axis."""
+    w = gf.create_world(soil=H100)
+    gf.create_electrode(
+        w, "rod", name="g", position=(0, 0, 0.5), length=1.5, wire_radius=a
+    )
+    gf.create_electrode(
+        w, "rod", name="h", position=(0, 0, 2.0 + gap), length=1.5, wire_radius=a
+    )
+    if source:
+        gf.create_source(w, attached_to="g", magnitude=1.0)
+    return w
+
+
+def test_w4r3b_01_collinear_wires_of_two_ports_with_a_small_gap_limit_the_source_radius() -> (
+    None
+):
+    """Two rods of two electrodes on one axis, 1 cm end to end: their
+    smoothed sources overlap at the gap (R = 6 cm), and the 3-D port entries
+    read R11 +1.6e-2 and R12 -7.3e-2 against the axisymmetric model
+    (estimates 4.9e-3 / 4.5e-3). The solve must limit the source radius or
+    refuse. Base: beside_wires leaves collinear pieces alone, R stays 6 cm
+    and the solve reaches the node check unlimited."""
+    # audit W4R3B-01 (test of auditor W4R3B)
+    from groundfield.diagnostics import ResourceLimitError
+
+    exc = _w4r3b_until_node_check(_w4r3b_stacked(0.01))
+    if isinstance(exc, ResourceLimitError):
+        assert "source radius was limited" in str(exc)
+    else:
+        assert type(exc).__name__ == "BackendCapabilityError"
+
+
+def test_w4r3b_01_end_gaps_below_the_smallest_source_radius_are_refused() -> None:
+    """End gaps of 2 mm, 5 mm and 1 cm between rods of a = 8 mm (the source
+    radius would be 1.3 … 6.7 mm, below the 17.6 mm that the wires need) are
+    refused before meshing, naming the gap; the second wire tilted by 1e-4
+    rad, or 0.4 rad (23 degrees), still lies in line. Base: solved at R = 6
+    cm (R11 +5.1e-2 / +2.6e-2 / +1.6e-2 against the axisymmetric model)."""
+    # audit W4R3B-01
+    for gap, mm in ((0.002, "2 mm"), (0.005, "5 mm"), (0.01, "10 mm")):
+        exc = _w4r3b_until_node_check(_w4r3b_stacked(gap))
+        assert isinstance(exc, gf.BackendCapabilityError), (gap, str(exc))
+        text = str(exc)
+        assert f"lie end to end, {mm} apart without touching" in text
+        assert "'mom'" in text
+    a = 0.008
+    for tilt in (1e-4, 0.4):
+        top = np.array([0.0, 0.0, 2.005])
+        foot = top + 1.5 * np.array([math.sin(tilt), 0.0, math.cos(tilt)])
+        model = wires3.WireModel(
+            names=("g", "h"),
+            pieces=[
+                wires3.WirePiece(
+                    0, np.array([0.0, 0, 0.5]), np.array([0.0, 0, 2.0]), a, 0.0, 0
+                ),
+                wires3.WirePiece(1, top, foot, a, 0.0, 1),
+            ],
+        )
+        b = wires3.beside_wires(model, 1.5 * R_SRC)
+        assert b.kind == "in line" and abs(b.distance - 0.005) < 1e-12, tilt
+        assert len(set(wires3.wire_systems(model))) == 2
+
+
+def test_w4r3b_01_collinear_wires_meet_only_without_a_gap() -> None:
+    """Collinear wires meet (one wire system) only where the gap is zero to
+    round-off (1e-9 m); a gap of 1 mm, below the 8 mm radius, separates
+    them. Base: a gap up to the radius 'met' (the 5 mm gap one system)."""
+    # audit W4R3B-01
+    for gap, systems in ((0.0, 1), (1e-12, 1), (1e-3, 2), (0.005, 2)):
+        model = wires3.world_pieces(_w4r3b_stacked(gap, source=False))
+        assert len(set(wires3.wire_systems(model))) == systems, gap
+
+
+def test_w4r3b_01_a_rod_cut_into_touching_pieces_is_unchanged() -> None:
+    """A rod cut into two touching rods of two electrodes (gap 0): one wire
+    system, nothing beside each other, and the radius correction of the
+    uncut rod at every point (both pieces and both images count whole)."""
+    # audit W4R3B-01
+    from groundfield.solver.fem import _solid
+
+    cut = _w4r3b_stacked(0.0)
+    model = wires3.world_pieces(cut)
+    assert wires3.beside_wires(model, 1.5 * R_SRC) is None
+    eng = gf.create_engine(backend="fem", segment_length=0.25)
+    assert _solid.source_radius(cut, eng, model, [], None, None) == 0.06
+    r_eta = wires3.BUMP_ENERGY_RADIUS * R_SRC
+    a = 0.008
+    pts = [[0.0, 0.0, z] for z in (0.51, 1.0, 1.99, 2.0, 2.01, 3.0, 3.49)]
+    pieces = [
+        wires3.WirePiece(0, np.array([0.0, 0, 0.5]), np.array([0.0, 0, 2.0]), a, 0.0),
+        wires3.WirePiece(1, np.array([0.0, 0, 2.0]), np.array([0.0, 0, 3.5]), a, 0.0),
+    ]
+    whole = [
+        wires3.WirePiece(0, np.array([0.0, 0, 0.5]), np.array([0.0, 0, 3.5]), a, 0.0)
+    ]
+    rho = np.full(len(pts), 100.0)
+    near = 1.5 * R_SRC
+    c_cut = wires3.radius_correction(_w4b_model_at(pieces, pts), r_eta, rho, near)
+    c_whole = wires3.radius_correction(_w4b_model_at(whole, pts), r_eta, rho, near)
+    assert np.allclose(c_cut, c_whole, rtol=1e-12, atol=0.0)
+
+
+def test_w4r3b_01_a_collinear_wire_that_does_not_meet_counts_nothing() -> None:
+    """A collinear rod of another electrode 10 cm below the tip (beyond the
+    1.5 R window, so the source radius stays 6 cm), or 5 mm below it (such
+    a world is refused), carries its own current: the correction of the
+    upper rod is that of the rod alone. Base: the whole lower rod and its
+    image counted with the observer's current (+0.82 % / +29 % of a self
+    term 5 mm above the tip)."""
+    # audit W4R3B-01
+    alone = gf.create_world(soil=H100)
+    gf.create_electrode(
+        alone, "rod", name="g", position=(0, 0, 0.5), length=1.5, wire_radius=0.008
+    )
+    m1, d1, _ = _w4r2b_correction(alone)
+    for gap in (0.10, 0.005):
+        m2, d2, _ = _w4r2b_correction(_w4r3b_stacked(gap, source=False))
+        for z in (0.6, 1.5, 1.995):
+            x = (0.0, 0.0, z)
+            assert abs(_w4r2b_at(m2, d2, x) / _w4r2b_at(m1, d1, x) - 1.0) < 1e-12
+
+
+# audit W4R3B-01 (slow where it solves; the 3-D model refuses it before meshing)
+@pytest.mark.slow
+def test_w4r3b_01_stacked_rods_of_two_ports_3_cm_apart_within_their_estimates() -> None:
+    """The same rods 3 cm end to end (a smaller R is possible: 2 cm >= 2.2 a):
+    every 3-D port entry and the bonded value must lie within their
+    estimates of the axisymmetric model's, or the world be refused. Base:
+    R11 +6.35e-3 (estimate 4.90e-3), R12 -2.88e-2 (transfer estimate
+    4.46e-3)."""
+    # audit W4R3B-01 (test of auditor W4R3B)
+    w = _w4r3b_stacked(0.03)
+    eng = gf.create_engine(backend="fem", segment_length=0.25)
+    from groundfield.solver.fem import solve_fem
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        ra = solve_fem(w, eng, model="axisymmetric")
+        try:
+            r3 = solve_fem(w, eng, model="3d")
+        except (gf.BackendCapabilityError, gf.ResourceLimitError):
+            return
+    axi = np.asarray(ra.metadata["fem_port_resistance"])
+    r = np.asarray(r3.metadata["fem_port_resistance"])
+    dev = r / axi - 1.0
+    est = r3.metadata["fem_error_estimate"]
+    assert abs(dev[0, 0]) <= est and abs(dev[1, 1]) <= est
+    assert abs(dev[0, 1]) <= r3.metadata["fem_error_estimate_transfer"]
+    bonded = 1.0 / np.linalg.inv(r).sum() / (1.0 / np.linalg.inv(axi).sum()) - 1.0
+    assert abs(bonded) <= est
+
+
+def test_w4r3b_01_wires_end_to_end_stay_5_source_radii_apart() -> None:
+    """Wires end to end in line keep their gap at least 5 source radii (the
+    coordinator's decision on the open point of stream fw4r3b: the measured
+    R12 error falls with R / gap; at gap / 3 stacked 8 mm rods 10 … 18 cm
+    apart read 1.15 … 1.18 times the transfer estimate, at gap / 5 every
+    measured case lies within it, evidence h09c, h09d, h12): rods of a = 8 mm
+    10 / 15 / 20 cm apart take R = 2 / 3 / 4 cm, 30 cm apart the default
+    6 cm unchanged; 3 and 6 cm apart (R would be 0.6 / 1.2 cm, below 1.76 cm)
+    they are refused before meshing. Factor 3 before: 3.33 / 5 / 6 cm, and
+    6 cm apart solved at 2 cm."""
+    # audit W4R3B-01 (coordinator decision on open point 1)
+    from groundfield.solver.fem import _solid
+
+    eng = gf.create_engine(backend="fem", segment_length=0.25)
+    for gap, expected in ((0.10, 0.02), (0.15, 0.03), (0.20, 0.04), (0.30, 0.06)):
+        w = _w4r3b_stacked(gap)
+        notes: list[str] = []
+        model = wires3.world_pieces(w)
+        r = _solid.source_radius(w, eng, model, [], None, None, notes=notes)
+        assert abs(r - expected) < 1e-12, gap
+        if gap < 0.3:
+            assert "lie end to end" in notes[0] and "5 source radii" in notes[0]
+        else:
+            assert r == 0.06 and not notes
+    for gap, mm in ((0.03, "30 mm"), (0.06, "60 mm")):
+        exc = _w4r3b_until_node_check(_w4r3b_stacked(gap))
+        assert isinstance(exc, gf.BackendCapabilityError)
+        assert f"lie end to end, {mm} apart without touching" in str(exc)
+        assert "5 source radii" in str(exc)
+    # in line means continuing the other's axis line: two parallel strips
+    # staggered by 5 cm with ends 13 cm apart along them are not in line,
+    # nor are distant chords of two concentric rings 7.5 cm apart
+    w = gf.create_world(soil=H100)
+    gf.create_electrode(
+        w, "strip", name="g", start=(0, 0, 0.8), end=(4, 0, 0.8), wire_radius=0.005
+    )
+    gf.create_electrode(
+        w,
+        "strip",
+        name="h",
+        start=(4.13, 0.05, 0.8),
+        end=(8, 0.05, 0.8),
+        wire_radius=0.005,
+    )
+    assert wires3.beside_wires(wires3.world_pieces(w), 1.5 * R_SRC) is None
+    b = wires3.beside_wires(_w4r2b_model(_w4r2b_rings(1.075)), 1.5 * R_SRC)
+    assert b.kind == "beside"
+
+
+# audit W4R3B-01 (slow: one 3-D solve of about 470 000 nodes)
+@pytest.mark.slow
+def test_w4r3b_01_stacked_rods_10_cm_apart_within_their_estimates() -> None:
+    """Stacked 8 mm rods of two electrodes 10 cm end to end take R = 2 cm:
+    every port entry, the transfer entry included, and the bonded value lie
+    within their estimates of the axisymmetric model's (the coordinator's
+    acceptance of the in-line factor). Measured at R = 2 cm: R12 -2.60e-3
+    against a transfer estimate of 4.35e-3; with factor 3 (R = 3.33 cm)
+    -5.03e-3 against 4.39e-3."""
+    # audit W4R3B-01 (coordinator decision on open point 1)
+    from groundfield.solver.fem import solve_fem
+
+    w = _w4r3b_stacked(0.10)
+    eng = gf.create_engine(backend="fem", segment_length=0.25)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        ra = solve_fem(w, eng, model="axisymmetric")
+        r3 = solve_fem(w, eng, model="3d")
+    axi = np.asarray(ra.metadata["fem_port_resistance"])
+    r = np.asarray(r3.metadata["fem_port_resistance"])
+    dev = r / axi - 1.0
+    est = r3.metadata["fem_error_estimate"]
+    assert abs(r3.metadata["fem_source_radius"] - 0.02) < 1e-12
+    assert abs(dev[0, 0]) <= est and abs(dev[1, 1]) <= est
+    assert abs(dev[0, 1]) <= r3.metadata["fem_error_estimate_transfer"]
+    bonded = 1.0 / np.linalg.inv(r).sum() / (1.0 / np.linalg.inv(axi).sum()) - 1.0
+    assert abs(bonded) <= est
+
+
+def _w4r3b_v_two(theta_deg, L=4.0, z=0.8, offset=0.0):
+    """A V of two bonded strips from the apex (``offset``: the second one
+    starts that far beside the apex, so the two do not meet)."""
+    w = gf.create_world(soil=H100)
+    t = math.radians(theta_deg)
+    gf.create_electrode(
+        w, "strip", name="g", start=(0, 0, z), end=(L, 0, z), wire_radius=0.005
+    )
+    gf.create_electrode(
+        w,
+        "strip",
+        name="h",
+        start=(0, offset, z),
+        end=(L * math.cos(t), offset + L * math.sin(t), z),
+        wire_radius=0.005,
+    )
+    gf.create_conductor(w, start="g", end="h")
+    gf.create_source(w, attached_to="g", magnitude=1.0)
+    return w
+
+
+def _w4r3b_v_poly(theta_deg, L=4.0, z=0.8):
+    w = gf.create_world(soil=H100)
+    t = math.radians(theta_deg)
+    gf.create_electrode(
+        w,
+        "polyline",
+        name="g",
+        closed=False,
+        wire_radius=0.005,
+        vertices=[(L, 0, z), (0, 0, z), (L * math.cos(t), L * math.sin(t), z)],
+    )
+    gf.create_source(w, attached_to="g", magnitude=1.0)
+    return w
+
+
+def test_w4r3b_02_a_v_of_two_bonded_strips_29_degrees_wide_is_not_refused() -> None:
+    """Two strips that meet at the apex of a 29-degree V: rule (a) of
+    beside_wires reported the sample point nearest the apex (reach / 24
+    sin 29 deg = 1.82 mm) and the world was refused before meshing, while
+    the 31-degree V solves at R = 6 cm; with the rule off the 25 / 29 /
+    31-degree V read +9.54e-3 / +9.82e-3 / +9.93e-3 against mom,
+    continuously. Base: BackendCapabilityError "... 1.82 mm apart ..."."""
+    # audit W4R3B-02 (test of auditor W4R3B)
+    from groundfield.diagnostics import ResourceLimitError
+
+    exc = _w4r3b_until_node_check(_w4r3b_v_two(29.0))
+    assert isinstance(exc, ResourceLimitError), str(exc)[:300]
+
+
+def test_w4r3b_02_the_beside_distance_of_wires_that_meet_does_not_follow_the_sampling() -> (
+    None
+):
+    """The distance beside_wires reported for a 10-degree V was a property
+    of the sampling, not of the geometry: 0.651 mm at a reach of 9 cm,
+    0.217 mm at 3 cm (base)."""
+    # audit W4R3B-02 (test of auditor W4R3B)
+    model = wires3.world_pieces(_w4r3b_v_two(10.0))
+    a, b = wires3.beside_wires(model, 0.09), wires3.beside_wires(model, 0.03)
+    if a is not None and b is not None:
+        assert a.distance == pytest.approx(b.distance, rel=1e-6)
+
+
+def test_w4r3b_02_wires_that_meet_at_a_small_angle_are_left_alone() -> None:
+    """A V of 10 and 20 degrees (two bonded strips and one polyline) and a
+    branch leaving a strip's middle at 20 degrees keep the default source
+    radius; near the apex the window term counts the other wire, whose
+    current agrees there. A V whose arms do not meet (the second strip
+    starts 3 cm beside the apex) still runs beside: at the closest distance
+    of the two axes, whatever the reach."""
+    # audit W4R3B-02
+    from groundfield.solver.fem import _solid
+
+    eng = gf.create_engine(backend="fem", segment_length=0.25)
+    worlds = [_w4r3b_v_two(t) for t in (10.0, 20.0)]
+    worlds += [_w4r3b_v_poly(t) for t in (10.0, 20.0)]
+    y = gf.create_world(soil=H100)
+    gf.create_electrode(
+        y, "strip", name="g", start=(-2, 0, 0.8), end=(2, 0, 0.8), wire_radius=0.005
+    )
+    t = math.radians(20.0)
+    gf.create_electrode(
+        y,
+        "strip",
+        name="h",
+        start=(0, 0, 0.8),
+        end=(3 * math.cos(t), 3 * math.sin(t), 0.8),
+        wire_radius=0.005,
+    )
+    worlds.append(y)
+    for w in worlds:
+        model = _w4r2b_model(w)
+        assert wires3.beside_wires(model, 1.5 * R_SRC) is None
+        assert _solid.source_radius(w, eng, model, [], None, None) == 0.06
+    model = _w4r2b_model(_w4r3b_v_two(10.0, offset=0.03))
+    for reach in (0.09, 0.12):
+        b = wires3.beside_wires(model, reach)
+        assert b.kind == "beside" and abs(b.distance - 0.03) < 1e-12
+
+
+def test_w4r3b_02_wires_that_meet_below_10_degrees_run_beside_each_other() -> None:
+    """Two wires of one system are left alone near where they meet only if
+    they meet at 10 degrees or more (the coordinator's decision on open point
+    2 of stream fw4r3b). A V of 9 degrees, as two bonded strips and as one
+    polyline, runs beside again and is refused before meshing, naming the
+    angle; two bonded parallel 4 m strips 8 mm apart (a = 5 mm, the surfaces
+    touch along their length) are refused naming their distance, as at the
+    base; the V of 10 degrees stays solved. Round 3 before the decision:
+    the 9-degree V and the parallel strips solved at R = 6 cm."""
+    # audit W4R3B-02 (coordinator decision on open point 2)
+    for world in (_w4r3b_v_two(9.0), _w4r3b_v_poly(9.0)):
+        b = wires3.beside_wires(_w4r2b_model(world), 1.5 * R_SRC)
+        assert b is not None and abs(b.angle - 9.0) < 1e-9
+        exc = _w4r3b_until_node_check(world)
+        assert isinstance(exc, gf.BackendCapabilityError), str(exc)
+        assert "at an angle of 9°" in str(exc) and "10°" in str(exc)
+    for world in (_w4r3b_v_two(10.0), _w4r3b_v_poly(10.0)):
+        assert wires3.beside_wires(_w4r2b_model(world), 1.5 * R_SRC) is None
+    w = gf.create_world(soil=H100)
+    gf.create_electrode(
+        w, "strip", name="g", start=(0, 0, 0.8), end=(4, 0, 0.8), wire_radius=0.005
+    )
+    gf.create_electrode(
+        w,
+        "strip",
+        name="h",
+        start=(0, 0.008, 0.8),
+        end=(4, 0.008, 0.8),
+        wire_radius=0.005,
+    )
+    gf.create_conductor(w, start="g", end="h")
+    gf.create_source(w, attached_to="g", magnitude=1.0)
+    b = wires3.beside_wires(_w4r2b_model(w), 1.5 * R_SRC)
+    assert b.kind == "beside" and abs(b.distance - 0.008) < 1e-12
+    exc = _w4r3b_until_node_check(w)
+    assert isinstance(exc, gf.BackendCapabilityError)
+    assert "runs beside electrode" in str(exc) and "8 mm apart" in str(exc)
+
+
+def _w4r3b_meander(theta, w=0.10, L=4.0, z=0.8):
+    world = gf.create_world(soil=H100)
+    gf.create_electrode(
+        world,
+        "polyline",
+        name="g",
+        closed=False,
+        wire_radius=0.005,
+        vertices=[
+            (0, 0, z),
+            (L, 0, z),
+            (L, w, z),
+            (0, w, z),
+            (0, 2 * w, z),
+            (L, 2 * w + L * math.tan(theta), z),
+        ],
+    )
+    return world
+
+
+def _w4r3b_mean(model, dc, port=None) -> float:
+    sel = np.ones(dc.size, bool) if port is None else model.port == port
+    return float(np.sum((dc * model.weights)[sel]) / np.sum(model.weights[sel]))
+
+
+def test_w4r3b_03_a_meander_arm_running_the_same_way_counts_like_another_wire() -> None:
+    """An S-meander whose third arm runs the same way as the first, 0.20 m
+    beside it (outside 1.5 R): tilting the third arm by 1e-4 rad must not
+    change the correction in the middle of the first arm. Base: d_obs . e =
+    +1 > -1/2 counted the tilted arm whole, +6.80e-3 (the closed-form line
+    term 6.84e-3); the full solve jumped +4.65e-4 while mom moved -1.3e-4."""
+    # audit W4R3B-03 (test of auditor W4R3B)
+    m0, d0, _ = _w4r2b_correction(_w4r3b_meander(0.0))
+    m1, d1, _ = _w4r2b_correction(_w4r3b_meander(1e-4))
+    x = (2.0, 0.0, 0.8)
+    assert abs(_w4r2b_at(m1, d1, x) / _w4r2b_at(m0, d0, x) - 1.0) < 1e-3
+
+
+def test_w4r3b_03_a_spiral_as_one_polyline_and_as_bonded_windings() -> None:
+    """A flat spiral (pitch 0.15 m > 1.5 R, five windings) as one polyline
+    and as one electrode per winding (consecutive windings meet): the mean
+    correction must agree. Base: +2.43e-2 (every neighbouring winding
+    counted whole); the full solve of three windings read +2.08e-3 in Z
+    while mom and image give identical values for both."""
+    # audit W4R3B-03 (test of auditor W4R3B)
+    z, dphi = 0.8, math.radians(2.0)
+    phi = np.arange(0.0, 2 * math.pi * 5 + 1e-9, dphi)
+    r = 0.3 + 0.15 * phi / (2 * math.pi)
+    v = np.stack([r * np.cos(phi), r * np.sin(phi), np.full_like(phi, z)], axis=1)
+    one = gf.create_world(soil=H100)
+    gf.create_electrode(
+        one,
+        "polyline",
+        name="g",
+        closed=False,
+        wire_radius=0.005,
+        vertices=[tuple(p) for p in v],
+    )
+    split = gf.create_world(soil=H100)
+    per = int(round(2 * math.pi / dphi))
+    for k in range(5):
+        gf.create_electrode(
+            split,
+            "polyline",
+            name=f"t{k}",
+            closed=False,
+            wire_radius=0.005,
+            vertices=[tuple(p) for p in v[k * per : (k + 1) * per + 1]],
+        )
+    mp, dp, _ = _w4r2b_correction(one)
+    ms, ds, _ = _w4r2b_correction(split)
+    assert abs(_w4r3b_mean(mp, dp) / _w4r3b_mean(ms, ds) - 1.0) < 1e-3
+
+
+def _w4r3b_v_turn(turn_deg, L, z=0.8):
+    """A V polyline whose second arm has turned by ``turn_deg`` at the apex."""
+    t = math.radians(180.0 - turn_deg)
+    w = gf.create_world(soil=H100)
+    gf.create_electrode(
+        w,
+        "polyline",
+        name="g",
+        closed=False,
+        wire_radius=0.005,
+        vertices=[(L, 0, z), (0, 0, z), (L * math.cos(t), L * math.sin(t), z)],
+    )
+    return w
+
+
+def test_w4r3b_03_the_own_chain_fades_out_continuously_with_its_turn() -> None:
+    """The own polyline counts whole up to a turn of 90 degrees, like
+    another wire of the electrode from 150 degrees on, and in between by a
+    weight linear in the turn: the V of 0.3 m arms changes by less than
+    1e-4 across a turn of 120 degrees (base: a jump of -7.7e-3 of its mean
+    correction; -1.26e-3 of Z for 0.5 m arms, mom +3.4e-4), and at a turn
+    of 120 degrees the other arm counts half whole and half by its window."""
+    # audit W4R3B-03
+    means = []
+    for turn in (119.7, 119.9, 120.1, 120.3):
+        m, d, _ = _w4r2b_correction(_w4r3b_v_turn(turn, 0.3))
+        means.append(_w4r3b_mean(m, d))
+    steps = np.diff(means) / means[0]
+    # the V narrows: +1.57e-4 per 0.2 degrees on either side of 120 degrees
+    assert abs(steps[1] - 0.5 * (steps[0] + steps[2])) < 1e-5
+    assert 0.0 < steps[1] < 2e-4
+    model, dc, r_eta = _w4r2b_correction(_w4r3b_v_turn(120.0, 0.3))
+    x = model.points[np.argmin(np.linalg.norm(model.points - [0.2, 0, 0.8], axis=1))]
+    p = model.pieces[1]
+    y = np.asarray([x])
+    a = np.array([0.005])
+    whole = wires3._line_integral(y, p.start, p.end, a)[0]
+    whole -= wires3._line_integral(y, p.start, p.end, np.array([r_eta]))[0]
+    t = float((x - p.start) @ p.direction)
+    half = math.sqrt(
+        max(
+            0.0,
+            (1.5 * R_SRC) ** 2
+            - float(wires3._axis_distance2(y - p.start, p.direction)[0]),
+        )
+    )
+    lo, hi = np.clip([t - half, t + half], 0.0, p.length)
+    window = wires3._line_integral(y, p.start, p.end, a, lo, hi)[0]
+    window -= wires3._line_integral(y, p.start, p.end, np.array([r_eta]), lo, hi)[0]
+    own = _w4r2b_whole(model, x, r_eta, (0,))
+    expected = own + 100.0 / (4 * math.pi) * (0.5 * whole + 0.5 * window)
+    assert abs(_w4r2b_at(model, dc, x) / expected - 1.0) < 1e-12
+
+
+def _w4r3b_cross(gap, L=4.0, z=0.8):
+    w = gf.create_world(soil=H100)
+    gf.create_electrode(
+        w, "strip", name="g", start=(-L / 2, 0, z), end=(L / 2, 0, z), wire_radius=0.005
+    )
+    gf.create_electrode(
+        w,
+        "strip",
+        name="h",
+        start=(0, -L / 2, z + gap),
+        end=(0, L / 2, z + gap),
+        wire_radius=0.005,
+    )
+    gf.create_conductor(w, start="g", end="h")
+    return w
+
+
+def test_w4r3b_04_the_correction_of_crossing_wires_is_continuous_where_they_stop_meeting() -> (
+    None
+):
+    """Two bonded strips crossing at 90 degrees, axes 4.9 / 5.1 mm apart
+    (wire radius 5 mm, the surfaces overlap in both): wire_systems switched,
+    and the window term of the other strip disappeared. Base: the mean
+    correction of the 4 m strip dropped by 8.5e-3; the full solve of a 2 m
+    cross jumped by -7.5e-4 (mom -1.6e-5, image -3.9e-5)."""
+    # audit W4R3B-04 (test of auditor W4R3B)
+    m0, d0, _ = _w4r2b_correction(_w4r3b_cross(0.0049, L=2.0))
+    m1, d1, _ = _w4r2b_correction(_w4r3b_cross(0.0051, L=2.0))
+    assert abs(_w4r3b_mean(m1, d1, port=0) / _w4r3b_mean(m0, d0, port=0) - 1.0) < 1e-3
+
+
+def test_w4r3b_04_crossing_wires_meet_where_their_surfaces_touch_and_fade_out() -> None:
+    """Wires meet where their surfaces touch (axis distance at most a1 + a2
+    = 10 mm here); beyond, the other strip's window term fades out linearly
+    to 2 (a1 + a2), so the correction is continuous at both ends and from
+    20 mm on equals that of the strip alone."""
+    # audit W4R3B-04
+    assert len(set(wires3.wire_systems(_w4r2b_model(_w4r3b_cross(0.0099))))) == 1
+    assert len(set(wires3.wire_systems(_w4r2b_model(_w4r3b_cross(0.0101))))) == 2
+    alone = gf.create_world(soil=H100)
+    gf.create_electrode(
+        alone, "strip", name="g", start=(-2, 0, 0.8), end=(2, 0, 0.8), wire_radius=0.005
+    )
+    ma, da, _ = _w4r2b_correction(alone)
+    base = _w4r3b_mean(ma, da)
+    mean = {}
+    for gap in (0.0099, 0.0101, 0.015, 0.0199, 0.0201, 0.03):
+        m, d, _ = _w4r2b_correction(_w4r3b_cross(gap))
+        mean[gap] = _w4r3b_mean(m, d, port=0) / base - 1.0
+    # base: a jump of 8.5e-3 at the switch (4.9 / 5.1 mm); the change over
+    # 0.2 mm is now that of the geometry and of the fading weight
+    assert abs(mean[0.0101] - mean[0.0099]) < 3e-4
+    assert abs(mean[0.0201] - mean[0.0199]) < 3e-4
+    assert mean[0.0099] > mean[0.015] > mean[0.0199] > 0.0
+    assert mean[0.0201] == 0.0 and mean[0.03] == 0.0

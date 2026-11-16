@@ -167,3 +167,66 @@ def test_w4r2b_06_the_junction_table_carries_the_re_measured_values() -> None:
     page = (ROOT / "docs/explanation/concrete-shells.md").read_text(encoding="utf-8")
     assert "| crossing | −6.0 cm | −2.8 cm |" not in page
     assert "−5.1 cm" in page and "−1.9 cm" in page
+
+
+# ---------------------------------------------------------------------
+# Audit W4R3B (stream fw4r3b)
+# ---------------------------------------------------------------------
+
+
+def test_w4r3b_05_the_refusal_radius_is_that_of_the_thickest_bare_wire() -> None:
+    # audit W4R3B-05: the limit is 2.2 radii of the thickest bare wire of
+    # the world, not of the two wires (two 4 mm strips 4 cm apart are
+    # refused next to a 20 mm rod elsewhere)
+    page, adr = _text(FEM_PAGE), _text(ADR)
+    solid = _text(FEM_PKG / "_solid.py")
+    assert "(3.3 wire radii;" not in page
+    for text in (page, adr, solid):
+        assert "thickest bare wire" in text
+
+
+def test_w4r3b_03_the_turn_rule_has_no_jump_and_counts_the_turn() -> None:
+    # audit W4R3B-03: "a V whose turn crosses 120° jumps by 1.5e-4" held for
+    # 4 m arms only (0.5 m arms -1.26e-3); the rule now blends in the turn
+    # accumulated along the wire
+    page, wires = _text(FEM_PAGE), _text(FEM_PKG / "_wires3d.py")
+    assert "jumps by 1.5e-4 of its impedance" not in page
+    assert "has turned by less than 120°" not in page
+    for text in (page, wires):
+        assert "90°" in text and "150°" in text
+
+
+def test_w4r3b_01_02_stacked_rods_and_narrow_vs_are_described_as_handled() -> None:
+    # audit W4R3B-01: "Left alone are ... stacked rods"; audit W4R3B-02: "the
+    # arms of a V narrower than 30°" ran beside each other although wires
+    # that meet were promised to be left alone
+    page = _text(FEM_PAGE)
+    assert "collinear pieces of a galvanic conductor and stacked rods" not in page
+    assert "the arms of a V narrower than 30°, a galvanic" not in page
+    assert "end to end" in page and "narrower than 30°" in page
+    assert "1.5\\,R/\\sin\\theta" in page
+
+
+def test_w4r3b_05_the_transfer_margin_is_a_range() -> None:
+    # audit W4R3B-05: "6.3 times" is the B8 analogue only; the measured
+    # margin where the model holds starts near 1
+    page = _text(FEM_PAGE)
+    assert "margin of" in page and "6.3" in page
+    assert "TR_" not in page and "RING_" not in page
+
+
+def test_w4r3b_decisions_the_texts_state_the_in_line_factor_the_angle_and_shells() -> (
+    None
+):
+    # the coordinator's decisions on the open points of stream fw4r3b: wires
+    # end to end keep 3 R, wires that meet at less than 10 degrees run beside
+    # each other, encased wires meet by their shell radius
+    page, adr = _text(FEM_PAGE), _text(ADR)
+    wires, solid = _text(FEM_PKG / "_wires3d.py"), _text(FEM_PKG / "_solid.py")
+    assert "It is no bound for two wires end to end closer than" not in page
+    assert "Touching wires that run together are not one conductor" in page
+    for text in (page, adr):
+        assert "5\\,R" in text and "10°" in text and "r_b" in text
+        assert "gap over 3" not in text and "gap / 3)" not in text
+    for text in (wires, solid):
+        assert "IN_LINE_FACTOR" in text and "10°" in text

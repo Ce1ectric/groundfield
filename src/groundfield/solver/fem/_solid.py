@@ -58,6 +58,7 @@ from groundfield.solver._layered import as_layer_stack
 from groundfield.solver.fem._ports import EarthPorts
 from groundfield.solver.fem._wires3d import (
     BUMP_ENERGY_RADIUS,
+    IN_LINE_FACTOR,
     NEAR_FACTOR,
     WireModel,
     axial_quadrature,
@@ -179,13 +180,20 @@ def source_radius(
     within 30° of parallel, an arm of the same polyline folded back, a wire
     within the reach of another over its whole length) stay at least
     :data:`~groundfield.solver.fem._wires3d.NEAR_FACTOR` $= 1.5$ source radii
-    apart: $R$ is at most their axis distance over 1.5 (audits W4R2B-03,
-    W4R2A-01). Junctions, corners, crossings at more than 30°, a rod on a
-    ring and collinear pieces are left alone. One $R$ serves the whole
-    world: the disc quadrature, the energy radius of the radius correction
-    and the mesh size around the wires all use it, so the limit of the
-    closest pair refines the mesh everywhere (``notes`` receives the
-    reason).
+    apart, two wires end to end in line with a gap at least
+    :data:`~groundfield.solver.fem._wires3d.IN_LINE_FACTOR` $= 5$: $R$ is at
+    most their axis distance over 1.5, or their gap over 5 (audits W4R2B-03,
+    W4R2A-01, W4R3B-01). Wires that meet at 10° or more — junctions,
+    corners, a V or a branch, a rod on a ring, a rod cut into touching
+    pieces — and crossings at more than 30° are left alone (audit W4R3B-02);
+    wires that meet at less than 10° run beside each other. One $R$
+    serves the whole world: the disc quadrature, the energy radius of the
+    radius correction and the mesh size around the wires all use it, so the
+    limit of the closest pair refines the mesh everywhere (``notes``
+    receives the reason). The smallest $R$ is 2.2 radii of the thickest bare
+    wire of the world, wherever that wire lies: wires that run beside each
+    other closer than 3.3 such radii, axis to axis, or lie end to end closer
+    than 11, are refused before meshing (audit W4R3B-05).
     """
     bare = [p.radius for p in model.pieces if p.shell == 0.0]
     a_bare = max(bare) if bare else 0.0
@@ -223,27 +231,38 @@ def source_radius(
         limit = min(limit, 0.45 * prisms_side)
     r = min(r, limit)
     close = beside_wires(model, NEAR_FACTOR * r)
-    if close is not None and close.distance / NEAR_FACTOR < r:
-        r = close.distance / NEAR_FACTOR
+    # (a configuration exactly at its distance, to round-off, keeps R)
+    if close is not None and close.limit < r * (1.0 - 1e-9):
+        r = close.limit
         where = _beside_text(model, close)
+        if close.kind == "in line":
+            rule = (
+                f"wires that lie end to end stay {IN_LINE_FACTOR:g} source radii apart"
+            )
+            why = (
+                "closer, the smoothed sources at their facing ends do not resolve "
+                "the transfer resistance between them: up to 1.18 times its "
+                "estimate at 3 radii, twice at 1.5"
+            )
+        else:
+            rule = f"wires that run beside each other stay {NEAR_FACTOR:g} source radii apart"
+            why = (
+                "closer, the disc of each wire's smoothed source reaches the other "
+                "wire, and the radius correction has no term for it"
+            )
         if notes is not None:
             notes.append(
-                f"the source radius was limited to {r:.3g} m because {where}, "
-                f"and wires that run beside each other stay {NEAR_FACTOR:g} "
-                "source radii apart"
+                f"the source radius was limited to {r:.3g} m because {where}, and {rule}"
             )
         if not BUMP_ENERGY_RADIUS * r > 1.2 * a_bare:
             _refuse(
                 world,
                 engine,
-                "its three-dimensional model keeps wires that run beside each "
-                f"other at least {NEAR_FACTOR:g} source radii apart (closer, the "
-                "disc of each wire's smoothed source reaches the other wire, and "
-                f"the radius correction has no term for it), and {where}: the "
-                f"source radius would be {r:.3g} m, below the {smallest:.3g} m "
-                f"that its bare wires of radius {a_bare:.3g} m need. Space the "
-                "wires farther apart, or solve the world with an integral "
-                "backend.",
+                f"its three-dimensional model keeps {rule.replace(' stay ', ' at least ')} "
+                f"({why}), and {where}: the source radius would be {r:.3g} m, below "
+                f"the {smallest:.3g} m that its bare wires of radius {a_bare:.3g} m "
+                "need. Space the wires farther apart, or solve the world with an "
+                "integral backend.",
             )
     if not BUMP_ENERGY_RADIUS * r > 1.2 * a_bare:
         _refuse(
@@ -273,11 +292,20 @@ def _beside_text(model: WireModel, close) -> str:
     a = _owner(model.names[close.port])
     b = _owner(model.names[close.other])
     d = f"{1000.0 * close.distance:.3g} mm"
-    if close.kind == "folded":
-        return f"an arm of {a} runs back beside itself {d} apart, axis to axis"
     if close.kind == "around":
         return f"the whole wire of {a} lies within {d} of {b}, axis to axis"
-    return f"{a} runs beside {b} {d} apart, axis to axis"
+    if close.kind == "in line":
+        return f"{a} and {b} lie end to end, {d} apart without touching"
+    if close.kind == "folded":
+        text = f"an arm of {a} runs back beside itself {d} apart, axis to axis"
+    else:
+        text = f"{a} runs beside {b} {d} apart, axis to axis"
+    if close.angle is not None:
+        text += (
+            f" (they touch at an angle of {close.angle:.3g}°, and wires that touch "
+            "are left alone only where they meet at 10° or more)"
+        )
+    return text
 
 
 def _prisms(world, engine, model: WireModel, rho_c: float):
@@ -551,8 +579,9 @@ def solid_earth(
     BackendCapabilityError
         Before meshing: for a wire too close to the surface or an interface,
         for wires that run beside each other closer than 1.5 times the
-        smallest source radius their wire radius allows
-        (:func:`source_radius`), for resolved concrete around wires that are
+        smallest source radius (2.2 radii of the thickest bare wire of the
+        world; :func:`source_radius`) or lie end to end closer than 5 times
+        it, for resolved concrete around wires that are
         not axis-aligned or whose metal radius the smoothed source would not
         reach beyond (a thin cover). After meshing: when the conjugate
         gradients do not converge (high layer contrast; tested up to about
