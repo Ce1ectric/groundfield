@@ -80,9 +80,17 @@ __all__: list[str] = []
 #: row of zero-area cells (+35 ... +44 %, a singular factor, or -2.7 % at
 #: 2 m, silently). Distinct lines are now at least 1e-9 / 2**level of
 #: max(1 m, x) apart, above the snap tolerance 1e-12 up to level 9 (the
-#: finest level of ``FemOptions.refinement`` = 6 is 7). Merging moves an
-#: interface or a rod end by at most 1e-9 of max(1 m, x); evidence
-#: ``fw4r3a/e04`` measures what that moves.
+#: finest level of ``FemOptions.refinement`` = 6 is 7). A merge moves a mesh
+#: line (of a ring's block, its contacts) onto the physical feature of its run
+#: (``keep`` of :func:`graded_lines`); the geometry moves only where two
+#: physical features are this close, by at most 1e-9 of max(1 m, x): a rod
+#: end and an interface (a rod tip on 1000 / 30 Ohm m moves by 1.9e-6 per
+#: nanometre), a ring axis and an interface (1e-9 per nanometre), two
+#: interfaces (the layer between them vanishes). No merge moves an interface
+#: relative to a ring wire, which can be that sensitive: a wire touching a
+#: 1000 times more conductive layer moves by 2.6e-3 per nanometre of the
+#: interface (the fem, confirmed by the boundary elements at 10 um, evidence
+#: ``fw4r3a/e04``).
 _SAME_LINE = 1e-9
 
 #: Snap tolerance of the interface cut, relative to the larger of 1 m and the
@@ -90,7 +98,11 @@ _SAME_LINE = 1e-9
 _CUT_ROUND_OFF = 1e-12
 
 
-def graded_lines(features: list[tuple[float, float]], growth: float) -> np.ndarray:
+def graded_lines(
+    features: list[tuple[float, float]],
+    growth: float,
+    keep: "set[float] | frozenset[float]" = frozenset(),
+) -> np.ndarray:
     """Node coordinates through every feature, graded away from them.
 
     Parameters
@@ -100,11 +112,18 @@ def graded_lines(features: list[tuple[float, float]], growth: float) -> np.ndarr
         node spacing in m wanted there (``math.inf`` for a line without
         its own size, e.g. a domain boundary). At least one size must be
         finite. Duplicates keep the smallest size; so do coordinates within
-        :data:`_SAME_LINE` of the first of a run, which become the line of
-        that first (smallest) one.
+        :data:`_SAME_LINE` of the line of a run, which become that line.
     growth
         Growth $g > 0$ of the spacing per unit distance: the spacing at
         $x$ is $h(x) = \\min_f (h_f + g\\,|x - x_f|)$.
+    keep
+        Coordinates of physical features (interfaces, rod ends and radii,
+        the soil surface, the truncation box): a run that contains one has
+        its line there (the first of them), so a merge moves a mesh-only
+        feature (a block or contact line) and not the geometry (audit
+        W4R3A-01: a ring wire touching a 1000 times more conductive layer
+        moves by 2.6e-3 per nanometre of the interface). Without one the
+        line is the first (smallest) coordinate of the run.
 
     Returns
     -------
@@ -128,12 +147,16 @@ def graded_lines(features: list[tuple[float, float]], growth: float) -> np.ndarr
     xs_all = sorted(merged)
     xs_list: list[float] = []
     hs_list: list[float] = []
+    pinned: list[bool] = []
     for x in xs_all:
         if xs_list and x - xs_list[-1] <= _SAME_LINE * max(1.0, abs(xs_list[-1])):
             hs_list[-1] = min(hs_list[-1], merged[x])
+            if x in keep and not pinned[-1]:
+                xs_list[-1], pinned[-1] = x, True
             continue
         xs_list.append(x)
         hs_list.append(merged[x])
+        pinned.append(x in keep)
     xs = np.array(xs_list)
     hs = np.array(hs_list)
     finite = np.isfinite(hs)
@@ -509,8 +532,12 @@ def mesh_lines(
     for h in interfaces:
         sizes = [size + g * max(0.0, lo - h, h - hi) for lo, hi, size in bodies]
         z_feat.append((h, min(sizes) if sizes else inf))
-    s_lines = bisect(graded_lines(s_feat, g), level)
-    z_lines = bisect(graded_lines(z_feat, g), level)
+    # physical features keep their place in a merge (audit W4R3A-01)
+    s_keep = {0.0, float(r_far)} | {float(rod.radius) for rod in rods}
+    z_keep = {0.0, float(r_far)} | {float(h) for h in interfaces}
+    z_keep |= {float(z) for rod in rods for z in (rod.z_top, rod.z_bottom)}
+    s_lines = bisect(graded_lines(s_feat, g, s_keep), level)
+    z_lines = bisect(graded_lines(z_feat, g, z_keep), level)
     return s_lines, z_lines
 
 

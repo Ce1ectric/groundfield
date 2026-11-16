@@ -1493,3 +1493,31 @@ def test_w4r3a_01_a_triangle_of_zero_area_is_an_internal_error() -> None:
     z_lines = np.sort(np.append(z_lines, 0.3 + 5e-13))
     with pytest.raises(RuntimeError, match="zero or negative area"):
         build_mesh([], [ring], [0.3], 3000.0, params, 0, lines=(s_lines, z_lines))
+
+
+def test_w4r3a_01_a_merge_moves_a_mesh_line_not_an_interface_or_a_rod_end() -> None:
+    """A ring wire touching a 1000 times more conductive layer moves by
+    2.6e-3 when the interface moves by 1.1 nm (evidence fw4r3a/e04): a merge
+    must not move the interface onto a line of the wire's mesh block. The
+    block lines, the contact lines and the truncation box are mesh lines;
+    interfaces and rod ends keep their depth, rod radii their radius."""
+    # audit W4R3A-01
+    from groundfield.solver.fem._mesh import RingGeometry, RodGeometry, graded_lines
+
+    inf = math.inf
+    lines = graded_lines(
+        [(0.0, inf), (0.3, 1e-3), (0.3 + 0.5e-9, 1e-3), (1.0, inf)],
+        0.2,
+        keep={0.3 + 0.5e-9},
+    )
+    assert 0.3 + 0.5e-9 in lines and 0.3 not in lines
+    # a block line (c = 3.2 a, 32 intervals: line 21 at t + a) 0.5 nm from an
+    # interface touching the wire
+    a, t = 0.005, 2.0
+    ring = RingGeometry(2.0, t, a, 3.2 * a, near_interface=True)
+    h = t + a + 0.5e-9
+    mesh = _mesh([], [ring], [h])
+    assert mesh.interfaces == (h,)
+    # two physical features: the first of them (here the rod tip) is the line
+    mesh = _mesh([RodGeometry(0.008, 0.5, 2.0 - 3e-10)], [], [2.0])
+    assert mesh.interfaces == (2.0 - 3e-10,) and 2.0 not in mesh.z_lines
