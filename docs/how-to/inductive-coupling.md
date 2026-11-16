@@ -1,13 +1,23 @@
 # Model the inductive coupling of cables and leads
 
+This guide switches on the inductive model of cables, PEN conductors and
+measurement leads, chooses the earth-return model, checks it against the
+classical per-metre formulas and adds the skin effect. Read it when a
+study has long conductors, or frequencies above 50 Hz, where the series
+impedance of the conductors matters.
+
 Below 1 kHz the soil is quasi-static, but cables are not: a PEN conductor,
 a cable shield or a measurement lead has a series impedance
-$R' + j\omega L'$ per metre and couples magnetically to every other
-conductor. This guide shows how to switch the inductive model on, how to
-choose the earth-return model, how to check a model against the classical
-per-metre formulas, and how to add the skin effect.
+$R' + j\omega L'$ per metre ($R'$ its resistance and $L'$ its inductance
+per metre, $\omega = 2\pi f$) and couples magnetically to every other
+conductor.
 
-## Switch it on
+**Prerequisites:** the basic workflow of tutorial
+[T01](../tutorials/T01_first_grounding_impedance.ipynb) and conductors
+between electrodes as in tutorial
+[T03](../tutorials/T03_interconnected_systems_and_impedances.ipynb).
+
+## 1. Switch the inductive model on
 
 Inductance is a property of a conductor with a cross section (a branch);
 the earth-return model is a property of the engine:
@@ -59,26 +69,46 @@ for gap, u in induced.items():
 assert np.all(np.abs(induced[0.5]) > np.abs(induced[5.0])) and np.all(np.abs(induced[5.0]) > np.abs(induced[50.0]))
 -->
 
-The voltage induced along the passive cable is almost purely imaginary
-(about +90° against the current in cable A), grows with frequency and
-falls with the distance between the cables.
+**What you get:** the voltage induced along the passive cable B per
+ampere in cable A. It is almost purely imaginary (about +90° against the
+current in cable A), grows with frequency and falls with the distance
+between the cables; the hidden check asserts all three.
 
-## Choose the earth-return model
+## 2. Choose the earth-return model
 
-| `earth_inductive_model` | Physics | Use it for |
+The earth-return model is the engine option `earth_inductive_model`:
+
+| Model | Earth | Use it for |
 |---|---|---|
-| `"sommerfeld"` (default) | Sommerfeld/Pollaczek integral of the conducting half-space or layered earth over the real segment geometry; conductors in or above the surface plane are handled | every quantitative study |
-| `"carson_series"` | Carson's (1926) per-metre correction for infinitely long **parallel** wires over homogeneous earth, on the anti-parallel image: tiled per metre of overlap for near-parallel horizontal pairs ($\lvert\cos\varphi\rvert > 0.99$, inclination below 8.1°), across the surface through the field transmitted into the soil; every other pair and inclined segment gets the Sommerfeld correction of the same earth, so the result steps at 8.1° | long parallel cables in homogeneous soil; not for layered soil, nor for networks of short cables (generated LV networks at 1 kHz: X 9 … 15 % above `"sommerfeld"`) |
-| `"perfect_mirror"` | the earth as a perfect magnetic mirror, frequency independent; with conductors on both sides of the soil surface the solve warns (its additive image has no basis for such pairs) | a fast diagnostic baseline only |
+| `"sommerfeld"` (default) | half-space or layered earth, real geometry | every quantitative study |
+| `"carson_series"` | homogeneous earth, long parallel wires | long parallel cables in homogeneous soil |
+| `"perfect_mirror"` | a perfect magnetic mirror | a fast diagnostic baseline only |
+
+- **`"sommerfeld"`** evaluates the Sommerfeld/Pollaczek integral of the
+  conducting half-space or of the layered earth over the real segment
+  geometry; conductors in or above the surface plane are handled.
+- **`"carson_series"`** applies Carson's (1926) per-metre correction for
+  infinitely long **parallel** wires over homogeneous earth, on the
+  anti-parallel image. It is tiled per metre of overlap for near-parallel
+  horizontal pairs ($\lvert\cos\varphi\rvert > 0.99$, $\varphi$ the angle
+  between the two wires: an inclination below 8.1°), across the surface
+  through the field transmitted into the soil. Every other pair and every
+  inclined segment gets the Sommerfeld correction of the same earth, so
+  the result steps at 8.1°. Do not use it for layered soil, nor for
+  networks of short cables: on generated LV networks at 1 kHz it gives a
+  reactance X 9 … 15 % above `"sommerfeld"`.
+- **`"perfect_mirror"`** treats the earth as a perfect magnetic mirror,
+  independent of frequency. With conductors on both sides of the soil
+  surface the solve warns: its additive image has no basis for such
+  pairs.
 
 With `"sommerfeld"` the correction is assembled from shared tables
-(`sommerfeld_assembly="tabulated"`, the default since 2026.11; the
-examples on this page spell it out): it agrees with the per-pair assembly
-(`"exact"`) to far below the model accuracy and is much faster on networks
-with many inductive segments (see
-[Speed up large studies](speed-up-large-studies.md)).
+(`sommerfeld_assembly="tabulated"`, the default; the examples on this page
+spell it out): it agrees with the per-pair assembly (`"exact"`) to far
+below the model accuracy and is much faster on networks with many
+inductive segments (see [Speed up large studies](speed-up-large-studies.md)).
 
-## Check against the per-metre formulas
+## 3. Check a model against the per-metre formulas
 
 For a long straight cable the series impedance per metre approaches the
 conductor–earth loop impedance of an infinite line, given by Pollaczek's
@@ -138,11 +168,13 @@ assert abs(z_per_m.imag / reference.imag - 1.0) < 5e-3
 assert abs(z_per_m.real / reference.real - 1.0) < 2e-2
 -->
 
-The reactance agrees closely; the earth-return resistance converges more
-slowly with the line length, because the current in the earth spreads
-over the skin depth beyond the ends of the line.
+**What you get:** the per-metre impedance of the line and Pollaczek's
+value with their relative deviations. The reactance agrees closely (the
+hidden check asserts within 0.5 %); the earth-return resistance converges
+more slowly with the line length (within 2 %), because the current in the
+earth spreads over the skin depth beyond the ends of the line.
 
-## Add the skin effect
+## 4. Add the skin effect
 
 By default a conductor uses its DC resistance and the DC internal
 inductance. `resistance_model="skin"` uses the exact solution for a solid
@@ -194,20 +226,20 @@ sections; it matters for harmonics up to 1 kHz.
 - A conductor without `inductance_model` is purely resistive.
 - Two conductors closer than the sum of their radii — cables in one
   trench drawn on one axis, a service drop along its main — couple as
-  wires touching side by side. A concentric cable is a core drawn on the
-  axis of a thicker conductor with `conductor_type="cable_shield"`: the
-  core couples to the shield as a filament inside a tube, at the shield
-  radius, and the shield carries no internal inductance of a solid wire
-  (user decisions Q32 and Q33; a 100 m coax with 5 mm core and 15 mm
-  shield: loop inductance 26.97 µH, whatever the sub-pieces
+  wires touching side by side.
+- A concentric cable is a core drawn on the axis of a thicker conductor
+  with `conductor_type="cable_shield"`: the core couples to the shield as
+  a filament inside a tube, at the shield radius, and the shield carries
+  no internal inductance of a solid wire. A 100 m coax with 5 mm core and
+  15 mm shield has a loop inductance of 26.97 µH, whatever sub-pieces
   `discretize_segment_length` cuts the two conductors into, also with the
-  core drawn off or across the shield's axis; two cables or leads that
+  core drawn off or across the shield's axis. Two cables or leads that
   touch at a small angle, or wires leaving one junction, add up to the
   lumped pair the same way, also under `"carson_series"`, whose correction
-  of a tilted pair is integrated along the overlap since audit W1R3-07).
-  Without the marker two conductors on one axis are two separate cables
-  touching each other; `gf.diagnose(world)` reports such pairs (category
-  `overlap`, see [Read and act on warnings](warnings-and-diagnostics.md)).
+  of a tilted pair is integrated along the overlap. Without the marker two
+  conductors on one axis are two separate cables touching each other;
+  `gf.diagnose(world)` reports such pairs (category `overlap`, see
+  [Read and act on warnings](warnings-and-diagnostics.md)).
 - A long conductor can stay lumped under `"sommerfeld"`: its self term is
   integrated in one dimension along it, at a cost that grows at most
   linearly with the length (one lumped 2 km conductor at 50 Hz and 1 kHz:
@@ -218,7 +250,7 @@ sections; it matters for harmonics up to 1 kHz.
   38 km for a conductor at 0.7 m, 33 km for one from a rod head at 0.5 m
   to a junction at 0.7 m. A longer conductor warns
   (`SommerfeldResolutionWarning`) and its result is not converged — the
-  100 km conductor above is solved in 10.6 s but warns (audit W3B-10).
+  100 km conductor above is solved in 10.6 s but warns.
 - For hand formulas of a cable or a line over layered soil (the
   complex-depth formulas of Dubanton and Deri),
   `gf.penetration_depth(soil, frequencies)` gives the equivalent complex
@@ -230,5 +262,24 @@ sections; it matters for harmonics up to 1 kHz.
 - Conductors that cross or lie in the soil surface are solved with
   `"sommerfeld"`; with the other two models their image is singular and
   the solve raises.
-- The theory of the three models is on the
-  [earth-return page](../explanation/earth-return.md).
+
+??? note "Background and audit trail"
+
+    - The coupling of touching conductors and of concentric cables follows
+      user decisions Q32 and Q33.
+    - The correction of `"carson_series"` for a tilted pair is integrated
+      along the overlap since audit W1R3-07.
+    - The resolution limit of long lumped conductors under `"sommerfeld"`
+      (`SommerfeldResolutionWarning`) was documented in audit W3B-10.
+    - `sommerfeld_assembly="tabulated"` is the default since 2026.11.
+
+## See also
+
+- [Earth return](../explanation/earth-return.md): the theory of the three
+  models and their validity.
+- Tutorial [T07](../tutorials/T07_fall_of_potential_measurement.ipynb):
+  the coupling of measurement leads.
+- [Speed up large studies](speed-up-large-studies.md): the cost of the
+  earth-return assembly.
+- API: [Conductors](../reference/api/conductors.md) and
+  [Coupling](../reference/api/coupling.md).
