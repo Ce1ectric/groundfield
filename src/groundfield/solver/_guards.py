@@ -857,33 +857,45 @@ class InterfaceContactWarning(UserWarning):
     radii on) a ring (a = 5 mm)
     over a layer 33 times more conductive reads +0.59 % at 4 radii, +1.2 %
     at 3, +3.6 % at 2, +8.6 % at 1.5 and +32 % at 1.1 radii, and +89 % when
-    the interface cuts the wire 0.99 radii below its axis; over a more
-    resistive layer at most +1.4 % (at 1.01 radii). The reach is the
-    largest distance at which the thin wire is 1 % off in six ring
+    the interface cuts the wire 0.99 radii below its axis; under a more
+    resistive layer up to +2.6 % (a 55 mm wire on a 1 m ring at 1.01
+    radii, contrast 1000). The reach is the largest distance at which the
+    thin wire (converged in its segment length) is 1 % off, in five ring
     geometries (r0 / a = 18 ... 400: rings of 0.5 ... 5 m at 0.3 ... 2 m,
-    a = 5 ... 55 mm, the interface below and above; the thick wire on a 1 m
-    ring is the widest everywhere), rounded up to 0.1 a, plus 0.1 a for the
-    contrasts between the nodes (audit W4R2A-04; up to then four geometries,
-    0.2 ... 0.4 a short of the thick wire):
+    a = 5 ... 55 mm; the more conductive layer below the wire, for the 2 m
+    ring also above it; the more resistive layer below and above every
+    one; the thick wire on the 1 m ring is the widest everywhere), rounded
+    up to 0.1 a, plus 0.1 a for the contrasts between the nodes (audits
+    W4R2A-04, W4R3A-02; up to W4R2A-04 four geometries, 0.2 ... 0.4 a short
+    of the thick wire; up to W4R3A-02 the resistive side measured above
+    the wire for the thin ring only, the thick wire 1 % off up to 0.74 a
+    beyond it):
 
     ======================  =====  =====  =====  =====  =====  =====  =====  =====  =====
     contrast                1.4    2      3      5.5    10     18     33     100    1000
-    more conductive beyond  1.0 a  1.3 a  1.9 a  2.7 a  3.3 a  3.7 a  3.9 a  4.1 a  4.2 a
+    more conductive beyond  1.0 a  1.3 a  1.9 a  2.7 a  3.3 a  3.7 a  3.9 a  4.1 a  4.3 a
     ======================  =====  =====  =====  =====  =====  =====  =====  =====  =====
 
-    ======================  =====  =====  =====  =====  =====
-    contrast                1.4    3      10     33     1000
-    more resistive beyond   1.0 a  1.0 a  1.2 a  1.3 a  1.4 a
-    ======================  =====  =====  =====  =====  =====
+    ======================  =====  =====  =====  =====  =====  =====
+    contrast                1.4    3      10     33     100    1000
+    more resistive beyond   1.0 a  1.3 a  1.9 a  2.2 a  2.2 a  2.3 a
+    ======================  =====  =====  =====  =====  =====  =====
 
-    (log-linear in the contrast between the nodes, held beyond the last;
-    1.0 a: only a wire that the interface cuts.) Checked against every
-    distance measured at the nodes and at 1.3 ... 1.9, 2.5, 4, 7, 14, 25,
-    50 and 300 (2348 points): no thin wire 1 % or more off lies outside the
-    reach, the largest outside it is +0.94 %. Below a contrast of 1.4
-    nothing is reported: a cut wire reads at most 0.77 % off at 1.3, 1.04 %
-    at 1.5 (up to audit W4R2A-04 the limit was 2, and a wire cut at a
-    contrast of 1.9 read up to -1.46 % unreported). Pieces of a galvanic distributed
+    (log-linear in the contrast between the nodes, held beyond the last
+    and at 1.0 a down to the contrast 1.3; 1.0 a: only a wire that the
+    interface cuts.) Checked against every distance measured at the nodes
+    and between them (conductive 1.3 ... 1.9, 2.5, 4, 7, 14, 25, 50, 300;
+    resistive 2, 5.5, 18, 300): no thin wire 1 % or more off lies outside
+    the reach (2348 conductive points at one segment length, the largest
+    outside +0.94 %; 2470 resistive points converged in it, +0.93 %). The
+    thick wire's conductive 1 % distances, converged in the segment length,
+    lie 0.004 ... 0.17 a inside the reach; the node at 1000 is 4.3 a (it
+    was 4.2) for the 4.15 a at 300. Below a contrast of 1.3 nothing is
+    reported: a cut wire reads at most +0.96 % off at 1.3 and +1.06 % at
+    1.35 (the thick wire cut 0.5 a below its axis by a more resistive layer
+    above it; up to audit W4R3A-02 the limit was 1.4, where it reads
+    +1.16 %, and up to W4R2A-04 2, where a wire cut at a contrast of 1.9
+    read -1.46 %). Pieces of a galvanic distributed
     conductor count as horizontal while their slope ``|e_z|`` is at most
     0.1 (5.7 deg): a steeper piece passes the reach of an interface over at
     most ``2 reach / |e_z|`` wire radii of its length, like a rod through an
@@ -990,7 +1002,9 @@ def _warn_rod_ends_near_interfaces(
 #: :class:`InterfaceContactWarning` and :func:`wire_contact_reach`). The
 #: largest distance at which the thin wire is 1 % off the solid torus in six
 #: ring geometries (r0 / a = 18 ... 400), rounded up to 0.1 a, plus 0.1 a for
-#: the contrasts between the nodes (audit W4R2A-04, evidence ``fw4r2a/e03``).
+#: the contrasts between the nodes (audit W4R2A-04, evidence ``fw4r2a/e03``);
+#: 4.3 at 1000 (was 4.2): the thin wire converged in its segment length is
+#: 1 % off up to 4.15 a at 300 (audit W4R3A-02, evidence ``fw4r3a/e05``).
 WIRE_CONTACT_REACH_CONDUCTIVE: tuple[tuple[float, float], ...] = (
     (1.4, 1.0),
     (2.0, 1.3),
@@ -1000,24 +1014,29 @@ WIRE_CONTACT_REACH_CONDUCTIVE: tuple[tuple[float, float], ...] = (
     (18.0, 3.7),
     (33.0, 3.9),
     (100.0, 4.1),
-    (1000.0, 4.2),
+    (1000.0, 4.3),
 )
 
 #: Reach of an interface over a more resistive layer, in wire radii (the same
-#: rule; 1.0: only a wire that the interface cuts).
+#: rule, with the layer below and above the wire of five ring geometries and
+#: the thin wire converged in its segment length; the 55 mm wire on the 1 m
+#: ring under the layer sets every node; 1.0: only a wire that the interface
+#: cuts; audit W4R3A-02, evidence ``fw4r3a/e01``, ``e02``).
 WIRE_CONTACT_REACH_RESISTIVE: tuple[tuple[float, float], ...] = (
     (1.4, 1.0),
-    (3.0, 1.0),
-    (10.0, 1.2),
-    (33.0, 1.3),
-    (1000.0, 1.4),
+    (3.0, 1.3),
+    (10.0, 1.9),
+    (33.0, 2.2),
+    (100.0, 2.2),
+    (1000.0, 2.3),
 )
 
 #: Below this contrast of the two resistivities no horizontal wire is
-#: reported: a wire that the interface cuts is at most 0.77 % off at 1.3 and
-#: 1.04 % at 1.5 (audit W4R2A-04; up to then the limit was 2, where a cut
-#: wire reads up to -1.6 %).
-WIRE_CONTACT_MIN_CONTRAST = 1.4
+#: reported: a wire that the interface cuts is at most +0.96 % off at 1.3 and
+#: +1.06 % at 1.35 (the 55 mm wire on the 1 m ring, cut 0.5 a below its axis
+#: by a more resistive layer above it; audit W4R3A-02; up to then the limit
+#: was 1.4, where that wire reads +1.16 %, and up to audit W4R2A-04 2).
+WIRE_CONTACT_MIN_CONTRAST = 1.3
 
 
 def wire_contact_reach(rho_wire: float, rho_other: float) -> float:
@@ -1040,10 +1059,10 @@ def wire_contact_reach(rho_wire: float, rho_other: float) -> float:
         The reach in wire radii, linear in ``log10`` of the contrast
         between the nodes of :data:`WIRE_CONTACT_REACH_CONDUCTIVE`
         (``rho_other < rho_wire``) or :data:`WIRE_CONTACT_REACH_RESISTIVE`
-        and held beyond the last node; ``0.0`` below the contrast
-        :data:`WIRE_CONTACT_MIN_CONTRAST` (1.4). Measured on rings with
-        r0 / a from 18 to 400 (audit W4R2A-04); a thicker wire on a smaller
-        ring is not covered.
+        and held beyond the last node and below the first down to the
+        contrast :data:`WIRE_CONTACT_MIN_CONTRAST` (1.3), ``0.0`` below it.
+        Measured on rings with r0 / a from 18 to 400 (audits W4R2A-04,
+        W4R3A-02); a thicker wire on a smaller ring is not covered.
     """
     lo, hi = sorted((float(rho_wire), float(rho_other)))
     contrast = hi / lo

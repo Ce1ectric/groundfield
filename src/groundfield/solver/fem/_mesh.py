@@ -21,8 +21,10 @@ projected radially onto the circle of the wire and joined by layers
 spaced uniformly in $\\ln \\rho$, so the circle is inscribed exactly and
 the block conforms to the tensor grid around it. A layer interface that
 passes through such a block (a ring within about its wire radius of the
-interface) is cut into the O-grid elements
-(:func:`cut_at_depth`), so every element lies in one layer. Next to such
+interface) is cut into the O-grid elements at its own mesh line
+(:func:`cut_at_depth`), so every element lies in one layer; features
+closer than :data:`_SAME_LINE` are one line (audit W4R3A-01), and a
+triangle of zero area is refused as an internal error. Next to such
 an interface the field varies on the scale of the gap between the wire
 and the interface (and of the narrow wedge where an interface cuts the
 wire near its edge), so that block has four times the lines
@@ -68,12 +70,40 @@ __all__: list[str] = []
 
 
 #: Coordinates of mesh features closer than this, relative to the larger of
-#: 1 m and the coordinate, are one line (round-off; the tolerance of the line
-#: look-up :func:`_index`).
-_SAME_LINE = 1e-12
+#: 1 m and the coordinate, are one line (the tolerance of the line look-up
+#: :func:`_index` too). Two features computed two ways differ by round-off
+#: (5.6e-17 m for 0.1 + 0.2 and 0.3); a ring axis or a rod end a few
+#: picometres off an interface is the same world physically. Up to audit
+#: W4R3A-01 the tolerance was 1e-12, the size of the interface cut's snap
+#: (:func:`cut_at_depth`): a feature just beyond it, or a line that bisection
+#: put between it and the interface, was snapped onto the plane and left a
+#: row of zero-area cells (+35 ... +44 %, a singular factor, or -2.7 % at
+#: 2 m, silently). Distinct lines are now at least 1e-9 / 2**level of
+#: max(1 m, x) apart, above the snap tolerance 1e-12 up to level 9 (the
+#: finest level of ``FemOptions.refinement`` = 6 is 7). A merge moves a mesh
+#: line (of a ring's block, its contacts) onto the physical feature of its run
+#: (``keep`` of :func:`graded_lines`); the geometry moves only where two
+#: physical features are this close, by at most 1e-9 of max(1 m, x): a rod
+#: end and an interface (a rod tip on 1000 / 30 Ohm m moves by 1.9e-6 per
+#: nanometre for a 4.5 m rod, 8e-6 for a 0.2 m one), a ring axis and an
+#: interface (1e-9 per nanometre), two
+#: interfaces (the layer between them vanishes). No merge moves an interface
+#: relative to a ring wire, which can be that sensitive: a wire touching a
+#: 1000 times more conductive layer moves by 2.6e-3 per nanometre of the
+#: interface (the fem, confirmed by the boundary elements at 10 um, evidence
+#: ``fw4r3a/e04``).
+_SAME_LINE = 1e-9
+
+#: Snap tolerance of the interface cut, relative to the larger of 1 m and the
+#: interface's depth: round-off of nodes that lie on the cut line.
+_CUT_ROUND_OFF = 1e-12
 
 
-def graded_lines(features: list[tuple[float, float]], growth: float) -> np.ndarray:
+def graded_lines(
+    features: list[tuple[float, float]],
+    growth: float,
+    keep: "set[float] | frozenset[float]" = frozenset(),
+) -> np.ndarray:
     """Node coordinates through every feature, graded away from them.
 
     Parameters
@@ -82,12 +112,19 @@ def graded_lines(features: list[tuple[float, float]], growth: float) -> np.ndarr
         ``(x, h)`` pairs: a coordinate in m that must be a node and the
         node spacing in m wanted there (``math.inf`` for a line without
         its own size, e.g. a domain boundary). At least one size must be
-        finite. Duplicates keep the smallest size; so do coordinates that
-        differ by round-off only (:data:`_SAME_LINE`), which become the
-        line of the first of them.
+        finite. Duplicates keep the smallest size; so do coordinates within
+        :data:`_SAME_LINE` of the line of a run, which become that line.
     growth
         Growth $g > 0$ of the spacing per unit distance: the spacing at
         $x$ is $h(x) = \\min_f (h_f + g\\,|x - x_f|)$.
+    keep
+        Coordinates of physical features (interfaces, rod ends and radii,
+        the soil surface, the truncation box): a run that contains one has
+        its line there (the first of them), so a merge moves a mesh-only
+        feature (a block or contact line) and not the geometry (audit
+        W4R3A-01: a ring wire touching a 1000 times more conductive layer
+        moves by 2.6e-3 per nanometre of the interface). Without one the
+        line is the first (smallest) coordinate of the run.
 
     Returns
     -------
@@ -104,18 +141,23 @@ def graded_lines(features: list[tuple[float, float]], growth: float) -> np.ndarr
         x, h = float(x), float(h)
         merged[x] = min(merged.get(x, math.inf), h)
     # One line for coordinates computed two ways (a block's centre line at
-    # 0.30000000000000004 m and an interface at 0.3 m; a rod tip at 0.1 + 0.2):
-    # two lines 5.6e-17 m apart were a row of cells of zero height, which made
-    # the stiffness matrix singular or the resistance wrong by a factor of ten.
+    # 0.30000000000000004 m and an interface at 0.3 m; a rod tip at 0.1 + 0.2)
+    # and for features a few picometres apart: two lines that close were a
+    # row of cells of zero height, which made the stiffness matrix singular
+    # or the resistance wrong by a factor of ten (audit W4R3A-01).
     xs_all = sorted(merged)
     xs_list: list[float] = []
     hs_list: list[float] = []
+    pinned: list[bool] = []
     for x in xs_all:
         if xs_list and x - xs_list[-1] <= _SAME_LINE * max(1.0, abs(xs_list[-1])):
             hs_list[-1] = min(hs_list[-1], merged[x])
+            if x in keep and not pinned[-1]:
+                xs_list[-1], pinned[-1] = x, True
             continue
         xs_list.append(x)
         hs_list.append(merged[x])
+        pinned.append(x in keep)
     xs = np.array(xs_list)
     hs = np.array(hs_list)
     finite = np.isfinite(hs)
@@ -311,8 +353,10 @@ class AxiMesh:
     r_far
         Size $R$ of the truncation box in m.
     interfaces
-        Depths in m of the layer interfaces inside the box (``layer``
-        counts the interfaces above a triangle's centroid).
+        The mesh lines in m of the layer interfaces inside the box, each
+        within :data:`_SAME_LINE` of its interface's depth (the line it was
+        merged into and cut at; ``layer`` counts the lines above a
+        triangle's centroid).
     stats
         Mesh size (nodes, triangles, lines, level).
     """
@@ -489,8 +533,12 @@ def mesh_lines(
     for h in interfaces:
         sizes = [size + g * max(0.0, lo - h, h - hi) for lo, hi, size in bodies]
         z_feat.append((h, min(sizes) if sizes else inf))
-    s_lines = bisect(graded_lines(s_feat, g), level)
-    z_lines = bisect(graded_lines(z_feat, g), level)
+    # physical features keep their place in a merge (audit W4R3A-01)
+    s_keep = {0.0, float(r_far)} | {float(rod.radius) for rod in rods}
+    z_keep = {0.0, float(r_far)} | {float(h) for h in interfaces}
+    z_keep |= {float(z) for rod in rods for z in (rod.z_top, rod.z_bottom)}
+    s_lines = bisect(graded_lines(s_feat, g, s_keep), level)
+    z_lines = bisect(graded_lines(z_feat, g, z_keep), level)
     return s_lines, z_lines
 
 
@@ -522,6 +570,17 @@ def cut_at_depth(
     plane are moved onto it first. A node inserted on an edge whose two
     end nodes belong to the same port lies on that electrode's surface
     and joins the port.
+
+    Parameters
+    ----------
+    nodes, triangles, port
+        The mesh arrays (see :class:`AxiMesh`).
+    z_cut
+        Depth of the plane in m: a tensor line (:func:`build_mesh`), so the
+        tensor nodes on it lie on it exactly and the others are at least
+        a line spacing away.
+    tol
+        Snap tolerance in m (round-off).
 
     Returns
     -------
@@ -618,6 +677,23 @@ def _o_grid_size(
     return perimeter, max(1, math.ceil(x + 1e-9))
 
 
+def _o_grid_centre_z(ring: RingGeometry, cut_lines: list[float]) -> float:
+    """Depth in m of the centre of a ring's O-grid.
+
+    The wire's axis depth, or the mesh line of an interface within
+    :data:`_SAME_LINE` of it: then the axis is merged with the interface
+    like two features (it moves by at most that much), and the O-grid's
+    rays at the axis height lie on the cut line. Tilted by the merge they
+    put their nodes up to :data:`_SAME_LINE` off the plane, partly within
+    the cut's snap tolerance, and the cut split them into slivers (audit
+    W4R3A-01).
+    """
+    t = ring.depth
+    tol = _SAME_LINE * max(1.0, abs(t)) * (1.0 + 1e-6)  # the box line's round-off
+    near = [line for line in cut_lines if 0.0 < abs(line - t) <= tol]
+    return min(near, key=lambda line: abs(line - t)) if near else t
+
+
 def predicted_nodes(
     s_lines: np.ndarray,
     z_lines: np.ndarray,
@@ -703,6 +779,11 @@ def build_mesh(
             port[nid(i, j1)] = k
         for j in range(j0, j1 + 1):
             port[nid(ia, j)] = k
+    # Every interface is cut at its own mesh line: the feature line it was
+    # merged into (within _SAME_LINE), on which the tensor nodes lie exactly.
+    # Cut at the depth itself, a line within the snap tolerance was moved
+    # onto the plane and left zero-area cells (audit W4R3A-01).
+    cut_lines = [float(z_lines[_index(z_lines, h)]) for h in interfaces]
     blocks = []
     for ring in rings:
         c = ring.half_width
@@ -731,7 +812,7 @@ def build_mesh(
             + [nid(i0, j) for j in range(j1, j0, -1)]
         )
         perimeter = np.array(perimeter, dtype=int)
-        centre = np.array([ring.radius, ring.depth])
+        centre = np.array([ring.radius, _o_grid_centre_z(ring, cut_lines)])
         offset = nodes[perimeter] - centre
         dist = np.hypot(offset[:, 0], offset[:, 1])
         unit = offset / dist[:, None]
@@ -760,10 +841,14 @@ def build_mesh(
         nodes = np.vstack([nodes, *extra])
     port = np.concatenate(port_parts)
     triangles = np.concatenate(tri_parts)
-    for h in interfaces:
+    for h, line in zip(interfaces, cut_lines, strict=True):
         if any(abs(r.depth - h) < r.half_width for r in rings):
             nodes, triangles, port = cut_at_depth(
-                nodes, triangles, port, h, tol=1e-12 * max(1.0, h)
+                nodes,
+                triangles,
+                port,
+                line,
+                tol=_CUT_ROUND_OFF * max(1.0, line),
             )
 
     used = np.zeros(nodes.shape[0], dtype=bool)
@@ -774,13 +859,26 @@ def build_mesh(
     triangles = renumber[triangles]
     port = port[used]
 
-    # Orientation: positive area in the (s, z) plane.
+    # Every triangle is built with positive area in the (s, z) plane (the
+    # tensor cells, the O-grid layers traversed counter-clockwise, the cut
+    # keeping its parent's orientation). A triangle of zero area made the
+    # factor singular or the resistance wrong without notice (audits
+    # W4R2A, W4R3A-01), a negative one would overlap its neighbours: both
+    # are a defect of this mesher, never a result.
     v = nodes[triangles]
     area2 = (v[:, 1, 0] - v[:, 0, 0]) * (v[:, 2, 1] - v[:, 0, 1]) - (
         v[:, 2, 0] - v[:, 0, 0]
     ) * (v[:, 1, 1] - v[:, 0, 1])
-    flip = area2 < 0.0
-    triangles[flip] = triangles[flip][:, [0, 2, 1]]
+    bad = ~(area2 > 0.0)
+    if bad.any():
+        s_bad, z_bad = v[np.argmax(bad)].mean(axis=0)
+        raise RuntimeError(
+            "Backend 'fem': internal error of the axisymmetric mesher: "
+            f"{int(bad.sum())} triangles have zero or negative area (the first "
+            f"at s = {s_bad:.9g} m, z = {z_bad:.12g} m), which would make the "
+            "solve singular or its result wrong without notice. This is a "
+            "defect of groundfield; please report the world."
+        )
 
     boundary = _boundary_edges(triangles)
     pa, pb = port[boundary[:, 0]], port[boundary[:, 1]]
@@ -793,7 +891,10 @@ def build_mesh(
     sa, sb = nodes[boundary[:, 0], 0], nodes[boundary[:, 1], 0]
     outer = boundary[((sa == r_far) & (sb == r_far)) | ((za == r_far) & (zb == r_far))]
 
-    bounds = np.asarray(sorted(interfaces), dtype=float)
+    # The layers are counted from the cut lines: a centroid between an
+    # interface's depth and its line (at most _SAME_LINE apart) is not in
+    # a layer of its own.
+    bounds = np.asarray(sorted(cut_lines), dtype=float)
     centroid_z = nodes[triangles, 1].mean(axis=1)
     layer = np.searchsorted(bounds, centroid_z, side="right")
     return AxiMesh(
