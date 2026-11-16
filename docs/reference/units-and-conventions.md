@@ -1,5 +1,10 @@
 # Units and conventions
 
+The units, the coordinate system, the phasor convention and the signs that
+every input and output of groundfield follows. Check this page when you
+build a world from your own data, or when you compare results with another
+tool or with a measurement.
+
 ## Units
 
 Every physical input and output is in SI units, without prefixes.
@@ -40,58 +45,69 @@ carry a lower-case unit suffix (`depth_m`, `concrete_rho_ohm_m`,
   When a horizontal coordinate of a world exceeds 10 km, the solvers
   (`image`, `image_2layer`, `mom`, `mom_sommerfeld`, `solve_mutual_*`) work
   in a local frame: the world shifted exactly by the centre of its
-  horizontal bounding box, rounded to whole metres; point sources are
+  horizontal bounding box, rounded to whole metres. Point sources are
   reported in the user's coordinates, and `FieldResult.potential`
   evaluates in a local frame of the sources in the same way (since
-  2026.11). Segment counts and straight runs allow the round-off of the
-  coordinates' own magnitude, 64 $\varepsilon |x|$ (0.46 µm at an easting
-  of 32.6 · 10⁶ m). A world moved from (0, 0) to the UTM origin
-  (32 604 321.123 m, 5 812 345.678 m) then changes its impedance by
-  3 · 10⁻¹¹ with the point kernel (`mom`, `mom_sommerfeld`, `image` with
-  `kernel="point"`), the effect of the rounding of its vertices; up to
-  2026.11 an edge of a whole number of segments got one more there (a
-  generated 10 m mesh foundation 508 instead of 440 segments, +2.6 · 10⁻⁴
-  in `mom`). With the default line kernel the results agree to the same
-  level: the kernel blends its exact integral into its far form between six
-  and 7.5 segment lengths (user decision D2), so no pair switches its form
-  with the round-off of the coordinates. Over 12 local shifts of 0.1 m …
-  8.8 km the impedance spreads by at most 8 · 10⁻¹⁴ (touch voltages
-  2 · 10⁻¹³), and the solve at the UTM origin lies within 5 · 10⁻¹¹ of the
-  local one (touch voltages 9.2 · 10⁻¹⁰), for strips, a mesh, a star and a
-  ring in homogeneous and two-layer soil and for two cross-layer worlds
-  (audits W2B-01 and W3A; with the one-step switch before, up to
-  5.4 · 10⁻⁷ for direct pairs and 2.6 · 10⁻⁵ in two-layer soil, where an
-  image distance equalled six segment lengths)
-  ([known limitations](known-limitations.md#current-ansatz-and-source-kernels)).
-  Worlds within 10 km of the origin are not shifted, and their electrodes
-  are discretised as before. A distributed conductor whose length exceeds
-  a whole number of pieces only by round-off gets that whole number at any
-  position since 2026.11, near the origin too: a galvanic counterpoise of
-  60 m in 10 m pieces from (3, 0, 0.5) m had 7 pieces in about a quarter of
-  all directions (829 … 876 of 3 600 in 0.1° steps, depending on how the
-  angles are formed; computed length 60.00000000000001 m) and has 6 in
-  every one, its impedance −0.30 % with `image` and −2.54 % with `mom`
-  (audits W2B-03, W2R2-08).
+  2026.11). A world at UTM coordinates gives the impedance of the same
+  world at the origin to within about 5 · 10⁻¹¹; worlds within 10 km of the
+  origin are not shifted.
 - **Mixed coordinates.** A world that mixes projected and local
   coordinates — points within 10 km of the origin and beyond 1 000 km
   from it, typically a return electrode, a cabinet or a cable end entered
   in a local system in a UTM world — is solved as given: its two groups
-  lie some 33 000 km apart, and a conductor between them is that long.
-  The local frame cannot help such a world; its round-off is that of the
-  projected world (1.5 · 10⁻¹¹ against 1.0 · 10⁻¹¹ with the point kernel),
-  but its geometry is wrong. Measured with a 12 m × 7 m outline and a 3 m
-  rod at UTM coordinates (audit W2B-04): a return rod given at local
-  (80, 15) m raises $Z_{in}$ by 0.43 % with `image` and 0.44 % with `mom`
-  (the potential next to the outline by 5.8 %); a PEN cable to a cabinet at local coordinates is 33 118 km
-  long, $Z_{in}$ = 7494 + j25 396 Ω instead of 5.39 + j0.19 Ω at 50 Hz with
-  `carson_series`, and the default `sommerfeld` earth return does not
-  finish. Since 2026.11 (user decision D5) the solve of such a world
-  warns once with `MixedCoordinatesWarning` (image family, `mom`,
-  `mom_sommerfeld`, `solve_mutual_*`), before anything is discretised, and
-  `diagnose()` reports it under `coordinates`. A world wholly in projected
-  or wholly in local coordinates is never warned about at the solve;
-  `diagnose()` reports worlds wider than 100 km as information (audit
-  W2R2-06).
+  lie some 33 000 km apart, and a conductor between them is that long. The
+  local frame cannot help such a world: its geometry is wrong. Since
+  2026.11 (user decision D5) the solve of such a world warns once with
+  `MixedCoordinatesWarning` (image family, `mom`, `mom_sommerfeld`,
+  `solve_mutual_*`), before anything is discretised, and `diagnose()`
+  reports it under `coordinates`. A world wholly in projected or wholly in
+  local coordinates is never warned about at the solve; `diagnose()`
+  reports worlds wider than 100 km as information (audit W2R2-06).
+
+??? note "Projected and mixed coordinates: measurements and audit trail"
+
+    **Round-off of projected coordinates.** Segment counts and straight
+    runs allow the round-off of the coordinates' own magnitude,
+    64 $\varepsilon |x|$ (0.46 µm at an easting of 32.6 · 10⁶ m). A world
+    moved from (0, 0) to the UTM origin (32 604 321.123 m, 5 812 345.678 m)
+    then changes its impedance by 3 · 10⁻¹¹ with the point kernel (`mom`,
+    `mom_sommerfeld`, `image` with `kernel="point"`), the effect of the
+    rounding of its vertices; up to 2026.11 an edge of a whole number of
+    segments got one more there (a generated 10 m mesh foundation 508
+    instead of 440 segments, +2.6 · 10⁻⁴ in `mom`). With the default line
+    kernel the results agree to the same level: the kernel blends its exact
+    integral into its far form between six and 7.5 segment lengths (user
+    decision D2), so no pair switches its form with the round-off of the
+    coordinates. Over 12 local shifts of 0.1 m … 8.8 km the impedance
+    spreads by at most 8 · 10⁻¹⁴ (touch voltages 2 · 10⁻¹³), and the solve at
+    the UTM origin lies within 5 · 10⁻¹¹ of the local one (touch voltages
+    9.2 · 10⁻¹⁰), for strips, a mesh, a star and a ring in homogeneous and
+    two-layer soil and for two cross-layer worlds (audits W2B-01 and W3A;
+    with the one-step switch before, up to 5.4 · 10⁻⁷ for direct pairs and
+    2.6 · 10⁻⁵ in two-layer soil, where an image distance equalled six
+    segment lengths)
+    ([known limitations](known-limitations.md#current-ansatz-and-source-kernels)).
+    Worlds within 10 km of the origin are not shifted, and their electrodes
+    are discretised as before.
+
+    **Whole numbers of pieces.** A distributed conductor whose length
+    exceeds a whole number of pieces only by round-off gets that whole
+    number at any position since 2026.11, near the origin too: a galvanic
+    counterpoise of 60 m in 10 m pieces from (3, 0, 0.5) m had 7 pieces in
+    about a quarter of all directions (829 … 876 of 3 600 in 0.1° steps,
+    depending on how the angles are formed; computed length
+    60.00000000000001 m) and has 6 in every one, its impedance −0.30 % with
+    `image` and −2.54 % with `mom` (audits W2B-03, W2R2-08).
+
+    **Mixed coordinates.** The round-off of a mixed world is that of the
+    projected world (1.5 · 10⁻¹¹ against 1.0 · 10⁻¹¹ with the point kernel),
+    but its geometry is wrong. Measured with a 12 m × 7 m outline and a 3 m
+    rod at UTM coordinates (audit W2B-04): a return rod given at local
+    (80, 15) m raises $Z_{in}$ by 0.43 % with `image` and 0.44 % with `mom`
+    (the potential next to the outline by 5.8 %); a PEN cable to a cabinet
+    at local coordinates is 33 118 km long, $Z_{in}$ = 7494 + j25 396 Ω
+    instead of 5.39 + j0.19 Ω at 50 Hz with `carson_series`, and the
+    default `sommerfeld` earth return does not finish.
 
 ## Phasors and frequency
 

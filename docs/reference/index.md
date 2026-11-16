@@ -1,10 +1,11 @@
 # Reference
 
-Look-up material: what a function takes and returns, which units and
-sign conventions apply, what a warning means, which names are
-deprecated, and what the package does not (yet) do. For the reasoning
-behind the methods see [Explanation](../explanation/index.md); to learn
-the package step by step see the [Tutorials](../tutorials/index.md).
+Look-up material for readers who know what they are looking for: what a
+function takes and returns, which units and sign conventions apply, what a
+warning means, which names are deprecated, and what the package does not
+(yet) do. For the reasoning behind the methods see
+[Explanation](../explanation/index.md); to learn the package step by step
+see the [Tutorials](../tutorials/index.md).
 
 ## API
 
@@ -34,6 +35,7 @@ classes and functions.
 - [Warnings and errors](warnings.md) — every warning and exception
   class with its cause and remedy.
 - [Known limitations](known-limitations.md) — what is approximate,
-  experimental or not implemented, with the evidence.
+  experimental or not implemented, with the evidence; the engine-by-engine
+  summary is on [choosing an engine](../explanation/engines/index.md#where-each-engine-must-not-be-used).
 - [Deprecations](deprecations.md) — deprecated names and parameters,
   their replacements and the earliest removal.
