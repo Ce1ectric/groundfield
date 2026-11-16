@@ -181,8 +181,8 @@ def source_radius(
     within the reach of another over its whole length) stay at least
     :data:`~groundfield.solver.fem._wires3d.NEAR_FACTOR` $= 1.5$ source radii
     apart, two wires end to end in line with a gap at least
-    :data:`~groundfield.solver.fem._wires3d.IN_LINE_FACTOR` $= 3$: $R$ is at
-    most their axis distance over 1.5, or their gap over 3 (audits W4R2B-03,
+    :data:`~groundfield.solver.fem._wires3d.IN_LINE_FACTOR` $= 5$: $R$ is at
+    most their axis distance over 1.5, or their gap over 5 (audits W4R2B-03,
     W4R2A-01, W4R3B-01). Wires that meet at 10° or more — junctions,
     corners, a V or a branch, a rod on a ring, a rod cut into touching
     pieces — and crossings at more than 30° are left alone (audit W4R3B-02);
@@ -193,7 +193,7 @@ def source_radius(
     receives the reason). The smallest $R$ is 2.2 radii of the thickest bare
     wire of the world, wherever that wire lies: wires that run beside each
     other closer than 3.3 such radii, axis to axis, or lie end to end closer
-    than 6.6, are refused before meshing (audit W4R3B-05).
+    than 11, are refused before meshing (audit W4R3B-05).
     """
     bare = [p.radius for p in model.pieces if p.shell == 0.0]
     a_bare = max(bare) if bare else 0.0
@@ -231,7 +231,8 @@ def source_radius(
         limit = min(limit, 0.45 * prisms_side)
     r = min(r, limit)
     close = beside_wires(model, NEAR_FACTOR * r)
-    if close is not None and close.limit < r:
+    # (a configuration exactly at its distance, to round-off, keeps R)
+    if close is not None and close.limit < r * (1.0 - 1e-9):
         r = close.limit
         where = _beside_text(model, close)
         if close.kind == "in line":
@@ -240,8 +241,8 @@ def source_radius(
             )
             why = (
                 "closer, the smoothed sources at their facing ends do not resolve "
-                "the transfer resistance between them: about twice its estimate "
-                "at 1.5 radii"
+                "the transfer resistance between them: up to 1.18 times its "
+                "estimate at 3 radii, twice at 1.5"
             )
         else:
             rule = f"wires that run beside each other stay {NEAR_FACTOR:g} source radii apart"
@@ -579,7 +580,7 @@ def solid_earth(
         Before meshing: for a wire too close to the surface or an interface,
         for wires that run beside each other closer than 1.5 times the
         smallest source radius (2.2 radii of the thickest bare wire of the
-        world; :func:`source_radius`) or lie end to end closer than 3 times
+        world; :func:`source_radius`) or lie end to end closer than 5 times
         it, for resolved concrete around wires that are
         not axis-aligned or whose metal radius the smoothed source would not
         reach beyond (a thin cover). After meshing: when the conjugate

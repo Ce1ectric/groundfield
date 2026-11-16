@@ -2089,46 +2089,68 @@ def test_w4r3b_01_stacked_rods_of_two_ports_3_cm_apart_within_their_estimates() 
     assert abs(bonded) <= est
 
 
-def test_w4r3b_01_wires_end_to_end_stay_3_source_radii_apart() -> None:
-    """Wires end to end in line keep their gap at least 3 source radii (the
-    coordinator's decision on the open point of stream fw4r3b: at gap / 1.5
-    the transfer entry R12 lay 1.5 times outside its estimate, from gap / 3
-    on inside it in every case, evidence h09): rods of a = 8 mm 10 / 15 cm
-    apart take R = 3.33 / 5 cm, 18.1 cm apart the default 6 cm; 3 cm apart
-    (R would be 1 cm) they are refused before meshing. Round 3 before the
-    decision: 6 / 6 / 6 cm and R = 2 cm for 3 cm."""
+def test_w4r3b_01_wires_end_to_end_stay_5_source_radii_apart() -> None:
+    """Wires end to end in line keep their gap at least 5 source radii (the
+    coordinator's decision on the open point of stream fw4r3b: the measured
+    R12 error falls with R / gap; at gap / 3 stacked 8 mm rods 10 … 18 cm
+    apart read 1.15 … 1.18 times the transfer estimate, at gap / 5 every
+    measured case lies within it, evidence h09c, h09d, h12): rods of a = 8 mm
+    10 / 15 / 20 cm apart take R = 2 / 3 / 4 cm, 30 cm apart the default
+    6 cm unchanged; 3 and 6 cm apart (R would be 0.6 / 1.2 cm, below 1.76 cm)
+    they are refused before meshing. Factor 3 before: 3.33 / 5 / 6 cm, and
+    6 cm apart solved at 2 cm."""
     # audit W4R3B-01 (coordinator decision on open point 1)
     from groundfield.solver.fem import _solid
 
     eng = gf.create_engine(backend="fem", segment_length=0.25)
-    for gap, expected in ((0.10, 0.10 / 3.0), (0.15, 0.05), (0.181, 0.06)):
+    for gap, expected in ((0.10, 0.02), (0.15, 0.03), (0.20, 0.04), (0.30, 0.06)):
         w = _w4r3b_stacked(gap)
         notes: list[str] = []
-        r = _solid.source_radius(
-            w, eng, wires3.world_pieces(w), [], None, None, notes=notes
-        )
+        model = wires3.world_pieces(w)
+        r = _solid.source_radius(w, eng, model, [], None, None, notes=notes)
         assert abs(r - expected) < 1e-12, gap
-        if gap < 0.18:
-            assert "lie end to end" in notes[0] and "3 source radii" in notes[0]
-    exc = _w4r3b_until_node_check(_w4r3b_stacked(0.03))
-    assert isinstance(exc, gf.BackendCapabilityError)
-    assert "lie end to end, 30 mm apart without touching" in str(exc)
-    assert "3 source radii" in str(exc)
+        if gap < 0.3:
+            assert "lie end to end" in notes[0] and "5 source radii" in notes[0]
+        else:
+            assert r == 0.06 and not notes
+    for gap, mm in ((0.03, "30 mm"), (0.06, "60 mm")):
+        exc = _w4r3b_until_node_check(_w4r3b_stacked(gap))
+        assert isinstance(exc, gf.BackendCapabilityError)
+        assert f"lie end to end, {mm} apart without touching" in str(exc)
+        assert "5 source radii" in str(exc)
+    # in line means continuing the other's axis line: two parallel strips
+    # staggered by 5 cm with ends 13 cm apart along them are not in line,
+    # nor are distant chords of two concentric rings 7.5 cm apart
+    w = gf.create_world(soil=H100)
+    gf.create_electrode(
+        w, "strip", name="g", start=(0, 0, 0.8), end=(4, 0, 0.8), wire_radius=0.005
+    )
+    gf.create_electrode(
+        w,
+        "strip",
+        name="h",
+        start=(4.13, 0.05, 0.8),
+        end=(8, 0.05, 0.8),
+        wire_radius=0.005,
+    )
+    assert wires3.beside_wires(wires3.world_pieces(w), 1.5 * R_SRC) is None
+    b = wires3.beside_wires(_w4r2b_model(_w4r2b_rings(1.075)), 1.5 * R_SRC)
+    assert b.kind == "beside"
 
 
 # audit W4R3B-01 (slow: one 3-D solve of about 470 000 nodes)
 @pytest.mark.slow
-def test_w4r3b_01_stacked_rods_6_cm_apart_within_their_estimates() -> None:
-    """Stacked rods of two electrodes 6 cm end to end take R = 2 cm: every
-    port entry, the transfer entry included, and the bonded value lie within
-    their estimates of the axisymmetric model's (measured R12 -3.5e-3 against
-    a transfer estimate of 4.3e-3, evidence h09 of stream fw4r3b). Round 3
-    before the decision (R = gap / 1.5 = 4 cm): R12 -8.78e-3 against 4.51e-3;
-    base 4f443f5 (R = 6 cm, the other rod counted whole): R12 outside too."""
+def test_w4r3b_01_stacked_rods_10_cm_apart_within_their_estimates() -> None:
+    """Stacked 8 mm rods of two electrodes 10 cm end to end take R = 2 cm:
+    every port entry, the transfer entry included, and the bonded value lie
+    within their estimates of the axisymmetric model's (the coordinator's
+    acceptance of the in-line factor). Measured at R = 2 cm: R12 -2.60e-3
+    against a transfer estimate of 4.35e-3; with factor 3 (R = 3.33 cm)
+    -5.03e-3 against 4.39e-3."""
     # audit W4R3B-01 (coordinator decision on open point 1)
     from groundfield.solver.fem import solve_fem
 
-    w = _w4r3b_stacked(0.06)
+    w = _w4r3b_stacked(0.10)
     eng = gf.create_engine(backend="fem", segment_length=0.25)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -2143,37 +2165,6 @@ def test_w4r3b_01_stacked_rods_6_cm_apart_within_their_estimates() -> None:
     assert abs(dev[0, 1]) <= r3.metadata["fem_error_estimate_transfer"]
     bonded = 1.0 / np.linalg.inv(r).sum() / (1.0 / np.linalg.inv(axi).sum()) - 1.0
     assert abs(bonded) <= est
-
-
-# audit W4R3B-01 (slow: one 3-D solve of about 310 000 nodes)
-@pytest.mark.slow
-@pytest.mark.xfail(
-    strict=True,
-    reason="open point of stream fw4r3b: the in-line factor 3 (coordinator "
-    "decision) takes R = 3.33 cm here and leaves R12 at -5.0e-3, 1.15 times the "
-    "transfer estimate; R <= gap / 5 meets it in every measured case (h09d, h12)",
-)
-def test_w4r3b_01_stacked_rods_10_cm_apart_within_their_estimates() -> None:
-    """Stacked 8 mm rods of two electrodes 10 cm end to end: every port
-    entry, the transfer entry included, and the bonded value within their
-    estimates of the axisymmetric model's (the coordinator's acceptance of
-    the in-line factor). Measured at R = 3.33 cm: R12 -5.03e-3 against a
-    transfer estimate of 4.39e-3; at R = 2 cm -2.60e-3 against 4.35e-3."""
-    # audit W4R3B-01 (coordinator decision on open point 1)
-    from groundfield.solver.fem import solve_fem
-
-    w = _w4r3b_stacked(0.10)
-    eng = gf.create_engine(backend="fem", segment_length=0.25)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        ra = solve_fem(w, eng, model="axisymmetric")
-        r3 = solve_fem(w, eng, model="3d")
-    axi = np.asarray(ra.metadata["fem_port_resistance"])
-    r = np.asarray(r3.metadata["fem_port_resistance"])
-    dev = r / axi - 1.0
-    est = r3.metadata["fem_error_estimate"]
-    assert abs(dev[0, 0]) <= est and abs(dev[1, 1]) <= est
-    assert abs(dev[0, 1]) <= r3.metadata["fem_error_estimate_transfer"]
 
 
 def _w4r3b_v_two(theta_deg, L=4.0, z=0.8, offset=0.0):

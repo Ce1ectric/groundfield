@@ -71,7 +71,7 @@ piece carries its own current, which the observer's correction cannot know
 entry with the window term; audit W4R3B-01: a collinear rod of another
 electrode 1 cm below counted whole). The 3-D model keeps wires that do not
 meet but run beside each other at least $1.5\\,R$ apart, and wires end to end
-at least $3\\,R$ (:func:`beside_wires`), so none of them reaches the window;
+at least $5\\,R$ (:func:`beside_wires`), so none of them reaches the window;
 wires that meet at less than 10° count as not meeting there. An encased wire
 meets others by its outer shell radius $r_b$ (what the soil sees): two encased
 wires of different ports whose shells touch are one conductor in the
@@ -164,11 +164,13 @@ TAPER = 2.0
 BESIDE_SINE = 0.5
 
 #: Two wires end to end in line keep their gap at least this many source
-#: radii (the coordinator's decision on audit W4R3B-01): at a gap of 1.5 R
-#: the transfer resistance of stacked rods read 1.5 … 2.0 times outside its
-#: estimate, from a gap of 3 R on inside it in every measured case (wire
-#: radii of 2, 4 and 8 mm; evidence ``h09`` of stream fw4r3b).
-IN_LINE_FACTOR = 3.0
+#: radii (the coordinator's decision on audit W4R3B-01). The error of their
+#: transfer resistance falls with R / gap: at a gap of 1.5 R stacked rods
+#: read 1.5 … 2.0 times outside its estimate, at 3 R stacked 8 mm rods
+#: 10 … 18 cm apart still 1.15 … 1.18 times, from 5 R on it lies within the
+#: estimate in every measured case (wire radii of 2, 4 and 8 mm, gaps of
+#: 3 cm … 1 m; evidence ``h09``, ``h12`` of stream fw4r3b).
+IN_LINE_FACTOR = 5.0
 
 #: Two wires that meet are left alone near where they meet only where they
 #: meet at 10° or more (this sine; the coordinator's decision on audit
@@ -434,8 +436,9 @@ class _Contacts(NamedTuple):
     j: np.ndarray
     #: Distance in m of the two axes (segments).
     distance: np.ndarray
-    #: Whether the two lie in line: the gap between an end of each runs within
-    #: 30° of both axes (:data:`BESIDE_SINE`) and is not zero.
+    #: Whether the two lie in line: the gap between an end of each is not
+    #: zero, runs within 30° of both axes (:data:`BESIDE_SINE`) and lies
+    #: within $a_i + a_j$ of both axis lines.
     in_line: np.ndarray
     #: Gap in m between the two wire surfaces (:func:`_surface_gap`).
     surface_gap: np.ndarray
@@ -527,11 +530,16 @@ def _contacts(model: "WireModel", reach: float = 0.0) -> _Contacts:
     with np.errstate(divide="ignore", invalid="ignore"):
         g = gap / d[:, None]
     ends = ((s <= 0.0) | (s >= 1.0)) & ((t <= 0.0) | (t >= 1.0))
+    # in line: end to end, the gap within 30° of both axes and within the
+    # touching distance of both axis lines (the two continue each other; not
+    # two staggered or concentric wires whose ends lie diagonally apart)
     in_line = (
         (d > TOUCH_TOL)
         & ends
         & (np.linalg.norm(np.cross(g, e_i), axis=1) < BESIDE_SINE)
         & (np.linalg.norm(np.cross(g, e_j), axis=1) < BESIDE_SINE)
+        & (np.linalg.norm(np.cross(gap, e_i), axis=1) <= total)
+        & (np.linalg.norm(np.cross(gap, e_j), axis=1) <= total)
     )
     surface = _surface_gap(gap, e_i, radius[i], e_j, radius[j])
     weight = np.clip(1.0 - surface / ((TAPER - 1.0) * total), 0.0, 1.0)
