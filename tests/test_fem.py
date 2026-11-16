@@ -1399,3 +1399,97 @@ def test_a_ring_on_an_interface_and_a_rod_tip_on_it_survive_round_off() -> None:
         for h in (0.3, 0.1 + 0.2, 0.3 + 1e-9)
     ]
     assert max(tips) / min(tips) - 1.0 < 1e-5, tips
+
+
+# ---------------------------------------------------------------------
+# Mesh lines picometres apart (audit W4R3A-01)
+# ---------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("depth", "gap", "opts"),
+    [
+        (0.3, 1.2e-12, {}),  # base: +35 %, estimate 8.3e-2
+        (0.3, 1.5e-12, {}),  # +35 %
+        (0.3, -1.0e-12, {}),  # RuntimeError: Factor is exactly singular
+        (0.3, -1.5e-12, {}),  # +42 %
+        (0.3, 3.5e-12, {"refinement": 1}),  # +34 %
+        (2.0, 3.0e-12, {}),  # -2.7 %, estimate 5.6e-3
+    ],
+)
+def test_w4r3a_01_a_ring_axis_picometres_off_an_interface(depth, gap, opts) -> None:
+    """Auditor W4R3A's test. The round-off fix of stream fw4r2a merged mesh
+    features within 1e-12 of max(1 m, x), but the interface cut still
+    snapped every node within 1e-12 of the interface onto it: a feature just
+    beyond the merge tolerance, or a line that bisection put between it and
+    the interface, was snapped onto the plane and left a row of zero-area
+    cells, silently (+35 ... +44 %, a singular factor, or -2.7 % at 2 m)."""
+    # audit W4R3A-01
+    soil = lambda h: _two(100.0, 100.0 / 1.3, h)  # noqa: E731
+    kw = {"options": {"fem": opts}} if opts else {}
+    on = _z(_ring_world(soil(depth), r0=0.5, depth=depth, radius=0.01), **kw)
+    off = _z(_ring_world(soil(depth + gap), r0=0.5, depth=depth, radius=0.01), **kw)
+    assert abs(off / on - 1.0) < 1e-5, (on, off)
+
+
+def test_w4r3a_01_features_within_a_nanometre_are_one_line() -> None:
+    """Features closer than 1e-9 of max(1 m, x) are one line; lines farther
+    apart stay two, and bisection keeps them far above the 1e-12 snap
+    tolerance of the interface cut at every level that fits in memory."""
+    # audit W4R3A-01
+    from groundfield.solver.fem._mesh import _SAME_LINE, bisect, graded_lines
+
+    assert _SAME_LINE >= 1e-9
+    inf = math.inf
+    lines = graded_lines(
+        [(0.0, inf), (0.3, 1e-3), (0.3 + 0.9e-9, 1e-3), (2.0, 1e-3)]
+        + [(2.0 + 1.8e-9, 1e-3), (5.0, inf)],
+        0.2,
+    )
+    assert int(np.sum(np.abs(lines - 0.3) < 1e-8)) == 1
+    assert int(np.sum(np.abs(lines - 2.0) < 1e-8)) == 1
+    two = graded_lines([(0.0, inf), (0.3, 1e-3), (0.3 + 1.2e-9, 1e-3), (1.0, inf)], 0.2)
+    assert int(np.sum(np.abs(two - 0.3) < 1e-8)) == 2
+    assert np.diff(bisect(two, 7)).min() > 1e-12 * 2**3
+
+
+@pytest.mark.parametrize("gap", [0.0, 5.6e-17, 1.2e-12, -1.2e-12, 0.6e-9, -0.9e-9])
+def test_w4r3a_01_an_interface_is_cut_at_its_own_mesh_line(gap) -> None:
+    """The interface is cut at the mesh line it became, not at its depth: no
+    triangle has vertices on both sides of that line, no node lies a sliver
+    away from it, and the layers are counted from the line."""
+    # audit W4R3A-01
+    from groundfield.solver.fem._mesh import RingGeometry
+
+    ring = RingGeometry(0.5, 0.3, 0.01, 0.03, near_interface=True)
+    for level in (0, 1):
+        mesh = _mesh([], [ring], [0.3 + gap], level=level)
+        (line,) = mesh.interfaces
+        assert line in mesh.z_lines and abs(line - (0.3 + gap)) <= 1e-9
+        dz = mesh.nodes[mesh.triangles, 1] - line
+        assert not ((dz > 0).any(axis=1) & (dz < 0).any(axis=1)).any()
+        off = np.abs(mesh.nodes[:, 1] - line)
+        assert off[off > 0.0].min() > 1e-7, off[off > 0.0].min()
+        centroid = mesh.nodes[mesh.triangles, 1].mean(axis=1)
+        assert (mesh.layer == (centroid > line)).all()
+
+
+def test_w4r3a_01_a_triangle_of_zero_area_is_an_internal_error() -> None:
+    """A row of zero-area cells made the factor singular or the result wrong
+    without notice; the mesher now refuses it as an internal error. Forced
+    here with a tensor line 5e-13 m off the interface, which the cut snaps
+    onto the plane."""
+    # audit W4R3A-01
+    from groundfield.solver.fem._mesh import (
+        MeshParameters,
+        RingGeometry,
+        build_mesh,
+        mesh_lines,
+    )
+
+    ring = RingGeometry(0.5, 0.3, 0.01, 0.03, near_interface=True)
+    params = MeshParameters()
+    s_lines, z_lines = mesh_lines([], [ring], [0.3], 3000.0, params, 0)
+    z_lines = np.sort(np.append(z_lines, 0.3 + 5e-13))
+    with pytest.raises(RuntimeError, match="zero or negative area"):
+        build_mesh([], [ring], [0.3], 3000.0, params, 0, lines=(s_lines, z_lines))
