@@ -85,7 +85,8 @@ __all__: list[str] = []
 #: (``keep`` of :func:`graded_lines`); the geometry moves only where two
 #: physical features are this close, by at most 1e-9 of max(1 m, x): a rod
 #: end and an interface (a rod tip on 1000 / 30 Ohm m moves by 1.9e-6 per
-#: nanometre), a ring axis and an interface (1e-9 per nanometre), two
+#: nanometre for a 4.5 m rod, 8e-6 for a 0.2 m one), a ring axis and an
+#: interface (1e-9 per nanometre), two
 #: interfaces (the layer between them vanishes). No merge moves an interface
 #: relative to a ring wire, which can be that sensitive: a wire touching a
 #: 1000 times more conductive layer moves by 2.6e-3 per nanometre of the

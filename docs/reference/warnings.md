@@ -138,8 +138,8 @@ solid wire next to a layer interface:
   end of another rod — a rod split at the interface into two pieces, the
   usual way to give each layer its own piece — has no free end face and is
   not reported.
-- **Horizontal wires** (since 2026.11, audits W4A-07, W4B-02 and
-  W4R2A-04). Every
+- **Horizontal wires** (since 2026.11, audits W4A-07, W4B-02, W4R2A-04
+  and W4R3A-02). Every
   electrode but a rod, and the leaking pieces of a galvanic distributed
   conductor, whose axis lies within the reach of a contrasting interface.
   Next to a more conductive layer the current crowds to the wire's near
@@ -148,28 +148,39 @@ solid wire next to a layer interface:
   proximity correction agrees to 5e-4) a ring of $a$ = 5 mm over a layer
   33 times more conductive reads +0.59 % at 4 radii, +1.2 % at 3, +3.6 % at
   2, +8.6 % at 1.5 and +32 % at 1.1 radii, and +89 % when the interface
-  cuts the wire; over a more resistive layer at most +1.4 %. The reach is
-  the distance of the wire axis from the interface inside which the thin
-  wire is 1 % or more off: the largest of six ring geometries ($r_0/a$ =
-  18 … 400: rings of 0.5 … 5 m at 0.3 … 2 m depth, $a$ = 5 … 55 mm, the
-  interface below and above; a 55 mm wire on a 1 m ring is the widest at
-  every contrast), rounded up to 0.1 $a$, plus 0.1 $a$ for the contrasts
-  between the nodes:
+  cuts the wire; under a more resistive layer up to +2.6 % (a 55 mm wire on
+  a 1 m ring at 1.01 radii, contrast 1000). The reach is the distance of
+  the wire axis from the interface inside which the thin wire (converged in
+  its segment length) is 1 % or more off: the largest of five ring
+  geometries ($r_0/a$ = 18 … 400: rings of 0.5 … 5 m at 0.3 … 2 m depth,
+  $a$ = 5 … 55 mm; the more conductive layer below the wire, for the 2 m
+  ring also above it; the more resistive layer below and above every one;
+  a 55 mm wire on a 1 m ring is the widest at every contrast), rounded up
+  to 0.1 $a$, plus 0.1 $a$ for the contrasts between the nodes:
 
   | contrast of the layers | 1.4 | 2 | 3 | 5.5 | 10 | 18 | 33 | 100 | 1000 |
   |---|---|---|---|---|---|---|---|---|---|
-  | more conductive beyond | 1.0 $a$ | 1.3 $a$ | 1.9 $a$ | 2.7 $a$ | 3.3 $a$ | 3.7 $a$ | 3.9 $a$ | 4.1 $a$ | 4.2 $a$ |
-  | more resistive beyond | 1.0 $a$ | (1.0 $a$) | 1.0 $a$ | (1.1 $a$) | 1.2 $a$ | (1.25 $a$) | 1.3 $a$ | (1.33 $a$) | 1.4 $a$ |
+  | more conductive beyond | 1.0 $a$ | 1.3 $a$ | 1.9 $a$ | 2.7 $a$ | 3.3 $a$ | 3.7 $a$ | 3.9 $a$ | 4.1 $a$ | 4.3 $a$ |
+  | more resistive beyond | 1.0 $a$ | (1.14 $a$) | 1.3 $a$ | (1.60 $a$) | 1.9 $a$ | (2.05 $a$) | 2.2 $a$ | 2.2 $a$ | 2.3 $a$ |
 
   (log-linear in between, values in brackets interpolated; held beyond
-  1000; 1.0 $a$: only a wire that the interface cuts.) Checked at the
-  nodes and at the contrasts 1.3 … 1.9, 2.5, 4, 7, 14, 25, 50 and 300:
-  of 2348 measured distances none with the thin wire 1 % or more off lies
-  outside the reach, the largest error outside it is +0.94 %. Below a
-  contrast of 1.4 nothing is reported: a cut wire is at most 0.77 % off at
-  1.3 (1.04 % at 1.5). Up to audit W4R2A-04 the table came from four
-  geometries (0.2 … 0.4 $a$ short of the thick wire on the 1 m ring) and
-  started at a contrast of 2, below which a cut wire read up to −1.46 %.
+  1000, and at 1.0 $a$ down to a contrast of 1.3; 1.0 $a$: only a wire
+  that the interface cuts.) Checked at the nodes and between them
+  (conductive 1.3 … 1.9, 2.5, 4, 7, 14, 25, 50, 300; resistive 2, 5.5, 18,
+  300): of 2348 conductive distances (the thin wire at one segment length)
+  and 2453 resistive ones (converged in it) none with the thin wire 1 % or
+  more off lies outside the reach, the largest errors outside it are
+  +0.94 % and +0.93 %; converged, the thick wire's conductive 1 % distances
+  lie 0.004 … 0.17 $a$ inside the reach (the node at 1000 is 4.3 $a$ for
+  the 4.15 $a$ at 300). Below a contrast of 1.3 nothing is reported: a cut
+  wire is at most +0.96 % off at 1.3 and +1.06 % at 1.35 (the thick wire
+  cut 0.5 $a$ below its axis by a more resistive layer above it). Up to
+  audit W4R2A-04 the table came from four geometries (0.2 … 0.4 $a$ short
+  of the thick wire on the 1 m ring) and started at a contrast of 2, below
+  which a cut wire read up to −1.46 %; up to audit W4R3A-02 its resistive
+  side was measured above the wire for the thin ring only (the thick wire
+  1 % off up to 0.74 $a$ beyond it: +1.75 % at 1.3 $a$ under a 33 times more
+  resistive layer, unreported) and it started at 1.4 (+1.16 % there).
   The table is measured on rings with $r_0/a \ge 18$; a thicker wire on a
   smaller ring is not covered. A piece of a galvanic distributed conductor
   counts as horizontal while its slope $|e_z|$ is at most 0.1 (5.7°): a
