@@ -113,6 +113,7 @@ def test_w3r2a_05_the_transverse_distance_is_exact_for_long_wires_only() -> None
 
 # audit W3R2A-07
 def test_w3r2a_07_the_golden_declaration_quotes_the_measured_move() -> None:
-    text = (ROOT / "tests/golden/expected_changes/w3xl.toml").read_text("utf-8")
+    declarations = ROOT / "tests/golden/expected_changes/released/2026.11.0"
+    text = (declarations / "w3xl.toml").read_text("utf-8")
     assert "line_img2_ring_rods_within_layer 3.19e-7" in text
     assert "line_img2_ring_rods_within_layer 3.4e-7" not in text

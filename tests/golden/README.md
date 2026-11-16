@@ -19,7 +19,12 @@ cycle. They answer one question for every change of the code base:
 
 The stored values are not regenerated during a development cycle, so
 the comparison always reports every change relative to the last
-release. The current baseline is **v0.15.0** (commit `c97b067`).
+release. The current baseline is **v2026.11.0**, generated on macOS
+arm64 from commit `082141d`, the code of 2026.11.0 before its version
+bump (so its manifest still reads `0.15.0`). The declarations of the
+2026.11.0 cycle, which explain every change against the v0.15.0
+baseline, are kept in `expected_changes/released/2026.11.0/`; the
+harness does not read them.
 
 ## Comparison
 
@@ -35,8 +40,7 @@ release. The current baseline is **v0.15.0** (commit `c97b067`).
 | `changed` | larger deviation, or a shape / dtype / string change |
 | `missing` / `new` | quantity disappeared / appeared |
 
-`GF_GOLDEN_STRICT=1` treats `within_tol` as a failure. Against the
-committed baseline (last release) a pure refactor that comes after a
+Against the committed baseline (last release) a pure refactor that comes after a
 round-off change can no longer be bit-identical; snapshot the branch
 you start from and compare against that instead:
 
@@ -105,4 +109,5 @@ feeds the numbers-change block of the CHANGELOG.
   default.
 * A new baseline is stored only at release time:
   `generate --force --reason "baseline vYYYY.MM.MICRO"`, after which
-  the declarations in `expected_changes/` are removed.
+  the declarations in `expected_changes/` move to
+  `expected_changes/released/<version>/`.
