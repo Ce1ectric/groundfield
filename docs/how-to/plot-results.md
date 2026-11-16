@@ -1,12 +1,20 @@
 # Plot results
 
+This guide draws the standard figures of a grounding study — the
+geometry, the surface potential, profiles and cross-sections, the current
+sharing and sweeps — with the plot helpers of groundfield. Read it when you
+need a first look at a result or a figure for a report.
+
 All plot helpers return matplotlib objects (a `Figure` or an `Axes`) and
 are available as flat names (`gf.plot_world`) and in the `gf.plot`
 namespace. Potential plots draw the real part of the complex potential by
 default and say so in the label; pass `component="imag"`, `"abs"` or
 `"phase"` for the other parts.
 
-## A result to plot
+**Prerequisites:** matplotlib (part of the core install); `plot_world_3d`
+draws with matplotlib as well.
+
+## 1. Solve a world to plot
 
 A substation earth (ring and four rods) measured with an auxiliary
 electrode 200 m east and a voltage probe at 61.8 %, built with the layout
@@ -31,7 +39,7 @@ assert abs(layout.measured_grounding_impedance(result) - result.input_impedance(
 assert layout.verify_current_balance(result)["ok"]
 -->
 
-## Geometry
+## 2. Plot the geometry
 
 ```python
 fig = gf.plot_world(world, title="Top view")  # plane="xy" (default)
@@ -45,7 +53,7 @@ from matplotlib.figure import Figure
 assert isinstance(fig, Figure) and isinstance(fig_side, Figure)
 -->
 
-## Potential on the surface
+## 3. Map the surface potential
 
 ```python
 fig = gf.plot_surface_potential(result, world, extent=(-20.0, 220.0, -40.0, 40.0), n=120)
@@ -68,7 +76,7 @@ fig = layout.plot_surface_potential(result, world, padding_m=30.0, n=120, levels
 fig_log = layout.plot_surface_potential(result, world, padding_m=30.0, n=120, log=True, cmap="viridis")
 ```
 
-## Profiles and cross-sections
+## 4. Draw profiles and cross-sections
 
 A profile along a line at several depths, the radial decay around an
 electrode, and a vertical cross-section through the measurement axis:
@@ -82,7 +90,7 @@ fig_xz = gf.plot_potential_contour(result, world=world, plane="xz", y=0.0, exten
 `plane="xz"` holds `y` fixed, `plane="xy"` holds `z` fixed (depth
 positive downwards). Without `extent` the window follows the electrodes.
 
-## Where the current goes
+## 5. Show where the current goes
 
 ```python
 fig = gf.plot_current_sharing(result, world, by="electrode")
@@ -94,7 +102,11 @@ print(table[["name", "abs_I", "share_of_cluster_pct"]].head())
 assert abs(table["I_re"].sum()) < 1e-9  # the test current returns through the auxiliary electrode
 -->
 
-## Sweeps and convergence
+**How to check it:** the electrode currents of a three-pole set-up add up
+to zero, because the test current returns through the auxiliary
+electrode; the hidden check of this page asserts it.
+
+## 6. Plot sweeps and convergence studies
 
 `gf.plot_sweep_lines` and `gf.plot_sweep_heatmap` take the table of
 `gf.sweep` (see [Run sweeps and Monte Carlo studies](sweeps-and-monte-carlo.md));
@@ -119,3 +131,12 @@ assert list(df["segment_length_m"]) == [0.5, 0.25, 0.125]
 - For publication plots, use the helpers for a first look and then plot
   the numbers yourself: `result.potential(points)` returns the complex
   potential at any `(M, 3)` array of points.
+
+## See also
+
+- Tutorial [T07](../tutorials/T07_fall_of_potential_measurement.ipynb):
+  the fall-of-potential measurement behind the example world.
+- [Export to CSV, VTK and ParaView](export-csv-vtk-paraview.md): the same
+  quantities as files, for other tools.
+- [Postprocess API](../reference/api/postprocess.md): every plot helper
+  with its options.

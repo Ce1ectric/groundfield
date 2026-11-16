@@ -1,11 +1,18 @@
 # Work with OpenStreetMap offline
 
+This guide builds and uses an on-disk cache of OpenStreetMap building
+footprints, so that a study runs without network access and reads the same
+map every time. Read it before you build a network from real buildings, in
+CI, behind a firewall or on the road.
+
 `groundfield.geo` reads building footprints from OpenStreetMap through the
-Overpass API (extra `geo`). Every answer is cached on disk, and a cached
-answer is used without any network access. That makes studies
-reproducible (the map changes, your cache does not) and lets you work
-where Overpass is not reachable — in CI, behind a firewall, or on the
-road.
+Overpass API. Every answer is cached on disk, and a cached answer is used
+without any network access. That makes studies reproducible: the map
+changes, your cache does not.
+
+**Prerequisites:** the `geo` extra (requests, shapely, pyproj; see
+[Install the optional extras](install-extras.md)). Only step 1 needs the
+network.
 
 ## How the cache works
 
@@ -17,7 +24,7 @@ for the file `<sha256 of the query>.json` in `cache_dir` (default
 answer, it is used; otherwise the query is sent and the answer is written
 there atomically. `force_refresh=True` sends the query again.
 
-## Prepare a cache while you are online
+## 1. Prepare a cache while you are online
 
 Run the query once with an explicit cache directory and keep the
 directory with your study (commit it, or copy it to the offline machine):
@@ -34,7 +41,7 @@ footprints, projector = gf.query_and_project(51.9136, 10.8432, 150.0, cache_dir=
 Every later call with the same centre, radius and timeout reads
 `osm_cache/` and never touches the network.
 
-## Use an Overpass answer you got elsewhere
+## 2. Or put an Overpass answer you got elsewhere into the cache
 
 An answer saved from another tool (for example the Overpass web
 front-end, with the same query) can be put into the cache under the name
@@ -95,11 +102,12 @@ assert [fp.osm_id for fp in footprints] == [1, 2]
 assert 90.0 < footprints[0].area_m2() < 120.0  # about 10 m x 10 m
 -->
 
-The cache key contains the timeout (`timeout_s`) and, for other
-endpoints than the default, the endpoint URL: use the same values offline
-as online.
+**What you get:** the two footprints of the cached answer, with their
+OSM ids, building use and area, read without any network access. The
+cache key contains the timeout (`timeout_s`) and, for other endpoints than
+the default, the endpoint URL: use the same values offline as online.
 
-## Filter the buildings
+## 3. Filter the buildings
 
 Every `building=*` way is a footprint by default, garages and sheds
 included. Buildings without electrical service usually have no
@@ -119,7 +127,7 @@ print([fp.building_use for fp in kept])
 assert [fp.building_use for fp in kept] == ["house"]
 -->
 
-## Coordinates
+## 4. Convert coordinates
 
 Footprints are projected into local east/north metres around the query
 centre. The returned `Projector` converts in both directions, so you can
@@ -146,3 +154,12 @@ Requests are bounded: the radius is at most 10 km, the timeout an
 integer of at most 900 s, the response is capped in size, and malformed
 answers or Overpass error remarks raise `OverpassError` and are never
 cached. A cache file that cannot be read is fetched again with a warning.
+
+## See also
+
+- Tutorial [T06](../tutorials/T06_tn_network_synthetic_and_osm.ipynb): a
+  whole TN network from a cached answer.
+- [ADR-0011](../adr/0011-osm-building-footprints.md): the footprint data
+  model, the projection, the Overpass query and its cache.
+- API: [Geo / OSM](../reference/api/geo.md) and the
+  [generators](../reference/api/generators.md).

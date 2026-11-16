@@ -1,12 +1,21 @@
 # Run sweeps and Monte Carlo studies
 
+This guide computes the impedance of many variants of one world — a grid of
+parameter values, or many realisations of a stochastic network — with one
+call of `gf.sweep`, and spreads the work over several processes. Read it
+when a study needs more than a handful of solves.
+
 `gf.sweep` builds one world per combination of parameter values, solves
 it, and returns a long-format pandas table with one row per combination
 and frequency. The same function runs a Monte Carlo study when one of the
-axes is the seed of a stochastic generator, and it can spread the work
-over several processes.
+axes is the seed of a stochastic generator.
 
-## A parameter grid
+**Prerequisites:** the basic workflow (soil → world → electrodes → source →
+engine → `solve`) of tutorial
+[T01](../tutorials/T01_first_grounding_impedance.ipynb); pandas is part of
+the core install.
+
+## 1. Sweep a parameter grid
 
 Write a *world factory* — a function that takes the swept parameters as
 keyword arguments and returns a fresh world — and pass the values per
@@ -38,12 +47,17 @@ assert np.allclose(table.div(table.index.to_series(), axis=0).std(axis=0), 0.0, 
 assert len(df) == 9 and df.attrs["impedance_quantity"] == "input"
 -->
 
-The columns are the axis names, `frequency_Hz` and the response
-(`Z_re`, `Z_im`, `abs_Z`, `arg_Z_deg`, `U_E_*`, `I_*`). For a quick look:
+**What you get:** one row per combination and frequency. The columns are
+the axis names, `frequency_Hz` and the response (`Z_re`, `Z_im`, `abs_Z`,
+`arg_Z_deg`, `U_E_*`, `I_*`). In homogeneous soil the impedance of every
+rod is proportional to $\rho$, which the hidden check of this page
+asserts. For a quick look:
 
 ```python
 fig = gf.plot_sweep_lines(df, x="rho", color="length", log_x=True)
 ```
+
+## 2. Let the discretisation follow the parameters
 
 When the discretisation should depend on the parameters, pass a function
 that returns the engine for a combination instead of an engine:
@@ -61,7 +75,7 @@ print(df_ds[["length", "abs_Z"]])
 assert list(df_ds["length"]) == [1.5, 6.0]
 -->
 
-## Monte Carlo over a stochastic network
+## 3. Monte Carlo over a stochastic network
 
 A `TnNetworkGenerator` draws a whole realisation from its seed, so the
 seed is a natural sweep axis. Put the factory into a module (a `.py` file
@@ -107,10 +121,13 @@ repeat = engine.solve(network(7)).input_impedance()[0]
 assert abs(repeat - mc.loc[mc["seed"] == 7, "abs_Z"].item()) < 1e-12 * abs(repeat)
 -->
 
-Record the seed range with the results: any single realisation can be
-rebuilt from its seed (tutorial [T10](../tutorials/T10_reproducible_studies.ipynb)).
+**What you get:** the distribution of the impedance over 16
+realisations, here as `describe()` and the 5 % / 95 % quantiles. Record
+the seed range with the results: any single realisation can be rebuilt
+from its seed (tutorial [T10](../tutorials/T10_reproducible_studies.ipynb)),
+and the hidden check repeats realisation 7 to 1e-12.
 
-## Run in parallel
+## 4. Run in parallel
 
 `n_jobs` spreads the combinations over worker processes (`-1`: one per
 CPU). The rows come back in the order of the serial run and are
@@ -128,9 +145,11 @@ pd.testing.assert_frame_equal(parallel, mc, check_exact=True)
 print("serial and parallel runs are identical:", len(parallel), "rows")
 ```
 
-Starting the workers costs about a second each, so parallel runs pay off
-for sweeps whose single solves take longer than that. Warnings raised in
-the workers are re-issued in the calling process.
+**How to check it:** `pd.testing.assert_frame_equal` above compares the
+parallel table with the serial one bit for bit. Starting the workers costs
+about a second each, so parallel runs pay off for sweeps whose single
+solves take longer than that. Warnings raised in the workers are re-issued
+in the calling process.
 
 ## Summary
 
@@ -138,3 +157,16 @@ the workers are re-issued in the calling process.
   frequency; `quantity=` selects the impedance.
 - A seed axis turns a stochastic generator into a Monte Carlo study.
 - `n_jobs=` parallelises; keep the factory in an importable module.
+
+## See also
+
+- Tutorial [T03](../tutorials/T03_interconnected_systems_and_impedances.ipynb):
+  the input, cluster and electrode impedances that `quantity=` selects.
+- Tutorial [T06](../tutorials/T06_tn_network_synthetic_and_osm.ipynb):
+  the TN network generator used for the Monte Carlo study.
+- [Plot results](plot-results.md): `plot_sweep_lines` and
+  `plot_sweep_heatmap`.
+- [Speed up large studies](speed-up-large-studies.md): what to change
+  before you parallelise.
+- API: [`sweep`](../reference/api/postprocess.md) and the
+  [generators](../reference/api/generators.md).

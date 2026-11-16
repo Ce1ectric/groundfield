@@ -1,14 +1,18 @@
 # Export to CSV, VTK and ParaView
 
-`groundfield.io` writes results as plain tables (CSV) and as legacy VTK
-files for 3-D viewers such as ParaView. Every CSV starts with
-`# key: value` lines that record where the numbers come from (groundfield
-version, UTC time, backend, frequency and the solve provenance), and no
-writer overwrites an existing file unless you pass `overwrite=True`.
-For complete, lossless result files use `gf.save_result`
-(tutorial [T10](../tutorials/T10_reproducible_studies.ipynb)).
+This guide writes the numbers of a solve to CSV tables for spreadsheets
+and other tools, and the geometry and the surface potential to VTK files
+for a 3-D viewer such as ParaView. Read it when results have to leave
+Python.
 
-## A result to export
+`groundfield.io` writes plain tables (CSV) and legacy VTK files. Every CSV
+starts with `# key: value` lines that record where the numbers come from
+(groundfield version, UTC time, backend, frequency and the solve
+provenance), and no writer overwrites an existing file unless you pass
+`overwrite=True`. For complete, lossless result files use `gf.save_result`
+instead (tutorial [T10](../tutorials/T10_reproducible_studies.ipynb)).
+
+## 1. Solve the world to export
 
 ```python
 from pathlib import Path
@@ -28,7 +32,7 @@ out = Path("export")
 out.mkdir(exist_ok=True)
 ```
 
-## Tables
+## 2. Write and read tables
 
 ```python
 gf.save_cluster_impedances_csv(result, out / "clusters.csv")
@@ -47,8 +51,10 @@ profile, _ = gf.read_csv_with_provenance(out / "profile.csv")
 assert len(profile) == 2 * 101  # one row per point and frequency
 -->
 
-`gf.read_csv_with_provenance` returns the table and the header lines as a
-dictionary. The potential path holds one row per point and frequency
+**What you get:** three CSV files in `export/`, and the electrode table
+read back with its header. `gf.read_csv_with_provenance` returns the table
+and the header lines as a dictionary; the hidden check asserts the backend
+and frequency of the header and that the current shares add up to 100 %. The potential path holds one row per point and frequency
 (columns `s`, `x`, `y`, `z`, `frequency_Hz`, `phi_re`, `phi_im`,
 `abs_phi`). Other tools read the files with
 `pandas.read_csv(path, comment="#")`; write a plain CSV without the header
@@ -63,7 +69,7 @@ except FileExistsError as exc:
 gf.save_cluster_impedances_csv(result, out / "clusters.csv", overwrite=True)
 ```
 
-## VTK files for ParaView
+## 3. Write VTK files
 
 Two writers produce legacy VTK files (ASCII, double precision):
 
@@ -86,7 +92,10 @@ assert lines[0].startswith("# vtk DataFile") and lines[2] == "ASCII"
 assert any("double" in line for line in lines[:15])
 -->
 
-In ParaView:
+**What you get:** two ASCII VTK files; the header lines printed above
+start with `# vtk DataFile`.
+
+## 4. Open them in ParaView
 
 1. *File → Open* both files, *Apply*.
 2. The coordinates are those of groundfield: $z$ is the depth and points
@@ -97,3 +106,12 @@ In ParaView:
    geometry for visible wires.
 4. For several frequencies, export one field file per
    `frequency_index`.
+
+## See also
+
+- Tutorial [T10](../tutorials/T10_reproducible_studies.ipynb): lossless
+  result files and reproducible studies.
+- [Plot results](plot-results.md): the same quantities as matplotlib
+  figures.
+- API: [IO](../reference/api/io.md) and
+  [result files](../reference/api/results-io.md).

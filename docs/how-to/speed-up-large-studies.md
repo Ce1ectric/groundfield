@@ -1,12 +1,21 @@
 # Speed up large studies
 
+This guide makes large solves — networks of many houses, fine
+discretisations, inductive conductors at many frequencies — fast enough,
+with the levers in the order in which they usually matter, and shows how to
+measure each one on your own machine. Read it before a study whose single
+solves take more than a few seconds.
+
 The cost of a solve grows with the number of wire segments $N$ (the
 reaction matrix has $N^2$ entries and the solve is a dense $N \times N$
 system), with the number of inductive conductor segments, and with the
-earth-return model. This guide lists the levers in the order in which
-they usually matter. Measured run times of this release are on the
-[performance page](../explanation/performance.md); the recipes below let you
-measure on your own machine.
+earth-return model. Measured run times of this release are on the
+[performance page](../explanation/performance.md).
+
+**Prerequisites:** the basic workflow of tutorial
+[T01](../tutorials/T01_first_grounding_impedance.ipynb). All blocks of this
+page build on the test network of step 1 (a ring station and six house
+grids joined by a PEN cable).
 
 ## 1. Count the segments before you solve
 
@@ -60,8 +69,9 @@ counts = [gf.expected_segments(world, gf.create_engine(segment_length=ds))["tota
 assert counts[0] < counts[1] < counts[2]
 -->
 
-Halving the segment length doubles $N$ and roughly quadruples the matrix
-work. A world above the engine's limit is rejected with
+**What you get:** the segment count per segment length and the limit it
+is checked against. Halving the segment length doubles $N$ and roughly
+quadruples the matrix work. A world above the engine's limit is rejected with
 `ResourceLimitError` before anything large is allocated.
 
 ### Raise or lower the resource limit
@@ -146,6 +156,10 @@ print(f"1.0 m: {z[1.0]:.5f} Ohm, 0.5 m: {z[0.5]:.5f} Ohm, change {z[0.5] / z[1.0
 assert abs(z[0.5] / z[1.0] - 1.0) < 1e-3
 -->
 
+**How to check it:** the change printed above is the convergence of the
+input impedance; the hidden check of this page asserts that it is below
+1e-3 for this network.
+
 ## 3. Kernel and compiled extension
 
 The exact line-source kernel (default of the image family) costs a few
@@ -163,17 +177,26 @@ for kernel in (None, "point"):
     print(f"kernel {result.metadata['kernel']:5s}: {elapsed:.3f} s, Z_in = {result.input_impedance()[0].real:.5f} Ohm")
 ```
 
+**What you get:** the time and the input impedance per kernel;
+`result.metadata["kernel"]` records the kernel a result was solved with.
+On this network the point kernel reads 0.6 % below the line kernel (on
+single rods, rings and strips 1–2 %, at every segment length; see
+[Kernels](../explanation/kernels.md)). In a fresh process the first
+line-kernel solve also compiles the numba kernels, about a second once;
+the earlier blocks of this page have done that already, so time a second
+solve when you run the block on its own.
+
 ## 4. Many excitations: one matrix instead of many solves
 
 When you need the response to an injection at *each* of many earth
 electrodes — the mutual grounding-impedance matrix $Z_G$ of a site —
 `gf.solve_mutual_matrix` assembles the reaction matrix once and solves
 all excitations with it, instead of one full solve per electrode. Its
-off-diagonal is the galerkin reaction of the leakage distributions,
+off-diagonal is the Galerkin reaction of the leakage distributions,
 which is reciprocal and reproduces a solve of the clusters joined by
 branches; probe points are not needed (`offdiag="probe"` samples the
-potential at points instead, the definition up to 0.15.0). It expects a
-world with the earth electrodes only (no cables between them):
+potential at points instead). It expects a world with the earth electrodes
+only (no cables between them):
 
 ```python
 electrodes_only = network()
@@ -202,6 +225,10 @@ assert np.max(np.abs(np.diag(z_g) - np.array(diagonal))) < 1e-9
 assert np.allclose(z_g, z_g.T)
 -->
 
+**How to check it:** the diagonal of $Z_G$ equals the cluster impedances
+of the single solves (the printed difference; the hidden check asserts
+below 1e-9 Ω), and $Z_G$ is symmetric.
+
 ## 5. Frequencies and the earth-return model
 
 - Put all frequencies into **one** engine: the soil problem is assembled
@@ -209,11 +236,10 @@ assert np.allclose(z_g, z_g.T)
   for the whole frequency set at once.
 - The Sommerfeld correction of inductive conductors is interpolated
   from tables per pair of depth groups by default
-  (`sommerfeld_assembly="tabulated"`, since 2026.11) instead of
-  integrated per segment pair (`"exact"`, the default up to 0.15.0).
-  The two agree to far below the accuracy of the model, and the tables
-  are the closer of the two to a converged reference; compare them on
-  your network:
+  (`sommerfeld_assembly="tabulated"`) instead of integrated per segment
+  pair (`"exact"`). The two agree to far below the accuracy of the model,
+  and the tables are the closer of the two to a converged reference;
+  compare them on your network:
 
 ```python
 inductive = network(inductive=True)
@@ -252,3 +278,25 @@ to row blocks for very large matrices, and evaluate `result.potential`
 on large grids in blocks, so memory grows with $N^2$ for the reaction
 matrix itself and not with the number of field points. If memory is the
 limit, reduce $N$ (segment length, fewer electrodes per solve) first.
+
+??? note "Changes since 0.15.0"
+
+    - `sommerfeld_assembly="tabulated"` is the default since 2026.11; up
+      to 0.15.0 the default was the per-pair assembly `"exact"`.
+    - `solve_mutual_matrix` takes the Galerkin reaction as its
+      off-diagonal since 2026.11; `offdiag="probe"`, which samples the
+      potential at probe points, was the definition up to 0.15.0.
+    - The default kernel of the image family is the exact line source
+      since 2026.11 (ADR-0015); `kernel="point"` reproduces the numbers
+      of 0.15.0.
+
+## See also
+
+- [Performance and scaling](../explanation/performance.md): measured run
+  times and memory of this release.
+- Tutorial [T09](../tutorials/T09_choosing_an_engine_and_convergence.ipynb):
+  the convergence study behind step 2.
+- [Run sweeps and Monte Carlo studies](sweeps-and-monte-carlo.md): parallel
+  sweeps.
+- [Diagnostics API](../reference/api/diagnostics.md): `HARD_LIMIT`,
+  `SOFT_LIMIT`, `check_segment_budget`, `ResourceLimitError`.
