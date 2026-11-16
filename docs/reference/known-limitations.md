@@ -137,7 +137,11 @@ solve.
     per-segment `mom` solution, grids +0.36 … +0.70 %, stars +1.8 %
     (3 arms) … +10.5 % (8 arms of 10 m). Touch / step voltage next to a
     20 m × 20 m grid corner +6.4 % / −7.6 %, beyond a 4-arm star tip
-    +8 % / −9 %, between two star arms touch −17 % and step +40 %.
+    +8 % / −9 %, between two star arms touch −17 % and step +40 %. Single
+    rings, rods and closed loops are within 2 %, but a bonded cluster is
+    not: a bare ring bonded 1 m outside a house's foundation mesh reads the
+    touch voltage +5 … +16 % above `mom` with the feet right above the
+    ring (the foundation alone within 2 %).
 
     **Instead:** for field values near such geometries solve with
     `backend="mom"` (or compare both); the safety functions warn with
@@ -180,6 +184,19 @@ solve.
         +40 %); rings, rods and closed loops within 2 % (the point kernel
         isolates the ansatz: +5 % / −8 %, +7 % / −10 %, within 1 %;
         `groundfield.postprocess.safety`).
+
+        The 2 % hold for single electrodes. Example E02 (stream docex2, the
+        executed notebook `docs/examples/E02_single_family_house.ipynb`):
+        the 10 m × 10 m mesh foundation of the generators' `residential`
+        house (2 × 2 cells, 0.8 m deep, 5 mm bar in 5 cm of 150 Ω·m
+        concrete) with a bare ring 1 m outside, bonded; the largest touch
+        voltage of `touch_voltage_envelope` 1 m from the bars (72
+        directions, the feet right above the ring) per ampere, `image`
+        against `mom` at 0.5 m segments: +9.4 % in 100 Ω·m, +5.3 % in
+        300 over 30 Ω·m and +15.7 % in 50 over 500 Ω·m ($h_1$ = 2 m);
+        the foundation alone +1.2 … +2.0 %. The image family is high there
+        (the safe side), and `UniformCurrentFieldWarning` fires for the
+        bonded cluster.
 
 - **Point kernel** (`kernel="point"`, and always in `mom` and
   `mom_sommerfeld`). It places each segment's current at its midpoint; its
