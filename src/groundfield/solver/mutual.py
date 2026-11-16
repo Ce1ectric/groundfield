@@ -90,8 +90,13 @@ __all__ = [
     "solve_mutual_field",
 ]
 
-#: Off-diagonal definition of :func:`solve_mutual_matrix` (10.34).
 OffDiagonal = Literal["probe", "galerkin"]
+"""Off-diagonal definitions of :func:`solve_mutual_matrix` (10.34).
+
+``"galerkin"`` (the default since 2026.11): the reaction of the leakage
+distributions, reciprocal; ``"probe"``: the potential at one probe point
+per cluster, the definition up to 0.15.0.
+"""
 
 _OFFDIAG_CHOICES: tuple[str, ...] = ("probe", "galerkin")
 

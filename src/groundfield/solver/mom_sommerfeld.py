@@ -1752,6 +1752,14 @@ def solve_mom_sommerfeld(
     signature defaults equal the option defaults, so a direct call
     without keywords behaves exactly like
     :meth:`~groundfield.solver.engine.Engine.solve`.
+
+    Raises
+    ------
+    TypeError
+        If the soil is not a :class:`HomogeneousSoil`,
+        :class:`TwoLayerSoil` or :class:`MultiLayerSoil`.
+    ValueError
+        If the world has no electrodes.
     """
     if not isinstance(world.soil, (HomogeneousSoil, TwoLayerSoil, MultiLayerSoil)):
         raise TypeError(

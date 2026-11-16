@@ -119,6 +119,17 @@ def solve_image_nlayer(
     FieldResult
         ``backend`` is rewritten to ``"image_nlayer"`` so that
         cross-engine reports use one unified label.
+
+    Raises
+    ------
+    TypeError
+        If the soil is not a :class:`HomogeneousSoil`,
+        :class:`TwoLayerSoil` or :class:`MultiLayerSoil`.
+    ValueError
+        If the world has no electrodes.
+    BackendCapabilityError
+        If the soil has three or more layers (a :class:`ValueError`
+        subclass).
     """
     if not isinstance(world.soil, (HomogeneousSoil, TwoLayerSoil, MultiLayerSoil)):
         raise TypeError(

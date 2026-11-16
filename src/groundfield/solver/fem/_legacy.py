@@ -69,6 +69,12 @@ def equivalent_hemisphere_radius(electrode: "_ElectrodeBase", rho_top: float) ->
     float
         Hemisphere radius $a_\\text{eq}$ in m.
 
+    Raises
+    ------
+    TypeError
+        If the electrode is of a kind without a closed form here (a
+        polyline or a star).
+
     Warns
     -----
     DeprecationWarning

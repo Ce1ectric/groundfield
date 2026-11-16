@@ -468,6 +468,20 @@ def overhead_lead(
     Laid out on the ground (``depth_m=0``, modelled
     :data:`SURFACE_LEAD_HEIGHT_M` above the surface), bare copper,
     isolated soil coupling, Neumann inductance enabled.
+
+    Parameters
+    ----------
+    wire_radius_m : float, default 0.005
+        Radius of the lead in m.
+    inductance_model : str or None, default "neumann"
+        ``"neumann"`` or ``None`` for a resistive lead.
+    segment_length_m : float or None, default 5.0
+        Sub-piece length in m; ``None`` keeps the lead lumped.
+
+    Returns
+    -------
+    MeasurementLeadConfig
+        The lead configuration.
     """
     return MeasurementLeadConfig(
         depth_m=0.0,
@@ -533,7 +547,21 @@ def single_rod_grounding(
     length_m: Union[float, AnyDistribution] = 1.5,
     depth_m: Union[float, AnyDistribution] = 0.0,
 ) -> GroundingSystemSpec:
-    """One driven rod — a typical *Erdungsspieß* used as an aux electrode."""
+    """One driven rod — a typical *Erdungsspieß* used as an aux electrode.
+
+    Parameters
+    ----------
+    length_m : float or Distribution, default 1.5
+        Rod length in m.
+    depth_m : float or Distribution, default 0.0
+        Depth of the rod head in m below the surface.
+
+    Returns
+    -------
+    GroundingSystemSpec
+        A grounding system with one :class:`RodElectrodeSpec` at the
+        site position.
+    """
     return GroundingSystemSpec(
         electrodes=[
             RodElectrodeSpec(length_m=length_m, depth_m=depth_m),
@@ -547,6 +575,13 @@ def neighbour_substation_grounding() -> GroundingSystemSpec:
     Used as the auxiliary electrode in measurements where the
     current returns through a remote, well-grounded substation
     instead of a single driven rod.
+
+    Returns
+    -------
+    GroundingSystemSpec
+        A ring of radius 4 m at 0.6 m depth and four 2.5 m rods on a
+        circle of radius 2 m (:func:`rod_circle`), bonded into one
+        grounding system.
     """
     # Imported here to avoid a top-level circular import:
     # tn_network depends on this module.

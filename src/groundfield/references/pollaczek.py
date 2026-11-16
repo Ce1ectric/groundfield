@@ -163,6 +163,11 @@ def layered_effective_wavenumber(
         Upper-layer thickness in m.
     omega
         Angular frequency in rad/s.
+
+    Returns
+    -------
+    complex
+        Effective wavenumber :math:`u_\text{eff}` in 1/m.
     """
     u1 = cmath.sqrt(lam * lam + 1j * omega * MU_0 / rho_1)
     if rho_1 == rho_2:
@@ -436,6 +441,14 @@ def pollaczek_mutual_impedance(
     air kernel :math:`e^{-(h_i+h_j)\lambda}`. As :math:`x \to \mathrm{GMR}`
     with :math:`depth_i = depth_j` it recovers
     :func:`pollaczek_self_impedance`.
+
+    Raises
+    ------
+    ValueError
+        If ``rho_1``, ``rho_2``, ``h_1``, ``frequency``, ``depth_i`` or
+        ``depth_j`` is not positive and finite, if ``separation`` is
+        negative, or if the two conductors coincide (``separation == 0``
+        and ``depth_i == depth_j``).
     """
     _check_positive(
         rho_1=rho_1,
@@ -532,6 +545,13 @@ def loop_impedance_conductor_earth(
     complex
         Loop series impedance :math:`R'_\text{loop} + jX'_\text{loop}` in
         Ω/m. Multiply by the line length for the terminated loop impedance.
+
+    Raises
+    ------
+    ValueError
+        If ``rho_1``, ``rho_2``, ``h_1``, ``frequency``, ``depth`` or
+        ``gmr`` is not positive and finite, or if ``r_internal`` is
+        negative.
 
     Notes
     -----

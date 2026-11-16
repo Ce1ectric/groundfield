@@ -318,6 +318,23 @@ class WorldGenerator(Generic[C]):
       hands the resolved config to :meth:`build`;
     * a guard in :meth:`_assert_resolved` that surfaces a clear
       error if :meth:`build` is called with an unresolved config.
+
+    Parameters
+    ----------
+    cfg : GeneratorConfig
+        Configuration of the generator; may still contain
+        :class:`Distribution` fields, which :meth:`sample_world`
+        resolves.
+    seed : int or numpy.random.Generator, optional
+        Seed or generator of the random draws. ``None`` (default)
+        draws a fresh, unseeded generator; an ``int`` seeds a new
+        generator; a ``Generator`` is used as it is.
+
+    Raises
+    ------
+    TypeError
+        If ``cfg`` is not a :class:`GeneratorConfig` or ``seed`` is
+        neither ``None``, an integer nor a ``numpy.random.Generator``.
     """
 
     cfg: C

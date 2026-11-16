@@ -49,6 +49,7 @@ __all__ = [
 # Vacuum permeability — kept local to avoid cross-module imports for
 # this small reference helper.
 MU_0 = 4.0e-7 * math.pi
+"""Vacuum permeability μ0 = 4π · 10⁻⁷ H/m (the conventional value)."""
 
 
 def two_wire_loop_radius(wire_radius: float, *, include_internal: bool = True) -> float:
@@ -65,6 +66,24 @@ def two_wire_loop_radius(wire_radius: float, *, include_internal: bool = True) -
 
     Pass ``include_internal=False`` to suppress the substitution and
     obtain the pure external-field expression.
+
+    Parameters
+    ----------
+    wire_radius : float
+        Wire radius $r$ in m.
+    include_internal : bool, default True
+        ``True`` returns $r' = r \\cdot e^{-1/4}$ (internal field
+        folded in); ``False`` returns $r$ unchanged.
+
+    Returns
+    -------
+    float
+        Effective wire radius in m.
+
+    Raises
+    ------
+    ValueError
+        If ``wire_radius`` is not positive.
     """
     if wire_radius <= 0.0:
         raise ValueError("wire_radius must be positive")
@@ -108,6 +127,12 @@ def loop_self_inductance_per_length(
     -------
     L_per_length : float
         Loop self-inductance per unit length in H/m.
+
+    Raises
+    ------
+    ValueError
+        If ``distance`` or ``wire_radius`` is not positive, or if
+        ``distance`` does not exceed ``wire_radius``.
     """
     if distance <= 0.0 or wire_radius <= 0.0:
         raise ValueError("distance and wire_radius must be positive")
@@ -161,6 +186,11 @@ def loop_mutual_inductance_per_length(
         1 is anti-parallel to wire 2 and wire 3 is anti-parallel to
         wire 4). The result can be negative when the loops are
         crossed.
+
+    Raises
+    ------
+    ValueError
+        If any of the four distances is not positive.
     """
     for label, val in (("s13", s13), ("s14", s14), ("s23", s23), ("s24", s24)):
         if val <= 0.0:

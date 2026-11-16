@@ -87,6 +87,25 @@ class Distribution(BaseModel):
     kind: str
 
     def sample(self, rng: np.random.Generator) -> Any:  # pragma: no cover
+        """Draw one sample.
+
+        Parameters
+        ----------
+        rng : numpy.random.Generator
+            Random number generator that supplies the draw.
+
+        Returns
+        -------
+        Any
+            One draw of the distribution (a float or a string in the
+            concrete subclasses).
+
+        Raises
+        ------
+        NotImplementedError
+            Always: the base class is abstract, a concrete subclass
+            implements the draw.
+        """
         raise NotImplementedError(
             f"{type(self).__name__}.sample is abstract; use a concrete subclass."
         )
@@ -108,6 +127,19 @@ class Constant(Distribution):
     value: float
 
     def sample(self, rng: np.random.Generator) -> float:
+        """Return ``value``; the generator is not used.
+
+        Parameters
+        ----------
+        rng : numpy.random.Generator
+            Random number generator (ignored; kept for the common
+            interface).
+
+        Returns
+        -------
+        float
+            ``value``.
+        """
         return float(self.value)
 
 
@@ -131,6 +163,18 @@ class Uniform(Distribution):
         return self
 
     def sample(self, rng: np.random.Generator) -> float:
+        """Draw one sample from the interval ``[low, high)``.
+
+        Parameters
+        ----------
+        rng : numpy.random.Generator
+            Random number generator that supplies the draw.
+
+        Returns
+        -------
+        float
+            One uniform draw.
+        """
         return float(rng.uniform(self.low, self.high))
 
 
@@ -162,6 +206,24 @@ class Normal(Distribution):
         return self
 
     def sample(self, rng: np.random.Generator) -> float:
+        """Draw one sample, rejecting draws outside the truncation bounds.
+
+        Parameters
+        ----------
+        rng : numpy.random.Generator
+            Random number generator that supplies the draws.
+
+        Returns
+        -------
+        float
+            One draw of the (truncated) normal distribution.
+
+        Raises
+        ------
+        RuntimeError
+            If ``max_attempts`` consecutive draws fall outside the
+            truncation bounds.
+        """
         for _ in range(self.max_attempts):
             x = float(rng.normal(self.mean, self.std))
             if self.truncate_low is not None and x < self.truncate_low:
@@ -192,6 +254,18 @@ class LogNormal(Distribution):
     sigma: float = Field(gt=0.0)
 
     def sample(self, rng: np.random.Generator) -> float:
+        """Draw one sample $X = e^{Y}$ with $Y \\sim \\mathcal{N}(\\mu, \\sigma^2)$.
+
+        Parameters
+        ----------
+        rng : numpy.random.Generator
+            Random number generator that supplies the draw.
+
+        Returns
+        -------
+        float
+            One log-normal draw (positive).
+        """
         return float(rng.lognormal(self.mu, self.sigma))
 
     @classmethod
@@ -232,6 +306,18 @@ class Weibull(Distribution):
     scale: float = Field(default=1.0, gt=0.0, description="Scale parameter lambda > 0.")
 
     def sample(self, rng: np.random.Generator) -> float:
+        """Draw one sample with shape ``shape`` and scale ``scale``.
+
+        Parameters
+        ----------
+        rng : numpy.random.Generator
+            Random number generator that supplies the draw.
+
+        Returns
+        -------
+        float
+            One Weibull draw (non-negative).
+        """
         return float(self.scale * rng.weibull(self.shape))
 
 
@@ -268,6 +354,18 @@ class Discrete(Distribution):
         return self
 
     def sample(self, rng: np.random.Generator) -> float:
+        """Draw one entry of ``values``, weighted by ``weights`` if given.
+
+        Parameters
+        ----------
+        rng : numpy.random.Generator
+            Random number generator that supplies the draw.
+
+        Returns
+        -------
+        float
+            One entry of ``values``.
+        """
         if self.weights is None:
             idx = int(rng.integers(0, len(self.values)))
         else:
@@ -311,6 +409,18 @@ class Categorical(Distribution):
         return v
 
     def sample(self, rng: np.random.Generator) -> str:
+        """Draw one entry of ``values``, weighted by ``weights`` if given.
+
+        Parameters
+        ----------
+        rng : numpy.random.Generator
+            Random number generator that supplies the draw.
+
+        Returns
+        -------
+        str
+            One entry of ``values``.
+        """
         if self.weights is None:
             idx = int(rng.integers(0, len(self.values)))
         else:
@@ -325,10 +435,15 @@ class Categorical(Distribution):
 # ---------------------------------------------------------------------
 
 
-# AnyDistribution is the discriminated-union form used in
-# GeneratorConfig field annotations to enable Pydantic to deserialise
-# the right subclass from JSON given the ``kind`` field.
 AnyDistribution = Annotated[
     Union[Constant, Uniform, Normal, LogNormal, Weibull, Discrete, Categorical],
     Field(discriminator="kind"),
 ]
+"""Any concrete distribution, as a union discriminated by ``kind``.
+
+Used in the field annotations of
+:class:`~groundfield.generators.base.GeneratorConfig` so that
+Pydantic deserialises the right subclass from JSON by its ``kind``
+field: ``"constant"``, ``"uniform"``, ``"normal"``, ``"lognormal"``,
+``"weibull"``, ``"discrete"`` or ``"categorical"``.
+"""

@@ -20,6 +20,11 @@ def get_logger(name: str) -> logging.Logger:
     ----------
     name
         Usually ``__name__`` of the calling module.
+
+    Returns
+    -------
+    logging.Logger
+        The standard-library logger of that name.
     """
     return logging.getLogger(name)
 

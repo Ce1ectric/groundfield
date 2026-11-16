@@ -40,6 +40,7 @@ import numpy as np
 __all__ = ["MU_0", "solid_round_internal_impedance"]
 
 MU_0 = 4.0e-7 * math.pi
+"""Vacuum permeability μ0 = 4π · 10⁻⁷ H/m (the conventional value)."""
 
 # Below |k a| = 0.02 the Bessel ratio is evaluated from its series,
 # I0(z)/I1(z) = (2/z)(1 + z^2/8 - z^4/192 + z^6/3072 + ...), which is
@@ -71,6 +72,12 @@ def solid_round_internal_impedance(
     complex or np.ndarray
         $Z'_\text{int} = R'(f) + j\omega L'_\text{int}(f)$ in Ω/m;
         at ``frequency == 0`` the DC resistance $\rho/(\pi a^2)$.
+
+    Raises
+    ------
+    ValueError
+        If ``radius`` or ``resistivity`` is not positive and finite, or
+        if a frequency is negative or not finite.
     """
     if not (radius > 0.0 and math.isfinite(radius)):
         raise ValueError(f"radius must be positive and finite, got {radius}")

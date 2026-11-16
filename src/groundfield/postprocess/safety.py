@@ -84,8 +84,11 @@ Validity envelope
   +6 %, step −8 % (non-conservative; the step from the point above the
   corner 1 m outwards is −11 %; one current per grid, up to then, gave
   +20 % / −21 % / −28 %); 4-arm star (5 m arms) beyond a tip touch +8 %,
-  step −9 %; 10 m strip beyond its end step −6 %; rings, rods and closed
-  rectangular loops within 2 %. The point kernel, which ``mom`` shares,
+  step −9 %; 10 m strip beyond its end step −6 %; single rings, rods and
+  closed rectangular loops within 2 %. A bonded cluster of a foundation
+  mesh and a bare ring 1 m outside it reads +5 … +16 % with the feet right
+  above the ring (example E02; the warning below fires for it, use
+  ``mom``). The point kernel, which ``mom`` shares,
   isolates the ansatz: grid +5 % / −8 % (−11 % from above the corner),
   star +7 % / −10 %, strip −7 %, rings, rods and loops within 1 %. The
   helpers emit
@@ -176,14 +179,17 @@ class UniformCurrentFieldWarning(UserWarning):
 #: Backends that solve one uniform current per straight wire of an electrode.
 _UNIFORM_CURRENT_BACKENDS = frozenset({"image", "image_2layer", "image_nlayer", "cim"})
 
-#: Horizontal distance in m from a crowding electrode within which the
-#: safety helpers warn about uniform-current results (10.22). At 5 m from
-#: the footprint the measured touch / step deviations of the uniform
-#: ansatz against ``mom`` are at most 4 % for strips, bonded clusters and
-#: grids (2.5 % for a 20 m grid with 4 × 4 meshes since user decision Q30,
-#: 8 % with one current per grid before) and 6.5 % for a 4-arm star
-#: (default line kernel; with the point kernel 5 % for the star).
 NEAR_FIELD_DISTANCE_M: float = 5.0
+"""Distance in m within which the safety helpers warn about uniform currents.
+
+Horizontal distance from a crowding electrode within which the safety
+helpers warn about uniform-current results (10.22). At 5 m from
+the footprint the measured touch / step deviations of the uniform
+ansatz against ``mom`` are at most 4 % for strips, bonded clusters and
+grids (2.5 % for a 20 m grid with 4 × 4 meshes since user decision Q30,
+8 % with one current per grid before) and 6.5 % for a 4-arm star
+(default line kernel; with the point kernel 5 % for the star).
+"""
 
 
 # ---------------------------------------------------------------------

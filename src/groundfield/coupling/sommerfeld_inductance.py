@@ -224,6 +224,7 @@ __all__ = [
 
 
 MU_0 = 4.0e-7 * math.pi
+"""Vacuum permeability μ0 = 4π · 10⁻⁷ H/m (the conventional value)."""
 
 # Outer (geometry) Gauss–Legendre rule: the same 16x16 grid as
 # coupling/inductance.py.
@@ -325,10 +326,14 @@ _LARGE_GRID_CACHE = 8
 _TABLE_NODES = 100
 _TABLE_MIN_PAIRS = 64
 
-#: Assembly of the Sommerfeld correction: ``"exact"`` (per segment pair)
-#: or ``"tabulated"`` (shared S(rho) tables; the default of
-#: :attr:`groundfield.Engine.sommerfeld_assembly` since 2026.11).
 SommerfeldAssembly = Literal["exact", "tabulated"]
+"""Assembly of the Sommerfeld earth-return correction matrix.
+
+- ``"exact"``: one spectral quadrature per segment pair;
+- ``"tabulated"``: shared S(rho) tables per pair of depth groups and
+  frequency (the default of :attr:`groundfield.Engine.sommerfeld_assembly`
+  since 2026.11).
+"""
 _ASSEMBLIES: tuple[str, ...] = ("exact", "tabulated")
 
 # Oscillatory tail cap: for a pair whose outer nodes are at least
@@ -1039,6 +1044,12 @@ def earth_return_correction_layered(
     -------
     correction : complex
         Kernel value in 1/m.
+
+    Raises
+    ------
+    ValueError
+        If ``z_i`` or ``z_j`` is not positive (a point not buried) and
+        ``omega`` is positive.
     """
     if omega <= 0.0:
         return 0.0 + 0.0j
@@ -2555,6 +2566,13 @@ def build_sommerfeld_correction_matrices(
     -------
     dZ : np.ndarray, shape (n_f, M, M), dtype complex
         Symmetric correction matrices in Ω.
+
+    Raises
+    ------
+    ValueError
+        If ``image`` is not one of ``"none"``, ``"additive"``,
+        ``"antiparallel"``, or ``method`` is not ``"exact"`` or
+        ``"tabulated"``.
     """
     mode = _resolve_image(image, None)
     if method not in _ASSEMBLIES:

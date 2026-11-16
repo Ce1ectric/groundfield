@@ -69,6 +69,12 @@ def grid_resistance_sverak(
     float
         Grid grounding resistance $R_g$ in Ω.
 
+    Raises
+    ------
+    ValueError
+        If ``rho``, ``total_conductor_length``, ``area`` or ``depth`` is
+        not positive.
+
     Notes
     -----
     In the two limits the formula behaves as expected: $h \to \infty$

@@ -327,6 +327,15 @@ def materialise_electrode(
     bond_conductor_type
         Conductor type of the internal bonds of a multi-primitive
         foundation.
+
+    Raises
+    ------
+    TypeError
+        If ``spec`` is not a rod, ring, strip or foundation electrode
+        spec.
+    ValueError
+        If a rectangular foundation has a side that is not positive
+        (after the draws of a distribution).
     """
     ex, ey = centre_xy
     if isinstance(spec, RodElectrodeSpec):
@@ -642,6 +651,17 @@ def site_anchor_point(site: PlannedSite) -> Optional[tuple[float, float, float]]
     each cable instead (:func:`site_contact_wires`, user decisions Q41,
     Q43); this point stays the end of everything attached to the site by
     name, and of the generators' conductors at a site with rods only.
+
+    Parameters
+    ----------
+    site
+        A planned site.
+
+    Returns
+    -------
+    tuple of float or None
+        ``(x, y, z)`` in m of the anchor electrode's connection point, or
+        ``None`` for a site without present electrodes.
     """
     if site.anchor is None:
         return None
@@ -850,6 +870,19 @@ def materialise_junction(world: World, junction: PlannedJunction) -> str:
     Kirchhoff's current law and no soil contact. Up to 0.15.0 it was a
     5 cm driven rod, which leaked 3 to 7 % of a test current through the
     nominally isolated cable (review finding 10.38).
+
+    Parameters
+    ----------
+    world
+        Target world.
+    junction
+        The planned joint: its name, plan position ``position_xy`` in m
+        and depth ``depth_m`` in m.
+
+    Returns
+    -------
+    str
+        The name of the created junction (``junction.name``).
     """
     create_junction(
         world,

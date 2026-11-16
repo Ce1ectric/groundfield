@@ -427,6 +427,7 @@ class RodElectrode(_ElectrodeBase):
 
     @property
     def connection_point(self) -> Point3D:
+        """Top end of the rod (``position``) in m, where conductors attach."""
         return self.position
 
     def segments(
@@ -495,6 +496,7 @@ class RingElectrode(_ElectrodeBase):
 
     @property
     def connection_point(self) -> Point3D:
+        """Point of the ring on the ``+x`` side of the centre in m, for conductors."""
         # Anchor at the first point of the ring (along +x).
         cx, cy, cz = self.center
         return (cx + self.radius, cy, cz)
@@ -611,6 +613,7 @@ class StripElectrode(_ElectrodeBase):
 
     @property
     def connection_point(self) -> Point3D:
+        """Start point of the strip (``start``) in m, where conductors attach."""
         return self.start
 
     def segments(
@@ -785,6 +788,7 @@ class PolylineElectrode(_ElectrodeBase):
 
     @property
     def connection_point(self) -> Point3D:
+        """First vertex of the polyline in m, where conductors attach."""
         return self.vertices[0]
 
     def segments(
@@ -931,6 +935,7 @@ class StarElectrode(_ElectrodeBase):
 
     @property
     def connection_point(self) -> Point3D:
+        """Centre of the star (``center``) in m, where conductors attach."""
         return self.center
 
     def segments(
@@ -991,6 +996,7 @@ class MeshElectrode(_ElectrodeBase):
 
     @property
     def connection_point(self) -> Point3D:
+        """Centre of the mesh rectangle in m, where conductors attach."""
         # Anchor at the centre of the mesh.
         cx, cy, cz = self.corner
         dx, dy = self.size
@@ -1088,6 +1094,7 @@ class GridMeshElectrode(_ElectrodeBase):
 
     @property
     def connection_point(self) -> Point3D:
+        """Centre of the grid rectangle in m, where conductors attach."""
         cx, cy, cz = self.corner
         dx, dy = self.size
         return (cx + dx / 2.0, cy + dy / 2.0, cz)
@@ -1143,3 +1150,9 @@ Electrode = Union[
     MeshElectrode,
     GridMeshElectrode,
 ]
+"""Union of the electrode classes; their ``kind`` field tells them apart.
+
+:class:`RodElectrode`, :class:`RingElectrode`, :class:`StripElectrode`,
+:class:`PolylineElectrode`, :class:`StarElectrode`, :class:`MeshElectrode`
+and :class:`GridMeshElectrode`. The item type of ``World.electrodes``.
+"""

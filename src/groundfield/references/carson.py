@@ -54,13 +54,17 @@ class CarsonExample:
     theta
         Carson angle $\\theta$ in radians ($\\theta = 0$ for the
         self-impedance case, $\\arctan(d/(h_i+h_j))$ for mutual).
-    P_expected, Q_expected
-        Reference values for the real / imaginary part of the
-        Carson integral $J = P + jQ$.
-    tolerance
-        Tolerance against which the implementation is compared.
-        ``"abs"`` and ``"rel"`` give absolute and relative
-        components — the test passes if either bound is met.
+    P_expected
+        Reference value for the real part $P$ of the Carson integral
+        $J = P + jQ$.
+    Q_expected
+        Reference value for the imaginary part $Q$ of $J$.
+    abs_tolerance
+        Absolute tolerance on $P$ and $Q$ against which the
+        implementation is compared (default 0.0).
+    rel_tolerance
+        Relative tolerance on $P$ and $Q$ (default 0.05). The test
+        passes if either bound is met.
     source
         Bibliographic source.
     """
@@ -98,6 +102,11 @@ WAVE_ANTENNA_HIGH_RHO = CarsonExample(
     rel_tolerance=0.05,
     source="Carson 1926, Bell STJ 5(4), §V, p. 552",
 )
+"""Carson's wave-antenna example (1926, §V, p. 552) at ``a = 4.0``, ``theta = 0``.
+
+The asymptotic regime of the Carson series; reference value
+J = 0.126 + j 0.168.
+"""
 
 
 WAVE_ANTENNA_LOW_RHO = CarsonExample(
@@ -113,6 +122,12 @@ WAVE_ANTENNA_LOW_RHO = CarsonExample(
     rel_tolerance=0.03,
     source="Carson 1926, Bell STJ 5(4), §V, p. 552",
 )
+"""Carson's wave-antenna example (1926, §V, p. 552) at ``a = 0.4``, ``theta = 0``.
+
+The intermediate regime of the Carson series; reference value
+J = 0.323 + j 0.871 as printed by Carson (a modern evaluation gives
+Q ≈ 0.853, hence the 3 % relative tolerance).
+"""
 
 
 # ---------------------------------------------------------------------
@@ -137,6 +152,11 @@ RAILWAY_25HZ = CarsonExample(
     rel_tolerance=0.01,
     source="Carson 1926, Bell STJ 5(4), §V, p. 553",
 )
+"""Carson's railway-induction example (1926, §V, p. 553) at 25 Hz.
+
+Trolley wire and telephone line at 10 m height, 40 m apart:
+``a = 0.2``, ``theta = 63.5°``; reference value J = 0.369 + j 1.135.
+"""
 
 
 # ---------------------------------------------------------------------
@@ -208,12 +228,25 @@ REGRESSION_ANCHORS = (
 )
 
 
-# Backwards-compatible alias retained from the early draft.
 TLEIS_TAB_3_2 = REGRESSION_ANCHORS
+"""Four regression anchors of the Carson integral (tuple of ``CarsonExample``).
+
+The values come from a direct numerical evaluation of Carson's Eq. 29
+(Gauss-Legendre quadrature) across the small-``a``, intermediate and
+asymptotic regimes, not from Tleis (2008), Tab. 3.2. The name is a
+backwards-compatible alias retained from an early draft.
+"""
 
 
 def all_examples() -> tuple[CarsonExample, ...]:
-    """Return all Carson reference examples used by the test suite."""
+    """Return all Carson reference examples used by the test suite.
+
+    Returns
+    -------
+    tuple of CarsonExample
+        The three Carson 1926 worked examples followed by the four
+        regression anchors of :data:`TLEIS_TAB_3_2`.
+    """
     return (
         WAVE_ANTENNA_HIGH_RHO,
         WAVE_ANTENNA_LOW_RHO,

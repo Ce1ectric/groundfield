@@ -99,25 +99,43 @@ __all__ = [
     "ConductorEnd",
 ]
 
-#: Electrode geometry accepted by :func:`create_electrode`.
 ElectrodeKind: TypeAlias = Literal[
     "rod", "ring", "strip", "polyline", "star", "mesh", "grid_mesh"
 ]
+"""Electrode kinds accepted by :func:`create_electrode`.
 
-#: Source type accepted by :func:`create_source`.
+``"rod"``, ``"ring"``, ``"strip"``, ``"polyline"``, ``"star"``, ``"mesh"``
+and ``"grid_mesh"`` create a :class:`RodElectrode`, :class:`RingElectrode`,
+:class:`StripElectrode`, :class:`PolylineElectrode`, :class:`StarElectrode`,
+:class:`MeshElectrode` and :class:`GridMeshElectrode`.
+"""
+
 SourceKind: TypeAlias = Literal["current", "voltage"]
+"""Source kinds accepted by :func:`create_source`.
 
-#: Field / reaction-matrix kernel accepted by :func:`create_engine`:
-#: ``"point"`` (point source per segment) or ``"line"`` (exact uniform
-#: line source per segment).
+``"current"`` creates a :class:`CurrentSource` (impressed current),
+``"voltage"`` a :class:`VoltageSource` (impressed voltage, ideal or behind
+an internal impedance).
+"""
+
 KernelKind: TypeAlias = Literal["point", "line"]
+"""Source kernels accepted by :func:`create_engine`.
 
-#: A point ``(x, y, z)`` in m: a tuple, a list or a numpy array.
+The kernel is used for the reaction matrix and the field evaluation:
+``"point"`` (one point source per segment) or ``"line"`` (the exact
+uniform line source per segment). ``kernel=None`` leaves the choice to
+the backend.
+"""
+
 PointLike: TypeAlias = Sequence[float] | npt.NDArray[Any]
+"""A point ``(x, y, z)`` in m: a tuple, a list or a numpy array."""
 
-#: A conductor end: an electrode or junction, the name of a registered
-#: electrode or junction, or a point ``(x, y, z)`` in m.
 ConductorEnd: TypeAlias = PointLike | Electrode | Junction | str
+"""One end of a conductor in :func:`create_conductor`.
+
+An electrode or junction, the name of a registered electrode or
+junction, or a point ``(x, y, z)`` in m.
+"""
 
 _ELECTRODE_CLASSES: dict[str, type[_ElectrodeBase]] = {
     "rod": RodElectrode,

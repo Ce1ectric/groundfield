@@ -56,11 +56,11 @@ __all__ = [
     "world_fingerprint",
 ]
 
-#: Value of the ``format`` key of a result file.
 RESULT_FORMAT = "groundfield.result"
+"""Value of the ``format`` key of a result file."""
 
-#: Schema version written by :func:`save_result`.
 RESULT_SCHEMA_VERSION = 1
+"""Schema version written by :func:`save_result`."""
 
 
 class ResultFormatError(ValueError):

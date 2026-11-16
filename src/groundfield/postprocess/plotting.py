@@ -426,6 +426,11 @@ def world_bounds_xy(world: "World") -> tuple[float, float, float, float]:
     * :class:`MeshElectrode` / :class:`GridMeshElectrode` —
       ``corner`` to ``corner + size``.
 
+    Parameters
+    ----------
+    world
+        World whose electrodes are inspected.
+
     Returns
     -------
     tuple
@@ -679,6 +684,8 @@ def plot_potential_radial(
 
     Parameters
     ----------
+    result
+        Solved field (homogeneous or two-layer soil).
     around
         Electrode name (resolved via ``world``) or ``(x, y, z)`` tuple.
     world
@@ -701,6 +708,12 @@ def plot_potential_radial(
     Returns
     -------
     fig : matplotlib.figure.Figure
+
+    Raises
+    ------
+    ValueError
+        If ``component`` is not one of the four values, or if ``around``
+        is an electrode name and ``world`` is ``None``.
     """
     import matplotlib.pyplot as plt
 

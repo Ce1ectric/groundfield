@@ -84,10 +84,12 @@ class ObstacleBox(BaseModel):
 
     @property
     def width(self) -> float:
+        """Extent of the box along x in m (``x_max - x_min``)."""
         return self.x_max - self.x_min
 
     @property
     def height(self) -> float:
+        """Extent of the box along y in m (``y_max - y_min``)."""
         return self.y_max - self.y_min
 
     def inflated(self, padding_m: float) -> "ObstacleBox":
@@ -103,6 +105,22 @@ class ObstacleBox(BaseModel):
         )
 
     def contains_point(self, x: float, y: float, *, tol: float = 0.0) -> bool:
+        """Whether the point ``(x, y)`` lies in the closed box.
+
+        Parameters
+        ----------
+        x, y : float
+            Coordinates of the point in m.
+        tol : float, default 0.0
+            Margin in m by which the box is enlarged on every side for
+            the test.
+
+        Returns
+        -------
+        bool
+            ``True`` if the point lies inside or on the boundary of the
+            box enlarged by ``tol``.
+        """
         return (
             self.x_min - tol <= x <= self.x_max + tol
             and self.y_min - tol <= y <= self.y_max + tol
@@ -152,6 +170,17 @@ def segment_intersects_box(
     tol
         Small slack so a segment running on the boundary of the
         box does not count as intersecting.
+
+    Returns
+    -------
+    bool
+        ``True`` if the segment passes through the interior of the box.
+
+    Raises
+    ------
+    ValueError
+        If the segment is not axis-aligned (neither its ``x`` nor its
+        ``y`` coordinates agree within ``tol``).
     """
     x0, y0 = p0
     x1, y1 = p1
@@ -180,6 +209,19 @@ def merge_collinear_waypoints(
     The result keeps the polyline's geometric shape (every actual
     corner) but discards the artificial mid-cell stops that the
     A\\* search produced. Endpoints are always kept.
+
+    Parameters
+    ----------
+    waypoints : list of tuple of float
+        Axis-aligned polyline as ``(x, y)`` points in m. A waypoint is
+        dropped when the pieces before and after it run along the same
+        axis in the same direction.
+
+    Returns
+    -------
+    list of tuple of float
+        The reduced waypoint list; a copy of the input when it has
+        fewer than three points.
     """
     if len(waypoints) < 3:
         return list(waypoints)

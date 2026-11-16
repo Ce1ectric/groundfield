@@ -70,6 +70,25 @@ def rod(rho: float, length: float, radius: float) -> float:
     Assumptions: rod starts at the soil surface and extends $L$
     downwards; the rod is treated together with its image in the
     half-space. Wire radius $a \\ll L$.
+
+    Parameters
+    ----------
+    rho : float
+        Resistivity of the homogeneous soil in Ω·m.
+    length : float
+        Rod length $L$ in m.
+    radius : float
+        Rod radius $a$ in m.
+
+    Returns
+    -------
+    float
+        Grounding resistance in Ω.
+
+    Raises
+    ------
+    ValueError
+        If ``length`` or ``radius`` is not positive.
     """
     if length <= 0.0 or radius <= 0.0:
         raise ValueError("length and radius must be positive.")
@@ -87,6 +106,27 @@ def two_rods_far(rho: float, length: float, radius: float, spacing: float) -> fl
     Assumption: ``spacing`` is the horizontal axis-to-axis distance.
     The series is an expansion for large ``s/L`` and is usable for
     $s/L \\gtrsim 1$.
+
+    Parameters
+    ----------
+    rho : float
+        Resistivity of the homogeneous soil in Ω·m.
+    length : float
+        Length $L$ of each rod in m.
+    radius : float
+        Rod radius $a$ in m.
+    spacing : float
+        Horizontal axis-to-axis distance $s$ in m.
+
+    Returns
+    -------
+    float
+        Grounding resistance of the two rods in parallel, in Ω.
+
+    Raises
+    ------
+    ValueError
+        If ``spacing`` is not positive.
     """
     if spacing <= 0.0:
         raise ValueError("spacing must be positive.")
@@ -105,6 +145,27 @@ def two_rods_close(rho: float, length: float, radius: float, spacing: float) -> 
         - \\tfrac{s^2}{16 L^2} + \\tfrac{s^4}{512 L^4}\\Bigr)
     $$
     Suitable for closely-spaced rods, $s \\ll L$.
+
+    Parameters
+    ----------
+    rho : float
+        Resistivity of the homogeneous soil in Ω·m.
+    length : float
+        Length $L$ of each rod in m.
+    radius : float
+        Rod radius $a$ in m.
+    spacing : float
+        Horizontal axis-to-axis distance $s$ in m.
+
+    Returns
+    -------
+    float
+        Grounding resistance of the two rods in parallel, in Ω.
+
+    Raises
+    ------
+    ValueError
+        If ``spacing`` is not positive.
     """
     s = spacing
     if s <= 0.0:
@@ -136,13 +197,20 @@ def horizontal_wire(rho: float, length: float, radius: float, depth: float) -> f
     $$
     Parameters
     ----------
-    length
+    rho : float
+        Resistivity of the homogeneous soil in Ω·m.
+    length : float
         ``L`` = half the wire length in m (total length is ``2*L``).
-    radius
+    radius : float
         Wire radius $a$ in m.
-    depth
+    depth : float
         Burial depth $t$ in m. The image distance is
         $s = 2\\,t$.
+
+    Returns
+    -------
+    float
+        Grounding resistance in Ω.
     """
     s = 2.0 * depth
     inner = (
@@ -159,7 +227,24 @@ def horizontal_wire(rho: float, length: float, radius: float, depth: float) -> f
 def right_angle_wire(
     rho: float, arm_length: float, radius: float, depth: float
 ) -> float:
-    """Right-angle wire: two arms of length $L$, Table I, Eq. (22)."""
+    """Right-angle wire: two arms of length $L$, Table I, Eq. (22).
+
+    Parameters
+    ----------
+    rho : float
+        Resistivity of the homogeneous soil in Ω·m.
+    arm_length : float
+        Length $L$ of each arm in m.
+    radius : float
+        Wire radius $a$ in m.
+    depth : float
+        Burial depth $t$ in m; internally $s = 2t$.
+
+    Returns
+    -------
+    float
+        Grounding resistance in Ω.
+    """
     L = arm_length
     s = 2.0 * depth
     inner = (
@@ -205,13 +290,27 @@ def n_point_star(
     $$
     Parameters
     ----------
-    n_arms
+    rho : float
+        Resistivity of the homogeneous soil in Ω·m.
+    arm_length : float
+        Length of a single arm $L$ in m.
+    radius : float
+        Wire radius $a$ in m.
+    depth : float
+        Burial depth $t$ in m; internally $s = 2\\,t$.
+    n_arms : int
         Number of arms. Supported values: 3, 4, 6, 8 (Dwight,
         Eqs. 23-26).
-    arm_length
-        Length of a single arm $L$ in m.
-    depth
-        Burial depth $t$; internally $s = 2\\,t$.
+
+    Returns
+    -------
+    float
+        Grounding resistance in Ω.
+
+    Raises
+    ------
+    ValueError
+        If ``n_arms`` is not one of 3, 4, 6, 8.
     """
     if n_arms not in _STAR_COEFFS:
         raise ValueError(
@@ -246,12 +345,19 @@ def buried_ring(
     $$
     Parameters
     ----------
-    ring_diameter
+    rho : float
+        Resistivity of the homogeneous soil in Ω·m.
+    ring_diameter : float
         Ring diameter $D$ in m.
-    wire_diameter
+    wire_diameter : float
         Wire diameter $d$ in m (i.e. ``2*radius``).
-    depth
-        Burial depth $t$; $s = 2\\,t$.
+    depth : float
+        Burial depth $t$ in m; $s = 2\\,t$.
+
+    Returns
+    -------
+    float
+        Grounding resistance in Ω.
 
     Notes
     -----
@@ -288,14 +394,27 @@ def horizontal_strip(
     $$
     Parameters
     ----------
-    length
+    rho : float
+        Resistivity of the homogeneous soil in Ω·m.
+    length : float
         Half the strip length $L$ in m (total length ``2*L``).
-    width
+    width : float
         Strip width $a$ in m.
-    thickness
+    thickness : float
         Strip thickness $b$ in m. Validity: $b < a/8$.
-    depth
-        Burial depth; $s = 2\\,t$.
+    depth : float
+        Burial depth $t$ in m; $s = 2\\,t$.
+
+    Returns
+    -------
+    float
+        Grounding resistance in Ω.
+
+    Raises
+    ------
+    ValueError
+        If ``thickness`` is not smaller than ``width / 8`` (the
+        precondition of Dwight's Eq. 30).
 
     Notes
     -----
@@ -359,6 +478,20 @@ def horizontal_round_plate(rho: float, radius: float, depth: float) -> float:
     Assumption: plate plane parallel to the soil surface; image
     distance $s = 2\\,t$ ≫ plate radius $a$ for the series
     to converge.
+
+    Parameters
+    ----------
+    rho : float
+        Resistivity of the homogeneous soil in Ω·m.
+    radius : float
+        Plate radius $a$ in m.
+    depth : float
+        Burial depth $t$ of the plate in m; internally $s = 2t$.
+
+    Returns
+    -------
+    float
+        Grounding resistance in Ω.
     """
     s = 2.0 * depth
     a = radius
@@ -382,6 +515,20 @@ def vertical_round_plate(rho: float, radius: float, depth: float) -> float:
     Assumption: plate plane perpendicular to the soil surface; image
     distance $s = 2\\,t$ ≫ plate radius $a$ for the series to
     converge.
+
+    Parameters
+    ----------
+    rho : float
+        Resistivity of the homogeneous soil in Ω·m.
+    radius : float
+        Plate radius $a$ in m.
+    depth : float
+        Burial depth $t$ of the plate centre in m; internally $s = 2t$.
+
+    Returns
+    -------
+    float
+        Grounding resistance in Ω.
 
     Notes
     -----
@@ -420,6 +567,23 @@ def hemisphere(rho: float, radius: float) -> float:
     (Dwight, p. 1320: hemisphere + image = full sphere,
     $C_{\\text{full sphere}} = A$, hence
     $R = \\rho/(2\\pi C) = \\rho/(2\\pi A)$.)
+
+    Parameters
+    ----------
+    rho : float
+        Resistivity of the homogeneous soil in Ω·m.
+    radius : float
+        Hemisphere radius $A$ in m.
+
+    Returns
+    -------
+    float
+        Grounding resistance in Ω.
+
+    Raises
+    ------
+    ValueError
+        If ``radius`` is not positive.
     """
     if radius <= 0.0:
         raise ValueError("radius must be positive.")

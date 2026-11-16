@@ -545,6 +545,11 @@ def plot_current_sharing(
     Returns
     -------
     matplotlib.figure.Figure
+
+    Raises
+    ------
+    ValueError
+        If ``by`` is neither ``"electrode"`` nor ``"cluster"``.
     """
     import matplotlib.pyplot as plt
 

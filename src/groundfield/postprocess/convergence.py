@@ -184,6 +184,12 @@ def plot_convergence(
     Returns
     -------
     matplotlib.figure.Figure
+
+    Raises
+    ------
+    KeyError
+        If ``df`` has no column ``response`` or no ``segment_length_m``
+        column.
     """
     import matplotlib.pyplot as plt
 

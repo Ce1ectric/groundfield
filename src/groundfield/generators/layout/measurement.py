@@ -63,6 +63,20 @@ def triangle_rod_grounding(
     spreading resistance stays well below the substation's. Three
     0.5 m rods at the corners of a 0.5 m equilateral triangle give
     roughly a third of the single-rod impedance.
+
+    Parameters
+    ----------
+    rod_length_m : float, default 0.5
+        Length of each rod in m; the rod heads lie at the soil surface.
+    triangle_side_m : float, default 0.5
+        Side length of the equilateral triangle in m; the centroid lies
+        at the origin of the electrode's local frame.
+
+    Returns
+    -------
+    GroundingSystemSpec
+        Three :class:`RodElectrodeSpec` at the triangle corners, bonded
+        into one grounding system.
     """
     # Equilateral triangle, centroid at the origin: corners are at
     # angles 90 deg, 210 deg, 330 deg from the centre at a radius
