@@ -72,6 +72,13 @@ lies below the exact one; a ring's O-grid inscribes a polygon in the
 wire's circle, so for rings this is observed, not guaranteed (see
 *Refinement and extrapolation*; audit W4A-09).
 
+Mesh features closer than 1e-9 of max(1 m, x) are one line: a run keeps
+the coordinate of its physical feature (an interface, a rod end, the soil
+surface), so only mesh lines move; an interface is cut at its own line, and
+a triangle of zero area is refused as an internal error (audits W4R2A,
+W4R3A-01: a ring axis picometres off an interface read +35 … +44 % or
+failed).
+
 An **encased electrode** (`concrete_shell_coefficient_ohm_m` $= C$,
 [concrete shells](../concrete-shells.md)) keeps its metal at $U_k$ and
 leaks through its shell surface $r_b$ = `wire_radius`: every metre adds the
