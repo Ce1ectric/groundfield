@@ -372,8 +372,8 @@ def test_both_concrete_model_values_give_the_same_results(
         if key != "fingerprint":
             assert np.array_equal(value, distributed[key]), key
     # 24 directions on the offset curve plus the one cell centre
-    # 24 equally spaced feet, the one cell centre, 5 feet on each corner arc
-    assert len(lumped["touch voltages"]) == 24 + 1 + 4 * 5
+    # 24 equally spaced feet, the one cell centre, 9 feet on each corner arc
+    assert len(lumped["touch voltages"]) == 24 + 1 + 4 * 9
 
 
 # user decision Q38

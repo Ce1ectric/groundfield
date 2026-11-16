@@ -57,9 +57,12 @@ __all__: list[str] = []
 # reference point sitting exactly at distance d from a wire).
 _T_TOL = 1e-9
 
-#: Feet per corner of the convex hull in :meth:`Footprint.corner_feet`
-#: (the ends of the arc and three points between them).
-CORNER_SAMPLES = 5
+#: Feet per corner of the convex hull in :meth:`Footprint.corner_feet`: the
+#: ends of the arc and seven points between them, 11.25 degrees apart on a
+#: right-angled corner. Five feet (22.5 degrees) read the maximum of a narrow
+#: outline up to 0.22 % low, between two feet (audit W5R2-02); nine keep every
+#: probed outline within 0.001 % of dense sampling.
+CORNER_SAMPLES = 9
 
 
 @dataclass(frozen=True)
@@ -236,7 +239,8 @@ class Footprint:
         :math:`\\mathbf n_1, \\mathbf n_2` of its two hull edges, the feet
         are :math:`\\mathbf v + d\\,(\\cos\\phi, \\sin\\phi)` at
         ``per_corner`` angles :math:`\\phi` spread evenly from
-        :math:`\\mathbf n_1` to :math:`\\mathbf n_2`, the ends included.
+        :math:`\\mathbf n_1` to :math:`\\mathbf n_2`, the ends included
+        (nine by default, :data:`CORNER_SAMPLES`).
         Every wire lies in the hull, so each foot is exactly ``d`` from its
         vertex and at least ``d`` from every other wire. Feet that come
         closer than ``d`` to a circular wire are dropped. A single point
@@ -296,7 +300,15 @@ def _convex_hull(points: np.ndarray) -> np.ndarray:
     if len(pts) <= 2:
         return pts + origin
     scale = max(1.0, float(np.abs(pts).max()))
-    tol = 1e-12 * scale * scale
+    # The turn test compares a cross product (an area) with the tolerance:
+    # 1e-12 of the extent squared, plus the round-off of the input
+    # coordinates themselves (16 ulp of the largest absolute coordinate,
+    # times the extent). Without the second term, edge nodes that are
+    # collinear by construction but rounded independently at projected
+    # coordinates (an ulp of a 5.8e6 m northing is 9.3e-10 m) became hull
+    # corners with feet of their own (audit W5R2-01).
+    ulp = 16.0 * np.finfo(float).eps * float(np.abs(raw).max())
+    tol = 1e-12 * scale * scale + ulp * scale
 
     def cross(o, a, b):
         return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])

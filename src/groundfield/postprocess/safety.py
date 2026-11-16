@@ -582,7 +582,7 @@ def touch_voltage_envelope(
     the 30° and 45° rays of the default 24, and that envelope read 12 …
     28 % low in two-layer soil (case study E03). With ``corners=True``
     (the default) the feet also stand on the arc around every corner of
-    the convex hull of the wires, five per corner. The maximum of ``|U_T|`` is the conservative
+    the convex hull of the wires, nine per corner. The maximum of ``|U_T|`` is the conservative
     envelope used in safety verification when the touched parts are not
     known; where they are, :func:`touch_voltage_at_part` puts the feet
     around each part.
@@ -631,7 +631,7 @@ def touch_voltage_envelope(
         lie under the house, a ring may surround a station housing or a
         mast foot.
     corners
-        With ``anchor="footprint"``, also place five feet on the arc of
+        With ``anchor="footprint"``, also place nine feet on the arc of
         the offset curve around every corner of the convex hull of the
         wires, from one edge normal to the next (a half circle at each end
         of a single straight wire; none for one rod or a ring). ``False``

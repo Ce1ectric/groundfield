@@ -5149,10 +5149,26 @@ the coordinator integrated them and checked the formulas.
   directions of `touch_voltage_envelope` hit the rounded corners of the offset
   curve only for a square; the 60 m × 40 m grid read 12 % / 28 % low, on the
   unsafe side. The envelope now also stands on the arc around every corner of
-  the convex hull of the wires (five feet per corner, `corners=True`); on that
+  the convex hull of the wires (nine feet per corner, `corners=True`); on that
   grid it equals the maximum over 3600 directions to 1e-4. Square grids, rings
   and rods keep their maximum; `corners=False` reproduces the directions
   alone; no golden case uses the envelope.
+- **Review W5E of the envelope fix:** the collinearity tolerance of the hull
+  grew with the absolute coordinates; at UTM coordinates a 20 m × 1 m outline
+  collapsed to one straight wire and the maximum read 1.2 % low (W5E-01; the
+  hull is built relative to the lower-left corner of the footprint). Two text
+  corrections (W5E-02, -03). Checked correct: every corner foot at the
+  distance to 1e-15 over many shapes and distances, the default within
+  −0.07 % of dense sampling at the origin-scale coordinates.
+- **Round 2, W5R2 (author's request):** the fix holds — no maximum changes
+  with the coordinates, no arc is lost, no sweep flips (425 705 hull
+  vertices). Two low findings, both fixed: at projected coordinates the
+  tolerance lay below the coordinates' round-off, so edge nodes of rotated
+  outlines (also generated foundations) became corners and the number of
+  feet depended on the coordinate system (64 instead of 44 at UTM; the
+  maximum unchanged; W5R2-01: the tolerance includes 16 ulp of the largest
+  coordinate). Five feet per 90° arc read a narrow outline 0.22 % low between
+  two feet (W5R2-02: nine per corner, every probe within 0.001 %).
 - **Formulas:** a headless-Chromium render of the built site under the mike
   version path with the vendored MathJax found three formulas left raw (two
   docstrings split by a line that Markdown read as a list item), raw TeX in the

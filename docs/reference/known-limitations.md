@@ -822,13 +822,16 @@ those at layer interfaces under [soil layers](#soil-layers).
   steps from 85 V at 10 s to 80 V just above.
 
 - **Touch-voltage envelope** samples 24 equally spaced directions around
-  the electrode's footprint and five feet on the arc around every corner of
+  the electrode's footprint and nine feet on the arc around every corner of
   the footprint's convex hull (`corners=True`), a proxy for touched parts
   that are not known. Re-entrant corners of a non-convex outline get no
   corner feet; there the equally spaced directions apply. Up to the final
   documentation pass of 2026.11.0 the directions alone were sampled, and
   they miss the corners of a non-square grid: a 60 m × 40 m grid read
-  12 … 28 % low (case study E03; `corners=False` reproduces it). It
+  12 … 28 % low (case study E03; `corners=False` reproduces it). With the
+  corner feet every probed outline (rectangles from 1 cm to 10 km, rotated,
+  L- and U-shaped outlines, stars, at the origin and at projected
+  coordinates) lies within 0.001 % of dense sampling. It
   samples nothing inside the footprint unless asked: `interior="meshes"`
   adds the centres of the meshes of grids, of rings and of the generated
   mesh foundations (bonded wires, one per wire line), `interior=True` also

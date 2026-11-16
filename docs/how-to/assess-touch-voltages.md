@@ -113,7 +113,7 @@ potential rise is a touch voltage there.
 `touch_voltage_envelope` puts the feet 1 m from the nearest wire of an
 electrode, all around it — a proxy where the touched parts are not known.
 It walks 24 equally spaced directions from the centre and, by default
-(`corners=True`), five more feet on the arc around every corner of the
+(`corners=True`), nine more feet on the arc around every corner of the
 convex hull of its wires, where the touch voltage is largest: equally spaced
 directions alone miss the corners of a non-square grid (a 60 m × 40 m grid
 read 12 … 28 % low, case study E03).
@@ -146,7 +146,7 @@ print(f"1 m outside: {abs(outside).max():.1f} V; mesh centres: {abs(inside[24:])
 ```
 
 <!-- doctest-check
-assert len(outside) == 24 + 4 * 5 and len(inside) == 24 + 4
+assert len(outside) == 24 + 4 * 9 and len(inside) == 24 + 4
 assert abs(abs(outside).max() - 113.6) < 0.1 and abs(abs(inside[24:]).max() - 90.3) < 0.1
 -->
 

@@ -133,7 +133,7 @@ reproduces 0.15.0, it is named.
 | W4R2A-01, -02, W4R2B-01 … -03 (wave 4, round 2, streams `fw4r2a`, `fw4r2b`) | `fem`: the ring block at an interface graded towards the contact points; 3-D: wires that run beside each other kept 1.5 source radii apart, the axis distance of oblique pieces, the own polyline whole only below a turn of 120° | axisymmetric: rings within 1.05 radii of an interface towards the reference, by up to 1.6e-2 touching a 1000 times more conductive layer (within the earlier estimates below a contrast of 33); 3-D: coaxial rings 4.5 … 7.5 cm apart in a port entry +1.99e-2 … +4.35e-3 → −8e-5 … −1.25e-3, rings diagonal to each other 1.3 … 3.8 mm apart refused (+11 … +14 % before), a 20 m oblique strip +3.78e-4, small rings and folded arms −9e-6 … −2.0e-3; the AP1 station and the house mesh unchanged to 7 digits; no golden case | users of `fem` |
 | W4R3A-01 (wave 4, round 3, stream `fw4r3a`) | `fem` (axisymmetric): mesh features within 1e-9 of max(1 m, x) are one line, the physical feature keeping its coordinate | worlds with a ring axis or rod end picometres off an interface that read +35 … +44 %, −2.7 % or failed are now within 1.7e-6 of the world on the interface; features that close move by at most 1e-9 m (a ring touching a 1000 times more conductive layer changes by 2.6e-3 per nanometre); no golden case | studies placing electrodes at interfaces with computed depths |
 | W4R3B-01 … -04 (wave 4, round 3, stream `fw4r3b`) | `fem` 3-D: wires end to end kept 5 R apart; wires that meet at 10° or more left alone, below 10° beside each other; the own chain blended in its accumulated turn; the touching distance with flat ends and a fading window | stacked rods 1 cm apart R11 +1.57e-2 → refused (up to 8.8 cm for 8 mm rods), 10 cm R12 within its estimate at R 2 cm (−2.6e-3); a V of 10 … 30° refused → solved; meander tilt +4.65e-4 → −1.24e-4; spiral representations +2.08e-3 → +5.9e-5; a 2 m cross at the switch −7.5e-4 → −2.4e-5; rings r = 0.3 / 1 m −6.9e-6 / −4.4e-7; the AP1 station, the house mesh and bonded L / T bit-identical; no golden case | users of the 3-D `fem` |
-| case study E03 (final documentation pass; author's decision of 2026-11-16) | `touch_voltage_envelope` also samples the corners of the footprint (`corners=True`) | the largest touch voltage of a non-square footprint rises to the value of dense sampling: the 60 m × 40 m grid of E03 627.6 → 710.4 V (+13 %, 300 over 50 Ω·m) and 351.8 → 486.4 V (+38 %, 50 over 300 Ω·m), the same grid without rods +17 … +43 % in three soils; square grids, rings and rods unchanged; the arrays gain 5 feet per hull corner; no golden case | touch-voltage assessments of rectangular grids, foundations and polylines; `corners=False` reproduces the earlier sampling |
+| case study E03 (final documentation pass; author's decision of 2026-11-16) | `touch_voltage_envelope` also samples the corners of the footprint (`corners=True`) | the largest touch voltage of a non-square footprint rises to within 0.001 % of dense sampling: the 60 m × 40 m grid of E03 627.6 → 710.4 V (+13 %, 300 over 50 Ω·m) and 351.8 → 486.4 V (+38 %, 50 over 300 Ω·m), the same grid without rods +17 … +43 % in three soils; square grids, rings and rods unchanged; the arrays gain 9 feet per hull corner; no golden case | touch-voltage assessments of rectangular grids, foundations and polylines; `corners=False` reproduces the earlier sampling |
 | roadmap *Vectorise the ADR-0007 path* (wave 3) | spectral amplitudes in closed form | round-off: ≤ 2.5e-16 (golden), ≤ 4.3e-16 (station Z) | cross-layer worlds, `two_layer_probe_matrix`, every backend through `layered_green` |
 | Q34 (wave 3, stream `w3perf`) | `sommerfeld` self terms and close pairs | lumped 1 km PEN 4.9e-7; segments of 5–20 m 1e-9 … 2e-8; a lumped 2 km conductor 1e-4 of the earth-return part; golden `cond_lumped_long_pen_sommerfeld`, `cond_isolated_pen_sommerfeld_two_layer`, `cond_overhead_lead_over_pen_carson_series`, `cond_galvanic_neumann_sommerfeld`, `defaults_mixed_cluster_inductive` 8e-10 … 4.9e-7 | every world with `sommerfeld` or the Sommerfeld fallback of `carson_series` |
 | audit W1R3-07 (wave 3, stream `w3perf`) | `carson_series`: tilted pairs that come close tiled per stretch | up to 5e-2 of X for a core crossing its shield at 4e-2 rad; generated networks up to 3e-7 (the 10-house star with sites 2.8e-7, the 80-house radial 3.4e-8; audit W3B-07) | worlds with tilted near-parallel pairs that touch or cross, under `carson_series` |
@@ -793,12 +793,17 @@ reproduces 0.15.0, it is named.
 - ⚠ **Touch-voltage envelope at the corners (case study E03, author's
   decision of 2026-11-16).** Besides its equally spaced directions the
   envelope stands on the arc of the offset curve around every corner of the
-  convex hull of the wires, five feet per corner (`corners=True`, the
+  convex hull of the wires, nine feet per corner (`corners=True`, the
   default). The 24 directions alone hit the corners of a square only; the
   60 m × 40 m grid of E03 read 12 % (300 over 50 Ω·m) and 28 % (50 over
-  300 Ω·m) low, on the unsafe side. The returned arrays list the equally
-  spaced feet, then the corner feet, then the interior points;
-  `corners=False` reproduces the directions alone. Test:
+  300 Ω·m) low, on the unsafe side. With the corner feet every probed
+  outline lies within 0.001 % of dense sampling, at the origin and at
+  projected coordinates alike (two review rounds: the hull is built
+  relative to the footprint and its collinearity tolerance includes the
+  round-off of the coordinates, audits W5E-01, W5R2-01; five feet per
+  corner read a narrow outline 0.22 % low, W5R2-02). The returned arrays
+  list the equally spaced feet, then the corner feet, then the interior
+  points; `corners=False` reproduces the directions alone. Test:
   `tests/test_touch_voltage_envelope_corners.py`.
 - ⚠ **Permissible touch voltage beyond 10 s (10.42; user decision Q4):** 80 V
   for every fault duration above 10 s, including `math.inf`, after the note

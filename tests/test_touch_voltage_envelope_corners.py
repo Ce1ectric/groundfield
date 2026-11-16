@@ -11,7 +11,7 @@ unaffected, because their diagonals lie on multiples of 15°.
 
 Since the final documentation pass of 2026.11.0 the envelope also stands on
 the arc around every corner of the convex hull of the wires
-(``corners=True``, five feet per corner). ``corners=False`` keeps the
+(``corners=True``, nine feet per corner since audit W5R2-02). ``corners=False`` keeps the
 equally spaced directions alone.
 """
 
@@ -122,7 +122,7 @@ def test_corners_never_lower_the_envelope_and_keep_the_rays_first(electrode) -> 
 
 def test_corner_feet_stand_at_the_distance_on_the_corner_arcs() -> None:
     d = 1.0
-    # A 6 m × 4 m rectangle of four wires: 4 corners × 5 feet on arcs of 90°.
+    # A 6 m × 4 m rectangle of four wires: 4 corners × 9 feet on arcs of 90°.
     rect = Footprint(
         segments=np.array(
             [
@@ -136,7 +136,7 @@ def test_corner_feet_stand_at_the_distance_on_the_corner_arcs() -> None:
         circles=np.empty((0, 3)),
     )
     feet = rect.corner_feet(d)
-    assert feet.shape == (20, 2)
+    assert feet.shape == (36, 2)
     np.testing.assert_allclose(rect.distance(feet), d, rtol=1e-12)
     # Every foot lies outside the rectangle, in the normal cone of a corner.
     outside = (
@@ -150,12 +150,12 @@ def test_corner_feet_stand_at_the_distance_on_the_corner_arcs() -> None:
     diag = (np.array([6.0, 4.0]) + d * np.array([1.0, 1.0]) / np.sqrt(2.0))[None, :]
     assert np.min(np.linalg.norm(feet - diag, axis=1)) < 1e-12
 
-    # One straight wire: a half circle of 5 feet around each end.
+    # One straight wire: a half circle of 9 feet around each end.
     strip = footprint(
         gf.StripElectrode(name="s", start=(0.0, 0.0, 0.5), end=(10.0, 0.0, 0.5))
     )
     sf = strip.corner_feet(d)
-    assert sf.shape == (10, 2)
+    assert sf.shape == (18, 2)
     np.testing.assert_allclose(strip.distance(sf), d, rtol=1e-12)
     assert np.all((sf[:, 0] <= 1e-12) | (sf[:, 0] >= 10.0 - 1e-12))
 
@@ -183,7 +183,7 @@ def test_corner_feet_of_a_non_convex_outline_keep_their_distance() -> None:
         )
     )
     feet = ell.corner_feet(1.0)
-    assert feet.shape == (5 * 5, 2)
+    assert feet.shape == (5 * 9, 2)
     assert np.all(ell.distance(feet) >= 1.0 - 1e-12)
 
 
@@ -214,7 +214,108 @@ def test_corner_feet_do_not_depend_on_projected_coordinates(offset, size) -> Non
         circles=np.empty((0, 3)),
     )
     feet = fp.corner_feet(1.0)
-    assert feet.shape == (20, 2)
+    assert feet.shape == (36, 2)
     np.testing.assert_allclose(fp.distance(feet), 1.0, rtol=1e-6)
     local = Footprint(segments=fp.segments - [x0, y0], circles=fp.circles)
     np.testing.assert_allclose(feet - [x0, y0], local.corner_feet(1.0), atol=1e-6)
+
+
+# Audit W5R2 (round 2 on W5E-01): the tests of auditor W5R2, with nine feet
+# per corner.
+_PROJECTED = [
+    (5.0e5 + 0.37, 5.8e6 + 0.61),
+    (3.25e7 + 0.37, 5.8e6 + 0.61),
+    (-5.0e5 - 0.37, -5.8e6 - 0.61),
+]
+
+
+@pytest.mark.parametrize("offset", _PROJECTED)
+@pytest.mark.parametrize("angle_deg", [7.0, 30.0, 33.0])
+def test_corner_feet_of_a_rotated_mesh_built_at_projected_coordinates(
+    offset, angle_deg
+) -> None:
+    """A rotated 60 m × 40 m mesh whose nodes are computed at projected
+    coordinates (as the generators do) has four hull corners, as at the
+    origin: the nodes on its edges are collinear up to the round-off of the
+    coordinates and are no corners (audit W5R2-01: 8 or 10 hull vertices at
+    UTM, zone-prefixed or negative offsets before)."""
+    x0, y0 = offset
+    c, s = np.cos(np.radians(angle_deg)), np.sin(np.radians(angle_deg))
+    us, vs = np.linspace(0.0, 60.0, 13), np.linspace(0.0, 40.0, 9)
+
+    def at(u, v):
+        return (c * u - s * v + x0, s * u + c * v + y0)
+
+    segs = []
+    for v in vs:
+        pts = [at(u, v) for u in us]
+        segs += [(pts[k], pts[k + 1]) for k in range(len(pts) - 1)]
+    for u in us:
+        pts = [at(u, v) for v in vs]
+        segs += [(pts[k], pts[k + 1]) for k in range(len(pts) - 1)]
+    fp = Footprint(segments=np.array(segs), circles=np.empty((0, 3)))
+    feet = fp.corner_feet(1.0)
+    assert feet.shape == (4 * 9, 2)
+    np.testing.assert_allclose(fp.distance(feet), 1.0, rtol=1e-6)
+
+
+@pytest.mark.parametrize("centre", [(0.0, 0.0), *_PROJECTED])
+def test_envelope_of_a_generated_rotated_foundation_does_not_depend_on_coordinates(
+    centre,
+) -> None:
+    """A generated 12 m × 9 m foundation turned by 33°: the same feet and the
+    same maximum at the origin and at projected coordinates (audit W5R2-01:
+    64 instead of 44 feet at UTM before, the maximum unchanged)."""
+    from groundfield.generators.materialise import _materialise_foundation_wires
+
+    w = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    _materialise_foundation_wires(
+        w,
+        centre_xy=centre,
+        depth=0.8,
+        dx=12.0,
+        dy=9.0,
+        n_x=4,
+        n_y=3,
+        angle_deg=33.0,
+        name="house",
+        wire_radius=0.005,
+        concrete_shell_coefficient=0.0,
+        bond_conductor_type="bare_copper",
+    )
+    gf.create_source(w, attached_to="house", magnitude=100.0)
+    res = _solve(w)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        _, u = touch_voltage_envelope(res, w, electrode="house")
+        _, dense = touch_voltage_envelope(
+            res, w, electrode="house", n_angles=3600, corners=False
+        )
+    assert u.shape == (24 + 4 * 9,)
+    assert np.abs(u).max() >= (1.0 - 2e-4) * np.abs(dense).max()
+    assert np.abs(u).max() == pytest.approx(_W5R2_HOUSE_MAX, rel=1e-6)
+
+
+#: The maximum of the generated foundation above at the origin, image, 1 m
+#: segments, 100 A in 100 Ω·m (W5R2: 192.840469 V with five feet per corner).
+_W5R2_HOUSE_MAX = 192.840469
+
+
+def test_corner_feet_reach_the_dense_maximum_of_a_narrow_outline() -> None:
+    """A 20 m × 1.5 m outline: the maximum on its corner arcs lies between the
+    feet of five per corner (22.5° apart), which read it 0.22 % low, on the
+    unsafe side (audit W5R2-02); nine per corner reach 7200 directions."""
+    w = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    v = [(0, 0, 0.3), (20, 0, 0.3), (20, 1.5, 0.3), (0, 1.5, 0.3)]
+    gf.create_electrode(
+        w, "polyline", name="f", vertices=v, closed=True, wire_radius=0.005
+    )
+    gf.create_source(w, attached_to="f", magnitude=100.0)
+    res = _solve(w, ds=0.5)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        _, u = touch_voltage_envelope(res, w, electrode="f")
+        _, dense = touch_voltage_envelope(
+            res, w, electrode="f", n_angles=7200, corners=False
+        )
+    assert np.abs(u).max() >= (1.0 - 2e-4) * np.abs(dense).max()
