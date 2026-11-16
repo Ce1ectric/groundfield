@@ -72,14 +72,34 @@ __all__ = [
 ]
 
 SiteRole = Literal["substation", "cabinet", "building", "auxiliary", "probe"]
-"""Role of a :class:`PlannedSite` in the network."""
+"""Role of a :class:`PlannedSite` in the network.
+
+- ``"substation"`` — the secondary substation (Ortsnetzstation).
+- ``"cabinet"`` — a cable distribution cabinet.
+- ``"building"`` — a building of the network (a house or a commercial
+  building).
+- ``"auxiliary"`` — the current return electrode of a measurement.
+- ``"probe"`` — the voltage probe electrode of a measurement.
+"""
 
 BranchRole = Literal["pen", "service_drop", "measurement_lead"]
-"""Role of a :class:`PlannedBranch` in the network."""
+"""Role of a :class:`PlannedBranch` in the network.
+
+- ``"pen"`` — a section of a PEN cable.
+- ``"service_drop"`` — the connection of a building to its cable.
+- ``"measurement_lead"`` — a metallic lead of a measurement set-up.
+"""
 
 CabinetRule = Literal["centroid_ray", "far_end_ray"]
 """Rule that placed the cable cabinet of a building group
-(:attr:`PlannedSite.cabinet_rule`, audit W1R2-02)."""
+(:attr:`PlannedSite.cabinet_rule`, audit W1R2-02).
+
+- ``"centroid_ray"`` — on the ray from the substation through the group's
+  centroid.
+- ``"far_end_ray"`` — on the ray through the group's far-end building,
+  because on the centroid ray the cabinet would have stood farther than
+  ``CabinetConfig.max_far_end_gap_m`` from its group.
+"""
 
 
 class PlannedElectrode(BaseModel):

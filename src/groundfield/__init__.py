@@ -79,6 +79,7 @@ import typing as _typing
 
 # Version
 __version__ = "0.15.0"
+"""Version of the installed package (calendar versioning since 2026.11, ADR-0013)."""
 
 # ---------------------------------------------------------------------
 # Eager imports: data model, engine, factories (light; no pandas,

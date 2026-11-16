@@ -533,6 +533,11 @@ def rod_circle(
     list[RodElectrodeSpec]
         Length ``n``. Drop straight into a
         :class:`GroundingSystemSpec.electrodes` list.
+
+    Raises
+    ------
+    ValueError
+        If ``n < 1`` or ``radius_m < 0``.
     """
     if n < 1:
         raise ValueError(f"rod_circle: n must be >= 1, got {n}.")

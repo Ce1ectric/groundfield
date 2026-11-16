@@ -76,24 +76,51 @@ ConductorType = Literal[
     "overhead",  # overhead line / earth wire
     "generic",  # fallback
 ]
+"""Kind of a conductor (``Conductor.conductor_type``).
+
+- ``"pen"``: PEN conductor of a low-voltage network;
+- ``"cable_shield"``: cable shield, a thin-walled tube around its core
+  (user decisions Q32 / Q33);
+- ``"bare_copper"``: bare copper wire;
+- ``"overhead"``: overhead line or earth wire;
+- ``"generic"``: fallback.
+"""
 
 SoilCoupling = Literal[
     "isolated",  # cable / PEN inside an insulating jacket — no leakage
     "galvanic",  # bare copper / exposed shield — leakage along the wire
 ]
+"""Galvanic coupling of a conductor to the soil (``Conductor.coupling_to_soil``).
+
+- ``"isolated"``: cable or PEN inside an insulating jacket, no leakage;
+- ``"galvanic"``: bare copper or exposed shield, leakage along the wire.
+"""
 
 InductanceModel = Literal[
     "neumann",  # Neumann double-line integrals + the engine's earth-return model
 ]
+"""Inductance model of a conductor (``Conductor.inductance_model``).
+
+- ``"neumann"``: Neumann double-line integrals plus the earth-return
+  model of the engine (``Engine.earth_inductive_model``).
+"""
 
 ResistanceModel = Literal[
     "dc",  # rho * L / A at every frequency (default)
     "skin",  # exact solid-round internal impedance (Bessel solution)
 ]
+"""Series-resistance model of a conductor (``Conductor.resistance_model``).
 
-#: Largest cross section in m² accepted without a warning (100 cm²).
-#: Real conductors stay far below it; a value in mm² does not.
+- ``"dc"``: ``rho * L / A`` at every frequency (the default);
+- ``"skin"``: the exact internal impedance of a solid round wire (Bessel
+  solution).
+"""
+
 MAX_PLAUSIBLE_CROSS_SECTION = 1e-2
+"""Largest cross section in m² accepted without a warning (100 cm²).
+
+Real conductors stay far below it; a value in mm² does not.
+"""
 
 _MU_0 = 4.0e-7 * math.pi
 

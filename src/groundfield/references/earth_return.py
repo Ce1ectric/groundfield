@@ -85,7 +85,8 @@ __all__ = [
     "carson_mutual_impedance",
 ]
 
-MU_0 = 4.0e-7 * math.pi  # vacuum permeability, H/m (conventional 4*pi*1e-7)
+MU_0 = 4.0e-7 * math.pi
+"""Vacuum permeability μ0 = 4π · 10⁻⁷ H/m (the conventional value)."""
 
 
 def _check_positive(**values: float) -> None:

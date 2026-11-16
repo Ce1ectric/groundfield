@@ -94,11 +94,13 @@ USE_NUMBA: bool = True
 #: below it the one-off compilation (about 1 s) would not pay off.
 NUMBA_MIN_WORK: int = 50_000_000
 
-#: Kernel an engine requests when it leaves the choice to the backend
-#: (``Engine.kernel = None``, the default since 2026.11, review pass 10,
-#: 10.28): the exact line-source kernel wherever a backend implements it
-#: (the image family), the backend's own kernel elsewhere.
 DEFAULT_KERNEL = "line"
+"""Kernel an engine requests when it leaves the choice to the backend.
+
+Applies to ``Engine.kernel = None``, the default since 2026.11 (review
+pass 10, 10.28): the exact line-source kernel wherever a backend implements it
+(the image family), the backend's own kernel elsewhere.
+"""
 
 
 def _block_rows(n_cols: int) -> int:

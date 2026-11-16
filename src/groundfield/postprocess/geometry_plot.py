@@ -124,6 +124,11 @@ def world_bounds_3d(
     * Conductors: ``min/max`` over both endpoint :math:`z` values
       (catches overhead :math:`z<0` and buried :math:`z>0`).
 
+    Parameters
+    ----------
+    world
+        World whose electrodes and conductors are inspected.
+
     Returns
     -------
     tuple
@@ -366,6 +371,11 @@ def plot_world(
     Returns
     -------
     matplotlib.figure.Figure
+
+    Raises
+    ------
+    ValueError
+        If ``plane`` is neither ``"xy"`` nor ``"xz"``.
     """
     import matplotlib.pyplot as plt
 

@@ -229,6 +229,15 @@ _GEO_IMPORT_HINT = (
 class OverpassError(RuntimeError):
     """Raised on a non-success Overpass response.
 
+    Parameters
+    ----------
+    message : str
+        Error message.
+    status_code : int, optional
+        HTTP status code of the response, if any.
+    body : str, default ""
+        Excerpt of the response body (the callers pass its first 1 kB).
+
     Attributes
     ----------
     status_code
@@ -276,6 +285,12 @@ def default_cache_dir() -> Path:
 
     The directory is *not* created here; the caller (e.g.
     :func:`query_buildings`) creates it on first write.
+
+    Returns
+    -------
+    pathlib.Path
+        ``$XDG_CACHE_HOME/groundfield/osm`` when the variable is set and
+        not empty, else ``~/.cache/groundfield/osm``.
     """
     xdg = os.environ.get("XDG_CACHE_HOME")
     if xdg:

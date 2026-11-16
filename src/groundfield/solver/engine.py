@@ -95,43 +95,6 @@ __all__ = [
     "EngineFrequencyOrderWarning",
 ]
 
-#: Metadata keys that :meth:`Engine.solve` writes into every result.
-#:
-#: ``backend``
-#:     Backend name as requested (``Engine.backend``).
-#: ``effective_backend``
-#:     Registered backend that ran, after alias resolution and the
-#:     auto-forwarding by soil model.
-#: ``kernel``
-#:     Source kernel used (``"point"`` / ``"line"``); ``fem`` reports the
-#:     kernel of the point sources of its result (the engine's, default
-#:     ``"line"``), which the field evaluation uses.
-#: ``groundfield_version``
-#:     Version of the package that solved.
-#: ``frequencies``
-#:     Frequencies in Hz, in solve order.
-#: ``n_segments``
-#:     Number of current-carrying source segments (for ``fem`` the display
-#:     segments that carry the point sources of its result).
-#: ``soil_kind``
-#:     ``kind`` of the soil model (``"homogeneous"``, ``"two_layer"``,
-#:     ``"multi_layer"``).
-#: ``earth_inductive_model``
-#:     Earth model of the inductive coupling.
-#: ``solve_time_s``
-#:     Wall time of the backend call in s.
-#: ``series``
-#:     Image-series controls of the engine, ``{"max_terms", "tol",
-#:     "far_field"}``, for the post-solve field evaluation.
-#: ``max_segments``
-#:     Problem-size limit the solve was checked against
-#:     (:attr:`Engine.max_segments`, or
-#:     :data:`groundfield.diagnostics.HARD_LIMIT` when the engine leaves
-#:     it at ``None``); ``fem`` checks its display segments against it
-#:     and limits its mesh by ``FemOptions.max_nodes`` / ``max_nodes_3d``.
-#: ``provenance``
-#:     Versions, platform, engine configuration, world fingerprint and
-#:     UTC timestamp (see :func:`groundfield.solver.result.solve_provenance`).
 CORE_METADATA_KEYS: tuple[str, ...] = (
     "backend",
     "effective_backend",
@@ -146,6 +109,31 @@ CORE_METADATA_KEYS: tuple[str, ...] = (
     "max_segments",
     "provenance",
 )
+"""Metadata keys that :meth:`Engine.solve` writes into every result.
+
+- ``backend``: Backend name as requested (``Engine.backend``).
+- ``effective_backend``: Registered backend that ran, after alias resolution and the
+  auto-forwarding by soil model.
+- ``kernel``: Source kernel used (``"point"`` / ``"line"``); ``fem`` reports the kernel
+  of the point sources of its result (the engine's, default ``"line"``), which the field
+  evaluation uses.
+- ``groundfield_version``: Version of the package that solved.
+- ``frequencies``: Frequencies in Hz, in solve order.
+- ``n_segments``: Number of current-carrying source segments (for ``fem`` the display
+  segments that carry the point sources of its result).
+- ``soil_kind``: ``kind`` of the soil model (``"homogeneous"``, ``"two_layer"``,
+  ``"multi_layer"``).
+- ``earth_inductive_model``: Earth model of the inductive coupling.
+- ``solve_time_s``: Wall time of the backend call in s.
+- ``series``: Image-series controls of the engine, ``{"max_terms", "tol",
+  "far_field"}``, for the post-solve field evaluation.
+- ``max_segments``: Problem-size limit the solve was checked against
+  (:attr:`Engine.max_segments`, or :data:`groundfield.diagnostics.HARD_LIMIT` when the
+  engine leaves it at ``None``); ``fem`` checks its display segments against it and
+  limits its mesh by ``FemOptions.max_nodes`` / ``max_nodes_3d``.
+- ``provenance``: Versions, platform, engine configuration, world fingerprint and UTC
+  timestamp (see :func:`groundfield.solver.result.solve_provenance`).
+"""
 
 
 class EngineFrequencyOrderWarning(UserWarning):
@@ -198,8 +186,6 @@ def _check_frequency_values(values: list[float]) -> None:
             raise ValueError(f"Engine.frequencies must be non-negative, got {f}.")
 
 
-#: Names of the built-in backends (for type hints; the registry is the
-#: authority at runtime and also accepts registered third-party names).
 Backend = Literal[
     "image",
     "image_2layer",
@@ -210,6 +196,13 @@ Backend = Literal[
     "bem",
     "fem",
 ]
+"""Names of the built-in backends, for type hints.
+
+The registry is the authority at runtime and also accepts registered
+third-party names (:func:`~groundfield.solver.registry.available_backends`).
+``"cim"``, ``"bem"`` and ``"image_nlayer"`` are deprecated aliases of
+``"image"`` and ``"mom"``.
+"""
 
 # ADR-0005 / ADR-0006: how the earth contributes to the inductive coupling.
 EarthInductiveModel = Literal[
@@ -217,6 +210,17 @@ EarthInductiveModel = Literal[
     "carson_series",  # ADR-0005 — Carson 1926 per-m asymptotic correction
     "sommerfeld",  # ADR-0006 — geometric Sommerfeld kernel integration
 ]
+"""Earth-return models of the inductive coupling.
+
+The values of ``Engine.earth_inductive_model``:
+
+- ``"perfect_mirror"``: the earth as a perfect magnetic mirror
+  (ADR-0004), a fast diagnostic baseline;
+- ``"carson_series"``: Carson's (1926) per-metre series correction for
+  long parallel wires over homogeneous earth (ADR-0005);
+- ``"sommerfeld"``: the geometric Sommerfeld / Pollaczek integral for any
+  geometry and any number of layers (ADR-0006), the engine's default.
+"""
 
 _log = get_logger(__name__)
 

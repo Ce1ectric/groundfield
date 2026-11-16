@@ -223,7 +223,10 @@ class NonPassiveFitError(ValueError):
 
 
 SCHEMA_NAME = "groundfield.bustype"
+"""Value of the ``schema`` key of a BusType JSON document."""
+
 SCHEMA_VERSION = 1
+"""Value of the ``schema_version`` key; the only version written and read."""
 
 #: ``metadata["rho_definition"]`` of every exported document: the ``rho`` of
 #: the formula and of the samples is the effective resistivity of the soil
@@ -1655,6 +1658,17 @@ def fit_quality_summary(spec: BusTypeSpec) -> str:
     pointwise relative error when the document records them, and the
     impedance the fit represents (``quantity``: ``input``,
     ``cluster`` or ``electrode``) when known.
+
+    Parameters
+    ----------
+    spec
+        Exported or loaded BusType document.
+
+    Returns
+    -------
+    str
+        ``BusTypeSpec(name=..., method=..., rms=..., ...)``; a figure the
+        document does not record is left out (the rms reads ``unknown``).
     """
     md = spec.metadata if isinstance(spec.metadata, dict) else {}
     fq = md.get("fit_quality")

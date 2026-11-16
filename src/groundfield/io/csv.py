@@ -97,10 +97,6 @@ __all__ = [
 ]
 
 
-#: Frozen column list for :func:`save_potential_path_csv`. The
-#: writer always emits exactly these columns in exactly this order.
-#: Locking this contract here makes regressions on the column name
-#: convention test-detectable.
 POTENTIAL_PATH_COLUMNS: tuple[str, ...] = (
     "s",
     "x",
@@ -111,12 +107,13 @@ POTENTIAL_PATH_COLUMNS: tuple[str, ...] = (
     "phi_im",
     "abs_phi",
 )
+"""Columns of :func:`save_potential_path_csv`, in the order written.
 
-#: Mandatory columns of :func:`save_electrode_table_csv` (additional
-#: columns such as ``kind`` / ``depth_m`` may appear when a
-#: ``world`` is supplied). The electrode is identified by ``name``
-#: and its galvanic cluster by ``cluster_root`` — the column names
-#: emitted by :func:`groundfield.postprocess.electrode_current_table`.
+The writer always emits exactly these columns in exactly this order.
+Locking this contract here makes regressions on the column name
+convention test-detectable.
+"""
+
 ELECTRODE_TABLE_REQUIRED_COLUMNS: tuple[str, ...] = (
     "name",
     "cluster_root",
@@ -125,11 +122,14 @@ ELECTRODE_TABLE_REQUIRED_COLUMNS: tuple[str, ...] = (
     "abs_I",
     "frequency_hz",
 )
+"""Mandatory columns of :func:`save_electrode_table_csv`.
 
-#: Mandatory columns of :func:`save_cluster_impedances_csv`. A cluster
-#: is identified by ``cluster_root``, the canonical (alphabetically
-#: first) member of the galvanic cluster, as emitted by
-#: :func:`groundfield.postprocess.cluster_current_balance`.
+Additional columns such as ``kind`` / ``depth_m`` may appear when a
+``world`` is supplied. The electrode is identified by ``name``
+and its galvanic cluster by ``cluster_root`` — the column names
+emitted by :func:`groundfield.postprocess.electrode_current_table`.
+"""
+
 CLUSTER_IMPEDANCE_REQUIRED_COLUMNS: tuple[str, ...] = (
     "cluster_root",
     "Z_re",
@@ -137,6 +137,12 @@ CLUSTER_IMPEDANCE_REQUIRED_COLUMNS: tuple[str, ...] = (
     "abs_Z",
     "frequency_hz",
 )
+"""Mandatory columns of :func:`save_cluster_impedances_csv`.
+
+A cluster is identified by ``cluster_root``, the canonical (alphabetically
+first) member of the galvanic cluster, as emitted by
+:func:`groundfield.postprocess.cluster_current_balance`.
+"""
 
 
 # ---------------------------------------------------------------------

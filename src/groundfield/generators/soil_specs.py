@@ -357,5 +357,20 @@ def materialise_soil(
 
     Provided so callers can write ``materialise_soil(cfg.soil, rng)``
     without having to discriminate by ``isinstance`` themselves.
+
+    Parameters
+    ----------
+    spec : HomogeneousSoilSpec, TwoLayerSoilSpec or MultiLayerSoilSpec
+        Soil spec; its fields may be fixed values or distributions.
+    rng : numpy.random.Generator
+        Random number generator for the draws of the distribution
+        fields.
+
+    Returns
+    -------
+    SoilModel
+        The concrete soil model (:class:`~groundfield.HomogeneousSoil`,
+        :class:`~groundfield.TwoLayerSoil` or
+        :class:`~groundfield.MultiLayerSoil`).
     """
     return spec.to_soil(rng)

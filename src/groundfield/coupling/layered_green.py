@@ -2075,6 +2075,36 @@ def two_layer_probe_matrix(
     ``J0`` contraction (see "Cost control" below) — reserve for the
     sub-blocks that the uu series cannot handle.
 
+    Parameters
+    ----------
+    probe_points : numpy.ndarray
+        Observation points, shape ``(M, 3)``, in m (``z >= 0``, positive
+        into the soil).
+    source_points : numpy.ndarray
+        Point-source positions, shape ``(N, 3)``, in m (``z >= 0``).
+    rho_1, rho_2 : float
+        Resistivities of the upper / lower layer in Ω·m.
+    h_1 : float
+        Upper-layer thickness in m.
+    min_distance : float, default 1e-3
+        Regularisation length of the near-singular pairs in m (see
+        Notes).
+    lambda_max_factor : float, default 200.0
+        Upper bound on the quadrature truncation and regularisation
+        wavenumber, as in :func:`two_layer_real_space_kernel`.
+
+    Returns
+    -------
+    G : numpy.ndarray
+        Real ``(M, N)`` matrix of potentials per unit injected current,
+        in V/A (Ω).
+
+    Raises
+    ------
+    ValueError
+        If a probe or source point lies above the soil surface
+        (``z < 0``) or has a non-finite depth.
+
     Notes
     -----
     The near-singularity is regularised like the image-series paths:
@@ -2311,6 +2341,19 @@ def two_layer_layered_correction_real_space(
         instead of the 25 mm clamp of $h_1 = 5$ m (audit A3S-01).
         ``None`` (default) keeps the clamp; values at
         $R \\ge 1/\\lambda_\\text{clamp}$ do not depend on it.
+
+    Returns
+    -------
+    dG : float
+        Layered correction $\\Delta G$ in the units of
+        :func:`two_layer_real_space_kernel` (V/A for a unit current);
+        exactly 0.0 in the homogeneous limit.
+
+    Raises
+    ------
+    ValueError
+        If ``z`` or ``z_s`` is negative or not finite (outside the
+        homogeneous limit, which returns 0.0 first).
     """
     if rho_baseline is None:
         rho_baseline = rho_1

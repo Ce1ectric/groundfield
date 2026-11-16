@@ -375,9 +375,11 @@ _TAG_NDARRAY = "$ndarray"
 _TAGS = frozenset({_TAG_FLOAT, _TAG_COMPLEX, _TAG_TUPLE, _TAG_DICT, _TAG_NDARRAY})
 _FLOAT_SPELLINGS = ("inf", "-inf", "nan")
 
-#: Deepest nesting of containers (lists, mappings, tuples, tagged
-#: objects) the metadata codec writes and reads.
 MAX_METADATA_DEPTH = 100
+"""Deepest nesting of containers the metadata codec writes and reads.
+
+Containers are lists, mappings, tuples and tagged objects.
+"""
 
 #: ``numpy.dtype.str`` of every array dtype the codec stores: an optional
 #: byte-order character, then bool, integer of 1-8 bytes, float of 2, 4

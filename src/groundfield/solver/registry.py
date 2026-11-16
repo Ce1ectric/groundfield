@@ -123,20 +123,25 @@ __all__ = [
     "unregister_backend",
 ]
 
-#: Earliest calendar version in which deprecated names are removed.
 DEPRECATION_REMOVAL = "2027.5"
+"""Earliest calendar version in which deprecated names are removed."""
 
-#: Default cap on the number of Tagg / Sunde image-series terms. One
-#: value for the engine, every layered backend and the post-solve field
-#: evaluation. The geometric tail bound |K|^(n+1)/(1-|K|) falls below
-#: the default tolerance after 277 terms for the AP1 corner soil
-#: rho_1 = 1000, rho_2 = 30 Ohm m (|K| = 0.9417), so the cap stays
-#: unused there.
 DEFAULT_IMAGE_MAX_TERMS = 300
+"""Default cap on the number of Tagg / Sunde image-series terms.
 
-#: Default stop tolerance of the image series: summation ends when the
-#: geometric tail bound |K|^(n+1)/(1-|K|) falls below this value.
+One value for the engine, every layered backend and the post-solve field
+evaluation. The geometric tail bound |K|^(n+1)/(1-|K|) falls below
+the default tolerance after 277 terms for the AP1 corner soil
+rho_1 = 1000, rho_2 = 30 Ohm m (|K| = 0.9417), so the cap stays
+unused there.
+"""
+
 DEFAULT_IMAGE_SERIES_TOL = 1e-6
+"""Default stop tolerance of the Tagg / Sunde image series.
+
+Summation ends when the geometric tail bound |K|^(n+1)/(1-|K|) falls
+below this value.
+"""
 
 SoilKind = Literal["homogeneous", "two_layer", "multi_layer"]
 ConductorFeature = Literal["lumped", "distributed", "inductive", "skin"]

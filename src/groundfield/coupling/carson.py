@@ -137,9 +137,11 @@ __all__ = [
     "carson_parameter",
 ]
 
-# Vacuum permeability in H/m: the conventional 4*pi*1e-7 (the CODATA
-# 2018 value differs by 5.5e-10 relative).
 MU_0 = 4.0e-7 * math.pi
+"""Vacuum permeability μ0 = 4π · 10⁻⁷ H/m (the conventional value).
+
+The CODATA 2018 value differs by 5.5 · 10⁻¹⁰ relative.
+"""
 
 # Euler's constant γ_E.
 _EULER_GAMMA = 0.5772156649015329
@@ -268,7 +270,13 @@ def carson_parameter(distance: float, omega: float, sigma_earth: float) -> float
     Returns
     -------
     a : float
-        Dimensionless Carson parameter $a$.
+        Dimensionless Carson parameter $a$ (0 for a non-positive
+        ``omega`` or ``sigma_earth``).
+
+    Raises
+    ------
+    ValueError
+        If ``distance`` is negative.
     """
     if distance < 0.0:
         raise ValueError("distance must be non-negative")
@@ -620,6 +628,12 @@ def carson_mutual_correction(
     -------
     Z : complex
         Per-unit-length mutual correction in $\\Omega/\\text{m}$.
+
+    Raises
+    ------
+    ValueError
+        If ``height_i`` or ``height_j`` is not positive, or if
+        ``horizontal_distance`` is negative.
     """
     if height_i <= 0.0 or height_j <= 0.0:
         raise ValueError("heights must be positive")

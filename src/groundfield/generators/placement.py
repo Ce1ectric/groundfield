@@ -116,6 +116,21 @@ class ManhattanGridPlacement(BaseModel):
     )
 
     def generate(self, n: int, rng: np.random.Generator) -> list[tuple[float, float]]:
+        """Place ``n`` sites on the grid, row by row.
+
+        Parameters
+        ----------
+        n : int
+            Number of sites.
+        rng : numpy.random.Generator
+            Random number generator for the spacings (one draw each per
+            call) and the per-site jitter.
+
+        Returns
+        -------
+        list of tuple of float
+            ``(x, y)`` per site in m; empty for ``n < 1``.
+        """
         if n < 1:
             return []
         sx = _to_float(self.spacing_x_m, rng)
@@ -157,6 +172,26 @@ class ExplicitPlacement(BaseModel):
     positions: list[tuple[float, float]] = Field(default_factory=list)
 
     def generate(self, n: int, rng: np.random.Generator) -> list[tuple[float, float]]:
+        """Return the first ``n`` of the given positions.
+
+        Parameters
+        ----------
+        n : int
+            Number of sites.
+        rng : numpy.random.Generator
+            Random number generator (not used; kept for the common
+            interface of the placement strategies).
+
+        Returns
+        -------
+        list of tuple of float
+            The first ``n`` entries of ``positions``, ``(x, y)`` in m.
+
+        Raises
+        ------
+        ValueError
+            If ``n`` exceeds the number of given positions.
+        """
         if n > len(self.positions):
             raise ValueError(
                 f"ExplicitPlacement: requested {n} positions but only "

@@ -495,6 +495,11 @@ def plot_sweep_lines(
     Returns
     -------
     matplotlib.figure.Figure
+
+    Raises
+    ------
+    KeyError
+        If ``x``, ``y`` or ``color`` is not a column of ``df``.
     """
     import matplotlib.pyplot as plt
 
@@ -572,6 +577,13 @@ def plot_sweep_heatmap(
     Returns
     -------
     matplotlib.figure.Figure
+
+    Raises
+    ------
+    KeyError
+        If ``x``, ``y`` or ``response`` is not a column of ``df``.
+    ValueError
+        If ``frequency_Hz`` is given and no row matches it.
     """
     import matplotlib.pyplot as plt
 

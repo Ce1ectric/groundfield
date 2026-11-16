@@ -393,16 +393,22 @@ def _internal_impedance(resistance: float, inductance: float, omega: float) -> c
     return complex(float(resistance), float(omega) * float(inductance))
 
 
-#: Discriminated union over the concrete source subclasses. The
-#: ``kind`` field selects the validator at validation time, which keeps
-#: Pydantic error messages on the actual sub-class instead of the union.
 Source = Annotated[
     Union[CurrentSource, VoltageSource],
     Discriminator("kind"),
 ]
+"""Union of the source classes, discriminated by ``kind``.
 
-#: Convenience :class:`TypeAdapter` for the discriminated union, used by
-#: code paths that need to validate a stand-alone source dict (e.g. CLI
-#: imports, JSON round-trips). ``World.sources`` uses the annotation
-#: directly via Pydantic field generation.
+:class:`CurrentSource` (``"current"``) and :class:`VoltageSource`
+(``"voltage"``). The ``kind`` field selects the validator at validation
+time, which keeps Pydantic error messages on the actual sub-class
+instead of the union.
+"""
+
 SourceAdapter: TypeAdapter[Source] = TypeAdapter(Source)
+"""Pydantic :class:`TypeAdapter` that validates one stand-alone source.
+
+Used by code paths that need to validate a source given as a dict (e.g.
+CLI imports, JSON round-trips). ``World.sources`` uses the annotation
+directly via Pydantic field generation.
+"""

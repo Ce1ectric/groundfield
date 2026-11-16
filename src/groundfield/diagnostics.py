@@ -204,21 +204,30 @@ _BUDGET_HARD_THRESHOLD = HARD_LIMIT
 #: wires closer than this multiple of the sum of their radii is reported.
 PROXIMITY_REL_THRESHOLD: float = 5.0
 
-#: Overlap of inductive conductors (check ``overlap`` of :func:`diagnose`):
-#: two conductors closer than touching (axis distance below the sum of
-#: their radii, d_t) lie beside each other when that stretch is longer than
-#: OVERLAP_REL_LENGTH * d_t and OVERLAP_FRACTION of the shorter conductor.
-#: Two conductors leaving a common point at an angle phi stay closer than
-#: touching over about d_t / phi; the touching rule changes their mutual
-#: inductance over that stretch by about (mu0 / 2 pi) d_t / phi (the mean
-#: of ln(d_t / d) along a linear divergence is 1), against a self
-#: inductance of about (mu0 / 2 pi) l (ln(2 l / r) - 1), ten times
-#: (mu0 / 2 pi) l for the cables of an LV network. A stretch of 5 % of the
-#: shorter conductor therefore moves the coupling by about 0.5 % of a self
-#: inductance; a branch is reported only below about d_t / (0.05 l): 0.46
-#: deg for 12 mm touching and a 30 m drop, 0.1 rad at most.
 OVERLAP_REL_LENGTH: float = 10.0
+"""Shortest reported overlap of two inductive conductors, in touching distances.
+
+Overlap of inductive conductors (check ``overlap`` of :func:`diagnose`):
+two conductors closer than touching (axis distance below the sum of
+their radii, d_t) lie beside each other when that stretch is longer than
+OVERLAP_REL_LENGTH * d_t and OVERLAP_FRACTION of the shorter conductor.
+Two conductors leaving a common point at an angle phi stay closer than
+touching over about d_t / phi; the touching rule changes their mutual
+inductance over that stretch by about (mu0 / 2 pi) d_t / phi (the mean
+of ln(d_t / d) along a linear divergence is 1), against a self
+inductance of about (mu0 / 2 pi) l (ln(2 l / r) - 1), ten times
+(mu0 / 2 pi) l for the cables of an LV network. A stretch of 5 % of the
+shorter conductor therefore moves the coupling by about 0.5 % of a self
+inductance; a branch is reported only below about d_t / (0.05 l): 0.46
+deg for 12 mm touching and a 30 m drop, 0.1 rad at most.
+"""
+
 OVERLAP_FRACTION: float = 0.05
+"""Shortest reported overlap, as a fraction of the shorter conductor.
+
+The second threshold of the ``overlap`` check of :func:`diagnose`; see
+:data:`OVERLAP_REL_LENGTH`.
+"""
 # Relative tolerance at the touching distance (audit W3B-03): two cables
 # drawn exactly at d_t lie closer by round-off (1e-14 m for 5 mm cables),
 # and the inductance matrix evaluates them the same either way (it clamps

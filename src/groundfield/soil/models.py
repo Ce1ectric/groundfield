@@ -442,8 +442,6 @@ def _soil_kind(value: Any) -> str | None:
     return getattr(value, "kind", None)
 
 
-#: Union of all supported soil models, discriminated by ``kind`` (inferred
-#: from the keys when a plain mapping omits it). Used by ``World.soil``.
 SoilModel = Annotated[
     Union[
         Annotated[HomogeneousSoil, Tag("homogeneous")],
@@ -452,3 +450,10 @@ SoilModel = Annotated[
     ],
     Discriminator(_soil_kind),
 ]
+"""Union of the soil models, discriminated by ``kind``.
+
+:class:`HomogeneousSoil` (``"homogeneous"``), :class:`TwoLayerSoil`
+(``"two_layer"``) and :class:`MultiLayerSoil` (``"multi_layer"``). The
+kind is inferred from the keys when a plain mapping omits it. Used by
+``World.soil``.
+"""

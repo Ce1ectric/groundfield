@@ -34,13 +34,16 @@ __all__ = [
     "warn_inert",
 ]
 
-#: Release in which the names deprecated in :data:`DEPRECATED_SINCE` are
-#: removed at the earliest (two releases and six months later).
 REMOVAL_VERSION = "2027.5"
+"""Earliest release that removes the names deprecated in :data:`DEPRECATED_SINCE`.
 
-#: First calendar-versioned release; the deprecations listed in its
-#: changelog start here.
+Two releases and six months later.
+"""
+
 DEPRECATED_SINCE = "2026.11"
+"""First calendar-versioned release; the deprecations listed in its
+changelog start here.
+"""
 
 _LIBRARY_PREFIXES = ("pydantic.", "pydantic_core.")
 _LIBRARY_MODULES = ("pydantic", "pydantic_core")

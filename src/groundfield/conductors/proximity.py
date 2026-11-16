@@ -64,6 +64,17 @@ __all__ = [
 ]
 
 ProximityKind = Literal["crossing", "touching", "interpenetrating", "close", "junction"]
+"""Kind of a close wire pair (``WireProximity.kind``).
+
+- ``"crossing"``: the axes intersect inside both segments;
+- ``"touching"``: the end point of one segment lies on the interior of
+  the other (a T-contact the model does not connect);
+- ``"interpenetrating"``: the axis distance is below the sum of the radii;
+- ``"close"``: the axis distance is below the reporting threshold;
+- ``"junction"``: the two segments only share an end point.
+
+The exact criteria are in the module docstring.
+"""
 
 # End points closer than this fraction of the longer segment count as
 # shared (junction) and two axes closer than it as intersecting.
@@ -109,17 +120,23 @@ class WireProximity:
     kind
         ``"crossing"``, ``"touching"``, ``"interpenetrating"``,
         ``"close"`` or ``"junction"`` (see the module docstring).
-    name_a, name_b
-        Owner names of the two segments (e.g. conductor names).
-    index_a, index_b
-        Indices of the two segments in the input arrays.
+    name_a
+        Owner name of the first segment (e.g. a conductor name).
+    name_b
+        Owner name of the second segment.
+    index_a
+        Index of the first segment in the input arrays.
+    index_b
+        Index of the second segment in the input arrays.
     distance
         Minimum axis-to-axis distance $d$ in m.
     clearance
         Surface-to-surface distance $d - (a_a + a_b)$ in m; negative
         when the wires interpenetrate.
-    point_a, point_b
-        Closest points on the two axes, ``(x, y, z)`` in m.
+    point_a
+        Closest point on the axis of the first segment, ``(x, y, z)`` in m.
+    point_b
+        Closest point on the axis of the second segment, ``(x, y, z)`` in m.
     """
 
     kind: ProximityKind
@@ -239,6 +256,14 @@ def find_close_wires(
     -------
     list of WireProximity
         Sorted by ascending clearance (worst first).
+
+    Raises
+    ------
+    ValueError
+        If ``endpoints`` does not have shape ``(K, 2, 3)``, if ``radii`` or
+        ``names`` does not have one entry per segment, if an end point or
+        radius is not finite or a radius is negative, or if a threshold is
+        negative.
     """
     ep = np.asarray(endpoints, dtype=float)
     if ep.ndim != 3 or ep.shape[1:] != (2, 3):

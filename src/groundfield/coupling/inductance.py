@@ -156,20 +156,28 @@ __all__ = [
     "build_carson_correction_matrices",
 ]
 
-# Vacuum permeability in H/m. The conventional value 4*pi*1e-7 (exact
-# in the pre-2019 SI; the CODATA 2018 value 1.25663706212e-6 differs
-# by 5.5e-10 relative, which is irrelevant here).
 MU_0 = 4.0e-7 * math.pi
+"""Vacuum permeability μ0 = 4π · 10⁻⁷ H/m (the conventional value).
 
-#: Image convention of an inductance matrix: ``"none"`` (free space),
-#: ``"additive"`` (perfect magnetic mirror, ADR-0004) or
-#: ``"antiparallel"`` (perfect electric mirror, Carson's baseline).
+Exact in the pre-2019 SI; the CODATA 2018 value 1.25663706212e-6 differs
+by 5.5 · 10⁻¹⁰ relative, which is irrelevant here.
+"""
+
 ImageConvention = Literal["none", "additive", "antiparallel"]
+"""Image convention of an inductance matrix.
 
-#: Treatment of touching / coaxial segment pairs in the Neumann
-#: integral: ``"exact"`` (closed forms, the default) or
-#: ``"quadrature"`` (16x16 Gauss–Legendre, the default up to 0.15.0).
+- ``"none"``: free space, no image;
+- ``"additive"``: perfect magnetic mirror at the soil surface (ADR-0004);
+- ``"antiparallel"``: perfect electric mirror, Carson's baseline.
+"""
+
 TouchingRule = Literal["quadrature", "exact"]
+"""Treatment of touching and coaxial segment pairs in the Neumann integral.
+
+- ``"exact"``: closed forms (the default);
+- ``"quadrature"``: the 16 x 16 Gauss–Legendre rule (the default up to
+  0.15.0).
+"""
 
 _IMAGE_CONVENTIONS: tuple[str, ...] = ("none", "additive", "antiparallel")
 _TOUCHING_RULES: tuple[str, ...] = ("quadrature", "exact")
@@ -245,6 +253,11 @@ def thin_wire_self_inductance(
     -------
     L : float
         Partial self-inductance in henries.
+
+    Raises
+    ------
+    ValueError
+        If ``length`` or ``wire_radius`` is not positive.
     """
     if length <= 0.0 or wire_radius <= 0.0:
         raise ValueError("length and wire_radius must be positive")
@@ -285,6 +298,11 @@ def parallel_segments_mutual(length: float, distance: float) -> float:
     -------
     M : float
         Partial mutual inductance in H.
+
+    Raises
+    ------
+    ValueError
+        If ``length`` or ``distance`` is not positive.
     """
     if length <= 0.0 or distance <= 0.0:
         raise ValueError("length and distance must be positive")
@@ -889,6 +907,13 @@ def neumann_mutual(
     -------
     M : float
         Partial mutual inductance in H.
+
+    Raises
+    ------
+    ValueError
+        If ``touching`` is not ``"exact"`` or ``"quadrature"``, or if a
+        segment of the generic (non-parallel, non-touching) case has
+        zero length.
     """
     _check_touching_rule(touching)
     p1_a = np.asarray(p1_a, dtype=float)

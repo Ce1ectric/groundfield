@@ -130,6 +130,13 @@ def resolve_earth_layers(soil) -> "LayeredEarth":
         Frozen layered-earth configuration (resistivities and layer
         thicknesses) consumable by
         :func:`groundfield.coupling.sommerfeld_inductance.build_sommerfeld_correction_matrix`.
+
+    Raises
+    ------
+    TypeError
+        If ``soil`` is not a :class:`~groundfield.soil.models.HomogeneousSoil`,
+        :class:`~groundfield.soil.models.TwoLayerSoil` or
+        :class:`~groundfield.soil.models.MultiLayerSoil`.
     """
     from groundfield.coupling.sommerfeld_inductance import LayeredEarth
     from groundfield.soil.models import (

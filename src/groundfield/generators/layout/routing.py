@@ -77,9 +77,27 @@ class PenCable(BaseModel):
     grid_size_m: float = 10.0
 
     def segments(self) -> list[tuple[tuple[float, float], tuple[float, float]]]:
+        """Straight pieces of the cable between consecutive waypoints.
+
+        Returns
+        -------
+        list of tuple
+            ``((x0, y0), (x1, y1))`` per piece in m, in waypoint order.
+        """
         return list(zip(self.waypoints[:-1], self.waypoints[1:], strict=True))
 
     def total_length_m(self) -> float:
+        """Route length of the cable in m.
+
+        Sums the Manhattan length ``abs(dx) + abs(dy)`` of every piece;
+        for the axis-aligned pieces of a routed cable this is the
+        Euclidean length.
+
+        Returns
+        -------
+        float
+            Length of the cable in m.
+        """
         return sum(
             abs(p1[0] - p0[0]) + abs(p1[1] - p0[1]) for p0, p1 in self.segments()
         )
@@ -118,6 +136,16 @@ class BuildingConnection(BaseModel):
     tap_point_xy: tuple[float, float]
 
     def total_length_m(self) -> float:
+        """Route length of the stub in m.
+
+        Sums the Manhattan length ``abs(dx) + abs(dy)`` of every piece
+        between consecutive ``stub_waypoints``.
+
+        Returns
+        -------
+        float
+            Length of the stub in m.
+        """
         return sum(
             abs(p1[0] - p0[0]) + abs(p1[1] - p0[1])
             for p0, p1 in zip(
