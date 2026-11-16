@@ -227,17 +227,23 @@ applies (bit for bit) and takes the 3-D model otherwise; `"3d"` forces it,
   fw4fem3d: a 3 m rod and a ring at $R$ = 4, 6 and 10 cm against part A).
   Default $R$ = 6 cm. Wires that do not meet but run beside each other
   (side by side within 30° of parallel, a folded arm, a wire within reach
-  of another over its whole length, two wires end to end in line with a
-  gap) are kept at least $1.5\,R$ apart: $R$ becomes their axis distance
-  over 1.5 for the whole world, and below 2.2 radii of the thickest bare
-  wire of the world the solve is refused before meshing
-  (`BackendCapabilityError`, naming the distance and the integral engines);
-  wires that meet at any angle (junctions, corners, a V or a branch
-  narrower than 30°) and crossings at more than 30° are left alone (audits
-  W4R2B-03, W4R2A-01, W4R3B-01, W4R3B-02; up to then two coaxial rings
-  7.5 cm apart read +4.35e-3 in a port entry, two rings diagonal to each
-  other, surface gaps 1.3 … 3.8 mm, +11 … +14 %, two stacked rods 1 cm
-  apart +1.6e-2, and a V narrower than 30° was refused).
+  of another over its whole length) are kept at least $1.5\,R$ apart, two
+  wires end to end in line with a gap at least $3\,R$: $R$ becomes their
+  axis distance over 1.5 (end to end: their gap over 3) for the whole
+  world, and below 2.2 radii of the thickest bare wire of the world the
+  solve is refused before meshing (`BackendCapabilityError`, naming the
+  distance and the integral engines). Wires that meet at 10° or more
+  (junctions, corners, a V or a branch of 10 … 30°) and crossings at more
+  than 30° are left alone; wires that meet at less than 10°, nearly
+  parallel or touching along their length, run beside each other (audits
+  W4R2B-03, W4R2A-01, W4R3B-01, W4R3B-02, and the coordinator's decisions
+  on them; up to then two coaxial rings 7.5 cm apart read +4.35e-3 in a
+  port entry, two rings diagonal to each other, surface gaps
+  1.3 … 3.8 mm, +11 … +14 %, two stacked rods 1 cm apart +1.6e-2, and a V
+  narrower than 30° was refused). An encased wire meets others by its outer
+  shell radius $r_b$, what the soil sees: two encased wires of different
+  ports whose shells touch are one conductor in the radius correction, and
+  their separate port entries are not resolved.
 - **Isotropic mesh, deterministic bisection.** A coarse grid of
   $8 \times 8 \times 4$ cubes (six Kuhn tetrahedra each) on the box is
   refined by conforming longest-edge bisection (own implementation with
@@ -295,7 +301,9 @@ applies (bit for bit) and takes the 3-D model otherwise; `"3d"` forces it,
   difference of the transfer entries is reported as
   `metadata["fem_error_estimate_transfer"]` (audit W4R2B-05: the
   estimate covered the diagonal only; where the model holds it is
-  1.06 … 6.3 times the error of the transfer entries, not for wires end to end closer than about $3\,R$). This holds away from layer
+  1.06 … 6.3 times the error of the transfer entries; for wires end to end
+  at the gap of $3\,R$ the rule keeps, 0.85 … 0.87 times it for 8 mm rods at
+  $R$ = 3.3 … 6 cm, and a bound from $5\,R$ on). This holds away from layer
   interfaces and other wires — the model keeps wires that run beside each
   other at least $1.5\,R$ apart, and two coaxial rings 4.5 … 10 cm apart lie
   within 1.8e-3 of the solid tori in every port entry. Next to a strongly

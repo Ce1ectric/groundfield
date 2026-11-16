@@ -213,3 +213,19 @@ def test_w4r3b_05_the_transfer_margin_is_a_range() -> None:
     page = _text(FEM_PAGE)
     assert "margin of" in page and "6.3" in page
     assert "TR_" not in page and "RING_" not in page
+
+
+def test_w4r3b_decisions_the_texts_state_the_in_line_factor_the_angle_and_shells() -> (
+    None
+):
+    # the coordinator's decisions on the open points of stream fw4r3b: wires
+    # end to end keep 3 R, wires that meet at less than 10 degrees run beside
+    # each other, encased wires meet by their shell radius
+    page, adr = _text(FEM_PAGE), _text(ADR)
+    wires, solid = _text(FEM_PKG / "_wires3d.py"), _text(FEM_PKG / "_solid.py")
+    assert "It is no bound for two wires end to end closer than" not in page
+    assert "Touching wires that run together are not one conductor" in page
+    for text in (page, adr):
+        assert "3\\,R" in text and "10°" in text and "r_b" in text
+    for text in (wires, solid):
+        assert "IN_LINE_FACTOR" in text and "10°" in text
