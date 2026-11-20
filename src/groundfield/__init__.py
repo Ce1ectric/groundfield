@@ -78,7 +78,7 @@ import sys as _sys
 import typing as _typing
 
 # Version
-__version__ = "0.15.0"
+__version__ = "2026.11.0"
 """Version of the installed package (calendar versioning since 2026.11, ADR-0013)."""
 
 # ---------------------------------------------------------------------

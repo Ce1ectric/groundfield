@@ -63,6 +63,10 @@ give the details.
 
 ## [Unreleased]
 
+---
+
+## [2026.11.0] - 2026-11-20
+
 The first calendar-versioned release. It implements review pass 10 against
 0.15.0 (findings 10.01–10.95; [audit history, pass 10][pass-10]) and closes the
 pass-9 findings F01, F02 and F32 that 0.15.0 left open. The release notes the
@@ -2465,7 +2469,8 @@ The first release with a solver.
 - Project skeleton: package layout, Poetry configuration, MkDocs scaffold,
   release script, GitHub workflows, citation file and licence (MIT).
 
-[Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v2026.11.0...HEAD
+[2026.11.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v2026.11.0
 [0.15.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.15.0
 [0.14.1]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.14.1
 [0.14.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.14.0

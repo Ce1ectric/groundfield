@@ -1,6 +1,6 @@
 [project]
 name = "groundfield"
-version = "0.15.0"
+version = "2026.11.0"
 description = "Numerical field computation for grounding systems (PDE / field model, coupling to groundinsight)"
 authors = [{ name = "Christian Ehlert", email = "christian.ehlert@mailbox.org" }]
 license = "MIT"
