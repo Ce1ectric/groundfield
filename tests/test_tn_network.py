@@ -416,8 +416,14 @@ def test_substation_with_zero_present_electrodes_raises() -> None:
 
 
 def test_deprecated_module_alias_still_imports() -> None:
+    """The alias warns at its first import; another test of the same worker
+    (the API-coverage walk, for one) may have imported it already, so the
+    module is dropped from ``sys.modules`` first (failed on the Python 3.14
+    CI runner, which happened to run that test earlier)."""
+    import sys
     import warnings
 
+    sys.modules.pop("groundfield.generators.tn_ortsnetz", None)
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         from groundfield.generators.tn_ortsnetz import (  # noqa: F401
