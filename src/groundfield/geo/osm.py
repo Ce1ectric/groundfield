@@ -169,8 +169,11 @@ element → ``members`` → member → ``geometry`` → vertex). A body nested
 far deeper is not an Overpass result: up to about 10 000 levels it decodes
 and would reach the recursive pure-Python encoder of :func:`json.dump` in
 the cache write (``RecursionError`` beyond about 1 000 levels, audit
-A2G-05); beyond that the decoder itself raises ``RecursionError``. Both
-become :class:`OverpassError`."""
+A2G-05); beyond that the decoder of Python 3.12 / 3.13 raises
+``RecursionError``; Python 3.14, whose recursion guard follows the C
+stack, may decode 100 000 levels (3.14.10 on the CI runner did, 3.14.6
+did not). Every case becomes :class:`OverpassError` right after
+decoding."""
 
 _INT64_MIN = -(2**63)
 _INT64_MAX = 2**63 - 1
@@ -720,16 +723,21 @@ def _post_overpass(
             if status == 200:
                 body = _read_capped(response, max_response_bytes)
                 try:
-                    return json.loads(body)
+                    payload = json.loads(body)
                 except (ValueError, RecursionError) as exc:
                     # RecursionError: a body nested deeper than the
-                    # decoder's limit (about 10 000 levels, audit A2G-05).
+                    # decoder's limit (about 10 000 levels up to Python
+                    # 3.13, audit A2G-05).
                     raise OverpassError(
                         "Overpass returned a 200 but the body is not valid JSON "
                         "(or is nested too deeply).",
                         status_code=status,
                         body=body[:1024].decode("utf-8", errors="replace"),
                     ) from exc
+                # Python 3.14 may decode far deeper bodies; reject them here
+                # as well, so every version reports a nested body the same way.
+                _check_depth(payload)
+                return payload
             if status in _RETRY_STATUSES and attempt < max_retries:
                 _sleep(_retry_delay(response, attempt))
                 continue

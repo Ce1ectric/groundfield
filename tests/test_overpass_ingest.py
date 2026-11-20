@@ -552,8 +552,11 @@ def _post_body(body: bytes) -> dict:
 )
 def test_deeply_nested_body_raises_overpass_error(body: bytes) -> None:
     """200 / 650 kB bodies (far below the cap) raised RecursionError from
-    ``json.loads``; only ``ValueError`` was turned into OverpassError."""
-    with pytest.raises(osm.OverpassError, match="JSON"):
+    ``json.loads``; only ``ValueError`` was turned into OverpassError.
+    Python 3.14.10 on the CI runner of 2026.11.0 decoded them without error
+    and returned the payload; the depth check after decoding rejects them
+    there too (the new path is also taken by the next test)."""
+    with pytest.raises(osm.OverpassError, match="nested"):
         _post_body(body)
 
 
@@ -565,9 +568,12 @@ def test_payload_nested_deeper_than_an_overpass_result_is_rejected(
     """An unknown key nested 1500 levels deep decodes (the C decoder allows
     about 10 000 levels), passed every check and then raised RecursionError
     from ``json.dump`` in the cache write; an Overpass result is at most a
-    handful of levels deep."""
+    handful of levels deep. Since 2026.11.0 the HTTP layer rejects it as
+    well; the cache path is checked with an injected ``_post``."""
     body = json.dumps({"elements": [_way(0)], "x": _nested(depth)}).encode()
-    payload = _post_body(body)
+    with pytest.raises(osm.OverpassError, match="nested"):
+        _post_body(body)
+    payload = json.loads(body)
     with pytest.raises(osm.OverpassError, match="nested"):
         osm.query_buildings(
             LAT, LON, 100.0, cache_dir=tmp_path, _post=lambda q, **kw: payload

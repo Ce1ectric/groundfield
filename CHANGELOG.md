@@ -1566,7 +1566,9 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
   `tests/test_placement.py::test_manhattan_grid_jitter_accepts_a_distribution`.
 - **Malformed Overpass payloads (10.05, audit M1, A2G-05)** raise
   `OverpassError` before caching, also deeply nested ones (`RecursionError`
-  before). Tests: `tests/test_overpass_ingest.py`.
+  before), on every Python version: the client checks the nesting right
+  after decoding, because Python 3.14 may decode 100 000 levels where 3.12
+  and 3.13 raise (release CI). Tests: `tests/test_overpass_ingest.py`.
 - **Layouts and generator configs pickled with 0.15.0 (10.69, audit A2G-07)**
   still load and build. Tests: `tests/test_generator_pickles.py`,
   `tests/test_generator_naming.py::test_layout_pickled_with_v0150_still_builds`.
