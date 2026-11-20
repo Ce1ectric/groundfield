@@ -63,10 +63,28 @@ CASES: dict[str, Callable[[], Quantities]] = {}
 #: (1.3e-13 ohm with numpy 2.5, 2.4e-10 ohm with numpy 2.4). The current
 #: of the probe lead of the junction case is zero by construction (its
 #: junction S has nothing else attached): -1.6e-19 A with OpenBLAS on Linux
-#: x86-64, 7.2e-21 A with Accelerate on macOS arm64, at a 1 A feed.
+#: x86-64, 7.2e-21 A with Accelerate on macOS arm64, at a 1 A feed. The
+#: same holds for the probe rod of the overhead-leads network: its lead ends
+#: at the open voltmeter, so the rod and its lead carry no current
+#: (1.4e-18 A stored on macOS arm64, 9.6e-20 A and 1.6e-18 A on two Linux
+#: x86-64 machines).
+#:
+#: Two further floors cover round-off that a solver amplifies. The conforming
+#: axisymmetric ``fem`` of the deep two-layer rod (sparse LU on a graded mesh)
+#: reproduces its 34.7 ohm only to about 2.5e-9 relative across platforms
+#: (macOS arm64 vs Linux x86-64); on one machine a 1-ulp change of ``rho_1``
+#: moves it by 1.1e-9 ... 2.2e-9 and another column ordering of the LU by
+#: 5e-11 ... 1e-7, far below its discretisation error of about 1e-4. The floor
+#: of 1e-6 ohm / V is 2.9e-8 of the value. The fourth coefficient of the
+#: rho-f least-squares fit (2.7e-8 in size) differs by 8.1e-10 relative
+#: (2.2e-17 absolute) between the two platforms, just under the default
+#: tolerance; its floor is 1e-15.
 NOISE_FLOORS: dict[str, dict[str, float]] = {
     "fit_vector_fit_synthetic": {"rms": 1e-8},
     "junction_measurement_leads_hom": {"I/probe": 1e-15},
+    "gen_tn_measurement_overhead_leads": {"I/probe_rod_*": 1e-15},
+    "fem_rod_two_layer_deep": {"Zc/rod": 1e-6, "phi/rod": 1e-6},
+    "fit_rho_f_standard_sweep": {"coef/k4": 1e-15},
 }
 
 
