@@ -130,9 +130,10 @@ and the hidden check repeats realisation 7 to 1e-12.
 ## 4. Run in parallel
 
 `n_jobs` spreads the combinations over worker processes (`-1`: one per
-CPU). The rows come back in the order of the serial run and are
-bit-identical to it when every process uses a single-threaded BLAS
-(`sweep` pins the workers to one thread). The factory, the engine and a
+CPU). The rows come back in the order of the serial run. `sweep` pins the
+workers to a single-threaded BLAS; the values are bit-identical to the
+serial run when the calling process runs a single-threaded BLAS too
+(`OPENBLAS_NUM_THREADS=1`), otherwise they agree to round-off. The factory, the engine and a
 custom response must be importable by the workers: module-level
 functions, not lambdas or functions defined in a notebook — `sweep`
 raises a clear `TypeError` otherwise.
@@ -141,12 +142,14 @@ raises a clear `TypeError` otherwise.
 import pandas as pd
 
 parallel = gf.sweep(network, engine, axes={"seed": range(16)}, n_jobs=2)
-pd.testing.assert_frame_equal(parallel, mc, check_exact=True)
-print("serial and parallel runs are identical:", len(parallel), "rows")
+pd.testing.assert_frame_equal(parallel, mc, check_exact=False, rtol=1e-12, atol=0.0)
+print("serial and parallel runs agree:", len(parallel), "rows")
 ```
 
 **How to check it:** `pd.testing.assert_frame_equal` above compares the
-parallel table with the serial one bit for bit. Starting the workers costs
+parallel table with the serial one to 1e-12 (bit for bit only with a
+single-threaded BLAS in the calling process: on a four-core CI runner one
+of the 16 values differed in the last digit). Starting the workers costs
 about a second each, so parallel runs pay off for sweeps whose single
 solves take longer than that. Warnings raised in the workers are re-issued
 in the calling process.
