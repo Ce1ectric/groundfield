@@ -188,7 +188,8 @@ reproduces 0.15.0, it is named.
   actions pinned to commit SHAs (Dependabot keeps them current), no persisted
   credentials, tag names only through environment variables, the release gated
   by the full CI; locked dependencies updated until `pip-audit` reports no
-  known advisory.
+  known advisory (last: tornado 6.6.1 for CVE-2026-126347, a dependency of
+  the Jupyter tools in the dev and docs groups, not of the package).
 - **Documentation site (10.08).** MathJax 3.2.2 is vendored with the site and
   pinned by checksums, and no Google Fonts are loaded: the site requests no
   third-party resource. Test: `tests/test_docs_assets.py`.
