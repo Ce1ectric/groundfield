@@ -4325,20 +4325,23 @@ from its seed (tutorial <a href="../../tutorials/T10_reproducible_studies/">T10<
 and the hidden check repeats realisation 7 to 1e-12.</p>
 <h2 id="4-run-in-parallel">4. Run in parallel<a class="headerlink" href="#4-run-in-parallel" title="Permanent link">&para;</a></h2>
 <p><code>n_jobs</code> spreads the combinations over worker processes (<code>-1</code>: one per
-CPU). The rows come back in the order of the serial run and are
-bit-identical to it when every process uses a single-threaded BLAS
-(<code>sweep</code> pins the workers to one thread). The factory, the engine and a
+CPU). The rows come back in the order of the serial run. <code>sweep</code> pins the
+workers to a single-threaded BLAS; the values are bit-identical to the
+serial run when the calling process runs a single-threaded BLAS too
+(<code>OPENBLAS_NUM_THREADS=1</code>), otherwise they agree to round-off. The factory, the engine and a
 custom response must be importable by the workers: module-level
 functions, not lambdas or functions defined in a notebook — <code>sweep</code>
 raises a clear <code>TypeError</code> otherwise.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
 <a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
 <a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">parallel</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">sweep</span><span class="p">(</span><span class="n">network</span><span class="p">,</span> <span class="n">engine</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;seed&quot;</span><span class="p">:</span> <span class="nb">range</span><span class="p">(</span><span class="mi">16</span><span class="p">)},</span> <span class="n">n_jobs</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">pd</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">assert_frame_equal</span><span class="p">(</span><span class="n">parallel</span><span class="p">,</span> <span class="n">mc</span><span class="p">,</span> <span class="n">check_exact</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;serial and parallel runs are identical:&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">parallel</span><span class="p">),</span> <span class="s2">&quot;rows&quot;</span><span class="p">)</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">pd</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">assert_frame_equal</span><span class="p">(</span><span class="n">parallel</span><span class="p">,</span> <span class="n">mc</span><span class="p">,</span> <span class="n">check_exact</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">rtol</span><span class="o">=</span><span class="mf">1e-12</span><span class="p">,</span> <span class="n">atol</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;serial and parallel runs agree:&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">parallel</span><span class="p">),</span> <span class="s2">&quot;rows&quot;</span><span class="p">)</span>
 </code></pre></div>
 <p><strong>How to check it:</strong> <code>pd.testing.assert_frame_equal</code> above compares the
-parallel table with the serial one bit for bit. Starting the workers costs
+parallel table with the serial one to 1e-12 (bit for bit only with a
+single-threaded BLAS in the calling process: on a four-core CI runner one
+of the 16 values differed in the last digit). Starting the workers costs
 about a second each, so parallel runs pay off for sweeps whose single
 solves take longer than that. Warnings raised in the workers are re-issued
 in the calling process.</p>

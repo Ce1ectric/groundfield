@@ -6235,7 +6235,8 @@ reproduces 0.15.0, it is named.</p>
   actions pinned to commit SHAs (Dependabot keeps them current), no persisted
   credentials, tag names only through environment variables, the release gated
   by the full CI; locked dependencies updated until <code>pip-audit</code> reports no
-  known advisory.</li>
+  known advisory (last: tornado 6.6.1 for CVE-2026-126347, a dependency of
+  the Jupyter tools in the dev and docs groups, not of the package).</li>
 <li><strong>Documentation site (10.08).</strong> MathJax 3.2.2 is vendored with the site and
   pinned by checksums, and no Google Fonts are loaded: the site requests no
   third-party resource. Test: <code>tests/test_docs_assets.py</code>.</li>
@@ -7701,7 +7702,9 @@ that ran. <code>fem</code> is registered as experimental (<code>ExperimentalBack
   <code>tests/test_placement.py::test_manhattan_grid_jitter_accepts_a_distribution</code>.</li>
 <li><strong>Malformed Overpass payloads (10.05, audit M1, A2G-05)</strong> raise
   <code>OverpassError</code> before caching, also deeply nested ones (<code>RecursionError</code>
-  before). Tests: <code>tests/test_overpass_ingest.py</code>.</li>
+  before), on every Python version: the client checks the nesting right
+  after decoding, because Python 3.14 may decode 100 000 levels where 3.12
+  and 3.13 raise (release CI). Tests: <code>tests/test_overpass_ingest.py</code>.</li>
 <li><strong>Layouts and generator configs pickled with 0.15.0 (10.69, audit A2G-07)</strong>
   still load and build. Tests: <code>tests/test_generator_pickles.py</code>,
   <code>tests/test_generator_naming.py::test_layout_pickled_with_v0150_still_builds</code>.</li>
