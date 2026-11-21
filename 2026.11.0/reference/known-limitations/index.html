@@ -1,0 +1,5657 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Numerical field computation for grounding systems.">
+      
+      
+      
+        <link rel="canonical" href="https://ce1ectric.github.io/groundfield/2026.11.0/reference/known-limitations/">
+      
+      
+        <link rel="prev" href="../warnings/">
+      
+      
+        <link rel="next" href="../deprecations/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+    
+    
+      
+        <title>Known limitations - groundfield</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#known-limitations" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="groundfield" class="md-header__button md-logo" aria-label="groundfield" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            groundfield
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Known limitations
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Ce1ectric/groundfield" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Ce1ectric/groundfield
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../getting-started/installation/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Getting started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../tutorials/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Tutorials
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../examples/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Examples
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../how-to/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  How-to guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../explanation/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Explanation
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../changelog/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Project
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="groundfield" class="md-nav__button md-logo" aria-label="groundfield" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    groundfield
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Ce1ectric/groundfield" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Ce1ectric/groundfield
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quickstart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../tutorials/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/T01_first_grounding_impedance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T01 First grounding impedance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/T02_layered_soil/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T02 Layered soil
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/T03_interconnected_systems_and_impedances/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T03 Interconnected systems and impedances
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/T04_frequency_response_and_rho_f/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T04 Frequency response and rho-f
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/T05_export_to_groundinsight/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T05 Export to groundinsight
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/T06_tn_network_synthetic_and_osm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T06 TN network, synthetic and OSM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/T07_fall_of_potential_measurement/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T07 Fall-of-potential measurement
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/T08_touch_and_step_assessment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T08 Touch and step voltage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/T09_choosing_an_engine_and_convergence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T09 Choosing an engine, convergence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/T10_reproducible_studies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T10 Reproducible studies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../examples/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Examples
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/E01_secondary_substation_and_lv_network/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    E01 Secondary substation and LV network
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/E02_single_family_house/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    E02 Single-family house
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/E03_hv_substation_grid_two_layer_soil/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    E03 HV substation grid in two-layer soil
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../how-to/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-to guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/install-extras/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install the optional extras
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/sweeps-and-monte-carlo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Run sweeps and Monte Carlo studies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/speed-up-large-studies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Speed up large studies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/plot-results/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plot results
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/inductive-coupling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Model the inductive coupling of cables and leads
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/assess-touch-voltages/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Assess touch voltages
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/export-csv-vtk-paraview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Export to CSV, VTK and ParaView
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/osm-offline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Work with OpenStreetMap offline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/warnings-and-diagnostics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Read and act on warnings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/contribute-to-the-docs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contribute to the documentation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../explanation/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Explanation
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Explanation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../explanation/engines/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engines
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6_3" id="__nav_6_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Engines
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/engines/image/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    image
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/engines/image_2layer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    image_2layer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/engines/mom/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    mom
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/engines/mom_sommerfeld/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    mom_sommerfeld
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/engines/fem/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    fem (experimental)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/kernels/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Source kernels
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/earth-return/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Earth return
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/concrete-shells/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concrete shells
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/sources-and-measurement/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sources and measurement
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Performance and scaling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_10" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_10" id="__nav_6_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture decisions
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture decisions
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0001-two-layer-method/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0001 Two-layer method
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0002-engine-family/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0002 Engine family
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0003-distributed-conductor-model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0003 Distributed conductor
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0004-inductive-coupling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0004 Inductive coupling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0005-carson-earth-return/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0005 Carson earth return
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0006-sommerfeld-earth-return/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0006 Sommerfeld earth return
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0007-cross-layer-electrodes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0007 Cross-layer electrodes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0008-groundinsight-bridge/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0008 groundinsight bridge
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0009-world-generators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0009 World generators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0010-tier0-performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0010 Tier-0 performance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0011-osm-building-footprints/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0011 OSM building footprints
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0012-foundation-concrete-encasement/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0012 Foundation concrete encasement
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0013-calendar-versioning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0013 Calendar versioning
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0014-backend-registry-and-pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0014 Backend registry and pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0015-line-source-kernel-default/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0015 Line-source kernel default
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0016-conforming-fem/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0016 Conforming fem
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../api/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7_2" id="__nav_7_2_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/factories/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Factories
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/world/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    World
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/soil/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Soil
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/geometry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Geometry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/conductors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conductors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/boundary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Boundary
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/solver/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Solver
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/registry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backend registry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/coupling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Coupling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/postprocess/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Postprocess
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/diagnostics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diagnostics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/results-io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Result files
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    IO and groundinsight
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/geo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Geo / OSM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/generators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Generators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/references/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    References
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/utils/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Utilities
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../glossary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Glossary (EN / DE)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../units-and-conventions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Units and conventions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../warnings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Warnings and errors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Known limitations
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Known limitations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#scope-of-the-physics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scope of the physics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#coordinates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Coordinates
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#current-ansatz-and-source-kernels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Current ansatz and source kernels
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#soil-layers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Soil layers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#backends" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backends
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Backends">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-fem-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The fem engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#concrete-shells" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Concrete shells
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#earth-return-and-conductors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Earth return and conductors
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#post-processing-and-export" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Post-processing and export
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#generators-and-osm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Generators and OSM
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#diagnostics-and-problem-size" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diagnostics and problem size
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deprecations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deprecations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../roadmap/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Roadmap
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../audit/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audit history
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8_3" id="__nav_8_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_8_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Audit history
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../audit/pass-01/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pass 1
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../audit/pass-02/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pass 2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../audit/pass-03/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pass 3
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../audit/pass-04/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pass 4
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../audit/pass-05/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pass 5
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../audit/pass-06/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pass 6
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../audit/pass-07/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pass 7
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../audit/pass-08/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pass 8
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../audit/audit-2026-07-08/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audit of 2026-07-08
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../audit/pass-09/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pass 9
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../audit/pass-10/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pass 10
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../graphify/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Knowledge graph (graphify)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#scope-of-the-physics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scope of the physics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#coordinates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Coordinates
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#current-ansatz-and-source-kernels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Current ansatz and source kernels
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#soil-layers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Soil layers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#backends" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backends
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Backends">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-fem-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The fem engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#concrete-shells" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Concrete shells
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#earth-return-and-conductors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Earth return and conductors
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#post-processing-and-export" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Post-processing and export
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#generators-and-osm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Generators and OSM
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#diagnostics-and-problem-size" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diagnostics and problem size
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="known-limitations">Known limitations<a class="headerlink" href="#known-limitations" title="Permanent link">&para;</a></h1>
+<p>This page lists what <code>groundfield</code> does not do, does only approximately,
+or does only with certain engines, with the size of the effect where it has
+been measured. Read the entries of your engine and topic before you rely on
+a number near one of these limits.</p>
+<p>Each entry says <strong>what</strong> the limit is, <strong>how large</strong> its effect is, and
+<strong>what to do instead</strong>. Measurement lists, audit references and history are
+collapsed under <em>Details and audit trail</em>. The numbers are recorded in the
+docstrings of the modules named in each entry (they are the authority and
+are updated with the code) and in the <a href="../../changelog/">changelog</a> of the
+release that measured them. The <a href="../../explanation/validation/">validation page</a>
+shows what agrees with independent references and how well, the
+<a href="../warnings/">warnings reference</a> explains every warning named here, and
+<a href="../api/diagnostics/"><code>diagnose()</code></a> reports most geometric limits before a
+solve.</p>
+<table>
+<thead>
+<tr>
+<th>Group</th>
+<th>Covers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="#scope-of-the-physics">Scope of the physics</a></td>
+<td>frequency range, soil model, what is not computed</td>
+</tr>
+<tr>
+<td><a href="#coordinates">Coordinates</a></td>
+<td>projected and local coordinates in one world</td>
+</tr>
+<tr>
+<td><a href="#current-ansatz-and-source-kernels">Current ansatz and source kernels</a></td>
+<td>the image family's uniform current per wire; the point and the line kernel</td>
+</tr>
+<tr>
+<td><a href="#soil-layers">Soil layers</a></td>
+<td>three or more layers, rod ends and wires at an interface, high contrast, effective resistivity</td>
+</tr>
+<tr>
+<td><a href="#backends">Backends</a>: <a href="#the-fem-engine">the <code>fem</code> engine</a>, <a href="#concrete-shells">concrete shells</a></td>
+<td>the axisymmetric and the 3-D model of <code>fem</code>, their accuracy, size and cost; overlapping concrete shells at junctions</td>
+</tr>
+<tr>
+<td><a href="#earth-return-and-conductors">Earth return and conductors</a></td>
+<td><code>carson_series</code>, <code>perfect_mirror</code>, the Sommerfeld rules, skin effect, concentric cables</td>
+</tr>
+<tr>
+<td><a href="#post-processing-and-export">Post-processing and export</a></td>
+<td>EN 50522 curve, touch-voltage envelope, reduced models</td>
+</tr>
+<tr>
+<td><a href="#generators-and-osm">Generators and OSM</a></td>
+<td>foundation outlines, service drops, cabinets, Overpass</td>
+</tr>
+<tr>
+<td><a href="#diagnostics-and-problem-size">Diagnostics and problem size</a></td>
+<td>segment limits, touching electrodes, backend aliases</td>
+</tr>
+</tbody>
+</table>
+<h2 id="scope-of-the-physics">Scope of the physics<a class="headerlink" href="#scope-of-the-physics" title="Permanent link">&para;</a></h2>
+<ul>
+<li>
+<p><strong>Quasi-static, below 1 kHz.</strong> Displacement currents in the soil and
+  wave propagation along conductors are neglected; impulse and lightning
+  transients are out of scope.</p>
+<p><strong>How large:</strong> the ratio of displacement to conduction current,
+<span class="arithmatex">\(\omega\varepsilon_0\varepsilon_r\rho\)</span>, is below <span class="arithmatex">\(10^{-2}\)</span> up to 1 kHz
+for <span class="arithmatex">\(\rho \le 1000\,\Omega\,\mathrm{m}\)</span> and <span class="arithmatex">\(\varepsilon_r = 81\)</span>, but
+reaches about <span class="arithmatex">\(4.5\cdot10^{-2}\)</span> in rock of 10 kΩ·m (<a href="../api/soil/">Soil</a>).</p>
+<p><strong>Instead:</strong> stay below 1 kHz. Higher frequencies are accepted without a
+warning but are outside the validated range.</p>
+</li>
+<li>
+<p><strong>Linear, isotropic, horizontally layered soil.</strong> No soil ionisation,
+  no lateral changes of resistivity, no anisotropy, no frequency
+  dependence of <span class="arithmatex">\(\rho\)</span>; soil and metal are non-magnetic.</p>
+</li>
+<li>
+<p><strong>No capacitive coupling</strong> between conductors (negligible below
+  1 kHz for buried conductors).</p>
+</li>
+<li>
+<p><strong>Voltage sources.</strong> The internal impedance of a <code>VoltageSource</code> is a
+  lumped <span class="arithmatex">\(R + j\omega L\)</span> with constant <span class="arithmatex">\(R\)</span> and <span class="arithmatex">\(L\)</span>. Voltage sources without
+  internal resistance that form a loop (through ideal bonds or remote
+  earth) are rejected, also when one of them has an inductance (it vanishes
+  at <span class="arithmatex">\(f = 0\)</span>; <code>World.check</code> does not know the frequencies).</p>
+<p><strong>Instead:</strong> for a frequency-dependent source impedance, solve once per
+frequency with its values.</p>
+</li>
+<li>
+<p><strong>Not computed:</strong> the inductive reduction factor of cable screens and
+  earth wires; mutual impedances (<code>BranchType</code>) for groundinsight — one
+  <code>BusType</code> describes one terminal.</p>
+</li>
+</ul>
+<h2 id="coordinates">Coordinates<a class="headerlink" href="#coordinates" title="Permanent link">&para;</a></h2>
+<ul>
+<li>
+<p><strong>Projected and local coordinates in one world.</strong> Projected coordinates
+  are solved in an exactly shifted local frame beyond 10 km from the
+  origin. A world that mixes projected and local coordinates — points
+  within 10 km of the origin and beyond 1000 km from it, typically a return
+  electrode, a cabinet or a cable end entered in a local system in a UTM
+  world — gains nothing from the frame and is solved as given: its two
+  groups lie some 33 000 km apart and a conductor between them is that
+  long.</p>
+<p><strong>How large:</strong> a return rod at local (80, 15) m for an outline at UTM
+coordinates: Z_in +0.43 %; a PEN cable to a cabinet at local
+coordinates: a 33 118 km conductor, 7494 + j25396 Ω instead of
+5.39 + j0.19 Ω with <code>carson_series</code>, and <code>sommerfeld</code> does not finish.</p>
+<p><strong>Instead:</strong> give every point in one coordinate system. The solve warns
+with <a href="../warnings/#mixedcoordinateswarning"><code>MixedCoordinatesWarning</code></a>
+and <code>diagnose()</code> reports it under <code>coordinates</code>. Field and probe points
+are never checked.</p>
+<details class="note">
+<summary>Details and audit trail</summary>
+<p>Its round-off is that of the UTM world (1.5e-11 instead of 1.0e-11,
+point kernel). Since 2026.11 the solve warns with
+<code>MixedCoordinatesWarning</code> and <code>diagnose()</code> reports it under
+<code>coordinates</code> (user decision D5). A world wholly in projected or
+wholly in local coordinates is never warned about at the solve;
+<code>diagnose()</code> reports one wider than 100 km as information. The rule
+is a point within 10 km of the origin together with one beyond
+1000 km: a stray point between 10 and 1000 km, a northing missing a
+digit, an easting without its zone prefix or a position given in km
+are silent at the solve (<code>diagnose()</code> reports them as information
+through their extent, 5 231 / 32 000 / 33 085 km for a rod beside
+one at UTM coordinates), and field and probe points
+(<code>FieldResult.potential(points)</code>, <code>touch_voltage(position=…)</code>,
+<code>step_voltage</code>, the probe and field points of <code>solve_mutual_*</code>) are
+never checked (a potential at local (1, 0, 0) m of a UTM world is
+4.8e-7 V, without a warning; audit W2R2-11). The measurements of
+the mixed world are those of audit W2B-04.</p>
+</details>
+</li>
+<li>
+<p><strong>Straight runs of a polyline at UTM coordinates.</strong> The straight runs of
+  a polyline (one owner per run) are found with a round-off allowance of 64
+  units of the coordinates, 0.46 µm at a UTM easting, and are grown
+  greedily from the first vertex.</p>
+<p><strong>How large:</strong> an arc whose vertices lie closer than that to the chord
+of their neighbours (R = 50 m in 6 mm edges) gets one owner per two
+edges instead of one per edge: +5.5e-4 in Z against the same arc at
+local coordinates. The same arc given in reverse order has as many
+wires, in another partition, and its impedance differs by 2.4e-8
+(closed) / 4.9e-8 (open).</p>
+<p><strong>Instead:</strong> for such finely divided arcs give the whole world in local
+coordinates (the reverse-order difference is 4e-15 there).</p>
+<details class="note">
+<summary>Details and audit trail</summary>
+<p>The partition depends on the vertex order only where vertices lie
+within the allowance off the chord (audit W1R3-06).</p>
+</details>
+</li>
+</ul>
+<h2 id="current-ansatz-and-source-kernels">Current ansatz and source kernels<a class="headerlink" href="#current-ansatz-and-source-kernels" title="Permanent link">&para;</a></h2>
+<ul>
+<li>
+<p><strong>Uniform current per straight wire (image family).</strong> <code>image</code> and
+  <code>image_2layer</code> assume a uniform current per unit length on each straight
+  wire of an electrode (and soil layer): a full wire line of a grid, an arm
+  of a star, a straight run of a polyline; rods, strips and rings are one
+  wire. Impedances are close to the per-segment <code>mom</code> solution; surface
+  potentials next to grid corners, star tips, strip ends and bonded
+  multi-electrode clusters are not, because the real current crowds there.</p>
+<p><strong>How large:</strong> impedances of rods and rings within about 1 % of the
+per-segment <code>mom</code> solution, grids +0.36 … +0.70 %, stars +1.8 %
+(3 arms) … +10.5 % (8 arms of 10 m). Touch / step voltage next to a
+20 m × 20 m grid corner +6.4 % / −7.6 %, beyond a 4-arm star tip
++8 % / −9 %, between two star arms touch −17 % and step +40 %. Single
+rings, rods and closed loops are within 2 %, but a bonded cluster is
+not: a bare ring bonded 1 m outside a house's foundation mesh reads the
+touch voltage +5 … +16 % above <code>mom</code> with the feet right above the
+ring (the foundation alone within 2 %). Two-layer soil can make the
+grid figures much larger, most of all over a resistive bottom: a
+60 m × 40 m grid with 5 m meshes in 50 over 300 Ω·m reads the touch
+voltage 1 m outside +12.5 %, at the mesh centres +45 % and the step
+voltage at a corner −4.7 % (the unsafe side); in 300 over 50 Ω·m
++2.1 %, +7.1 % and +4.5 % (case study E03).</p>
+<p><strong>Instead:</strong> for field values near such geometries solve with
+<code>backend="mom"</code> (or compare both); the safety functions warn with
+<a href="../warnings/#uniformcurrentfieldwarning"><code>UniformCurrentFieldWarning</code></a>.
+For impedances, rho-f samples and far-field potentials the image family
+is the right tool.</p>
+<details class="note">
+<summary>Details and audit trail</summary>
+<p>The current model is that of user decisions Q30 and Q44. Impedances
+of rods and rings are within about 1 % of the per-segment <code>mom</code>
+solution, grids +0.36 … +0.70 % above one current per segment with
+the default line kernel (10 m 2 × 2 … 40 m 8 × 8; +0.43 … +0.89 % in
+5 cm of wet concrete; against <code>mom</code> with the point kernel
++0.29 … +0.66 %, +0.35 … +0.69 % in the same concrete), stars a few
+per cent above it, growing with the number of arms (+1.8 % for 3,
++3.5 % for 4, +10.5 % for 8 arms of 10 m in 100 Ω·m; up to +12.6 %
+in 1000 over 100 Ω·m and +19.7 % in wet concrete; against <code>mom</code>,
+point kernel, +1.4 … +11.8 % bare, up to +18.8 % encased): the
+current crowds to the tips, which one current per arm cannot
+represent.</p>
+<p>Rectangles without cross-braces, given by their size or as an
+outline (one owner per side), with a short side of at least 1 m, an
+aspect ratio up to 50 and sides up to 150 m are at most 1.4 % high
+over the AP1 soils, bare or encased (150 m × 3 m bare in 30 over
+200 Ω·m: +1.34 %; 0.9 % for 150 m × 7.75 m; at most 0.25 % up to
+aspect ratio 4); narrower ones more (150 m × 1 m: +1.65 %). For
+shells as thick as 0.2 m these numbers carry about 0.2 percentage
+points of model uncertainty.</p>
+<p>Surface potentials near grids, stars, strip ends and bonded
+multi-electrode clusters are worse. Against the per-segment <code>mom</code>
+solution, with the default line kernel, touch voltage with the feet
+1 m outside the footprint and step voltage from 1 m to 2 m outside:
+a 20 m × 20 m grid with 4 × 4 meshes at a corner +6.4 % / −7.6 %
+(the step from the point above the corner 1 m outwards −11 %, the
+step at the middle of an edge +5.8 %); a 4-arm star with 5 m arms
+beyond a tip +8 % / −9 % (between two arms touch −17 %, step
++40 %); rings, rods and closed loops within 2 % (the point kernel
+isolates the ansatz: +5 % / −8 %, +7 % / −10 %, within 1 %;
+<code>groundfield.postprocess.safety</code>).</p>
+<p>The 2 % hold for single electrodes. Example E02 (stream docex2, the
+executed notebook <code>docs/examples/E02_single_family_house.ipynb</code>):
+the 10 m × 10 m mesh foundation of the generators' <code>residential</code>
+house (2 × 2 cells, 0.8 m deep, 5 mm bar in 5 cm of 150 Ω·m
+concrete) with a bare ring 1 m outside, bonded; the largest touch
+voltage of <code>touch_voltage_envelope</code> 1 m from the bars (72
+directions, the feet right above the ring) per ampere, <code>image</code>
+against <code>mom</code> at 0.5 m segments: +9.4 % in 100 Ω·m, +5.3 % in
+300 over 30 Ω·m and +15.7 % in 50 over 500 Ω·m (<span class="arithmatex">\(h_1\)</span> = 2 m);
+the foundation alone +1.2 … +2.0 %. The image family is high there
+(the safe side), and <code>UniformCurrentFieldWarning</code> fires for the
+bonded cluster.</p>
+</details>
+</li>
+<li>
+<p><strong>Point kernel</strong> (<code>kernel="point"</code>, and always in <code>mom</code> and
+  <code>mom_sommerfeld</code>). It places each segment's current at its midpoint; its
+  row sums carry an error of about <span class="arithmatex">\(-0.23/L\)</span>, which no refinement removes.</p>
+<p><strong>How large:</strong> grounding resistances converge 0.9–1.9 % below the exact
+uniform-current value (<code>Engine.kernel</code>). Horizontal wires close to the
+layer interface need segments much shorter than
+<span class="arithmatex">\(2\lvert z - h_1\rvert\)</span>: a ring 5 cm below the interface of 100 over
+1000 Ω·m reads −46 % at 0.5 m segments.</p>
+<p><strong>Instead:</strong> use the line kernel (the default of the image family) or
+shorter segments. A horizontal point-kernel segment within 0.6 segment
+lengths of the interface warns with
+<a href="../warnings/#pointkernelinterfacewarning"><code>PointKernelInterfaceWarning</code></a>;
+one closer than 0.387 segment lengths raises <code>BackendCapabilityError</code>.</p>
+<details class="note">
+<summary>Details and audit trail</summary>
+<p>The ring 5 cm below the interface is documented in changelog
+2026.11.0, finding 10.28. A horizontal point-kernel segment within
+0.6 segment lengths of the interface, on either side of it, warns
+with <code>PointKernelInterfaceWarning</code> (3–17 % low in the measured cases
+with an electrode through the interface, −2.5 % for a ring 0.2 m
+above it); one closer than 0.387 segment lengths, or one whose
+three-point rule would reach above the surface, raises
+<code>BackendCapabilityError</code> (a ring 1 µm above the interface read
+−1931 Ω instead of 4.18 Ω before).</p>
+</details>
+</li>
+<li>
+<p><strong>Line kernel in two-layer soil.</strong> The exact line kernel leaves three
+  small remainders in two-layer soil: the ends of a finite wire next to the
+  interface, the reduced kernel of direct pairs of different wires, and the
+  form of far images.</p>
+<p><strong>How large:</strong> a 2 m strip 5 mm above a 1000 / 30 Ω·m interface reads
++3.0e-4 against the circumference average, a 10 m strip +5.5e-5; two
+strips 1 cm above that interface, 5 cm apart, −3.5e-4 in their mutual
+resistance. With <code>Engine.image_far_field = "point"</code> a wire on the
+interface is up to 3.0e-4 apart between the two paths (the default:
+1.3e-6).</p>
+<p><strong>Instead:</strong> keep the default <code>Engine.image_far_field</code>. With an
+electrode through the interface, give a galvanic distributed conductor
+sub-pieces of the order of <span class="arithmatex">\(h_1\)</span>.</p>
+<details class="note">
+<summary>Details and audit trail</summary>
+<p>Image pairs take the image's potential at the transverse distance of
+the wire from the image's axis (audit W3A-02). That is its average
+over the wire's circumference for a long wire; the ends of a finite
+one add a remainder of order a²/(d·ℓ) (audit W3R2A-05): a 2 m strip
+5 mm above a 1000 / 30 Ω·m interface reads +3.0e-4 against the
+circumference average, a 10 m strip +5.5e-5; rings have no ends.</p>
+<p>A ring 1 cm above a 1000 / 30 Ω·m interface is within 0.004 % of its
+exact thin ring. A straight 10 m strip in 1000 / 50 Ω·m with
+<span class="arithmatex">\(h_1\)</span> = 1 m is within 3.6e-6 of its uniform-current resistance for
+segment lengths of 0.125 … 2 m, not monotonically. A rod through
+the interface is within 1.4e-6 of its exact two-owner value.</p>
+<p>Direct pairs of different wires and the soil-surface image keep the
+reduced kernel of the direct term (audit W3R2A-06). Two strips 1 cm
+above a 1000 / 30 Ω·m interface, 5 cm apart, read −3.5e-4 against
+their mutual resistance with the circumference average of the direct
+term too. A house grid at 0.8 m is 4e-7 lower than with the
+transverse distance on the surface image, at 0.1 m 1.7e-5.</p>
+<p>Far images carry the quadrupole term up to a vertical distance of
+120 segment lengths (tapered from 60) and where it exceeds 1e-9 of a
+unit point term. With <code>Engine.image_far_field = "point"</code> they stay
+point sources and their near pairs stay Galerkin integrals. In that
+form a wire on the interface is up to 3.0e-4 apart between the
+series and the cross-layer path (the default: 1.3e-6), and a rod
+through the interface depends on the segment length by up to 6e-5
+(ds 1 … 0.25 m; the default 4e-7).</p>
+<p>The field of sources in the lower layer (<code>FieldResult.potential</code>,
+<code>solve_mutual_field</code>) is evaluated in point form by the spectral
+kernel. With an electrode through the interface, a galvanic
+distributed conductor needs sub-pieces of the order of <span class="arithmatex">\(h_1\)</span>
+(changelog 2026.11.0, finding 10.24).</p>
+</details>
+</li>
+<li>
+<p><strong>Cost of the line kernel.</strong> The near pairs and the quadrupole far field
+  over all pairs make the line kernel more expensive than the point kernel;
+  the extra work grows like <span class="arithmatex">\(N^2\)</span>.</p>
+<p><strong>How large:</strong> for 16 house grids (<span class="arithmatex">\(N\)</span> = 1920) 3.8 times the solve time
+of the point kernel in homogeneous soil and 1.6 times in two-layer soil
+(<span class="arithmatex">\(h_1\)</span> = 5 m) with numba, 5.8 and 1.4 times without (<code>Engine.kernel</code>).</p>
+<p><strong>Instead:</strong> install numba (extra <code>fast</code>); for large two-layer studies
+<code>Engine.image_far_field = "point"</code> takes 0.49 … 0.94 of the default's
+time; <code>kernel="point"</code> reproduces the numbers of 0.15.0. See
+<a href="../../explanation/performance/">performance</a>.</p>
+<details class="note">
+<summary>Details and audit trail</summary>
+<p>In two-layer soil the far images cost with the image density: a
+40-house network in 1000 / 30 Ω·m with <span class="arithmatex">\(h_1\)</span> = 1.5 m takes 1.8 times
+the solve before wave 3 (3.6 times without numba), 16 house grids
+below a 0.1 m top layer 4 times, and with eight 9.4 m pieces below a
+0.5 m top layer 5 times (their near image pairs are Galerkin
+integrals). <code>Engine.image_far_field = "point"</code>: 1.1 … 1.3 times
+within the upper layer; on the cross-layer path its near image pairs
+stay Galerkin integrals (audit W3R2A-01): 0.7 … 0.9 times at the AP1
+station and the 40-house network, 1.5 … 2.4 times below thin top
+layers, 4.3 … 4.5 times with long pieces there — 0.49 … 0.94 of the
+default's time.</p>
+</details>
+</li>
+<li>
+<p><strong>Line-kernel switch.</strong> Pairs closer than six segment lengths are
+  integrated exactly, pairs beyond 7.5 use the far form, and between the
+  two the values are blended.</p>
+<p><strong>How large:</strong> results of the same world at different positions agree
+to 8e-14 over local shifts of 0.1 m … 8.8 km and to 5e-11 (impedance)
+at UTM coordinates — the rounding of the input vertices, as with the
+point kernel. Nothing to do.</p>
+<details class="note">
+<summary>Details and audit trail</summary>
+<p>The blend is user decision D2.</p>
+</details>
+</li>
+</ul>
+<h2 id="soil-layers">Soil layers<a class="headerlink" href="#soil-layers" title="Permanent link">&para;</a></h2>
+<ul>
+<li>
+<p><strong>Three or more layers</strong> are solved only by <code>mom_sommerfeld</code> (and <code>fem</code>).
+  <code>FieldResult.potential</code> — and with it touch and step voltages, potential
+  plots, potential-path CSV and the VTK field export — supports
+  homogeneous and two-layer soil only and raises <code>NotImplementedError</code> for
+  three or more layers.</p>
+<p><strong>Instead:</strong> read impedances, electrode potentials and currents of such
+a solve from the result; only the field evaluation after the solve is
+missing.</p>
+</li>
+<li>
+<p><strong>Rod ends at a layer interface.</strong> The thin-wire model has no end face,
+  so the contact of a rod end with the layer beyond is all or nothing.</p>
+<p><strong>How large:</strong> against the conforming <code>fem</code> model and a finite-volume
+model of the solid rod (4.5 m, <span class="arithmatex">\(a\)</span> = 8 mm, 1000 / 30 Ω·m) the thin wire
+reads +22 % with its tip at the interface, +7.2 % 1 mm above it and
+−4.4 % 1 mm below it (+3.3 % / +2.1 % 16 mm above / below).</p>
+<p><strong>Instead:</strong> keep rod ends a few wire radii from an interface, or
+bracket the result by moving the end by ±2 wire radii; the axisymmetric
+<code>fem</code> solves the solid rod. A rod head or tip within one wire radius of
+an interface warns with
+<a href="../warnings/#interfacecontactwarning"><code>InterfaceContactWarning</code></a> and is
+listed by <code>diagnose()</code> (<code>interface_contact</code>).</p>
+</li>
+<li>
+<p><strong>Wires within one radius of the layer interface.</strong> A wire at least one
+  wire radius from the interface is integrated exactly by the line kernel.
+  Closer, its surface crosses the interface and the thin-wire model does
+  not apply.</p>
+<p><strong>How large:</strong> a ring 5 mm above a 1000 / 30 Ω·m interface is within
+4.1e-5 of its exact thin ring (two references). At half a radius the two
+references (image sum, Hankel transform) differ by 8 %, and the line
+kernel lies 2 … 11 % below them.</p>
+<p><strong>Instead:</strong> solve a ring that touches or crosses an interface with the
+axisymmetric <code>fem</code> (solid torus). Such wires lie within the reach of the
+next entry, so the solve warns with <code>InterfaceContactWarning</code> wherever
+the contrast is at least 1.3; <code>kernel="point"</code> keeps its own warning for
+wires within two segment lengths of the interface.</p>
+<details class="note">
+<summary>Details and audit trail</summary>
+<p>At half a radius the line kernel read +65 % before audit W3A-02.
+Within a/20 of the interface the image blends into the reduced
+kernel of the direct pair, so a wire on the interface is the same on
+both sides (4.1806 Ω for a 3 m ring at <span class="arithmatex">\(h_1\)</span> = 5 m). Through ±a the
+impedance moves with wiggles of at most 0.17 % against its direction
+(strips and rings in 1000 / 30 and 30 / 1000 Ω·m; up to 24 % with
+the blend over one radius before audit W3R2A-03).</p>
+<p>The horizontal-wire rule of <code>InterfaceContactWarning</code> (audits
+W4A-07, W4R2A-04, W4R3A-02) covers every wire that the interface
+cuts at a contrast of 1.3 or more.</p>
+</details>
+</li>
+<li>
+<p><strong>A horizontal wire within a few wire radii of an interface.</strong> The
+  thin-wire engines (the image family, <code>mom</code>, <code>mom_sommerfeld</code>) and the 3-D
+  <code>fem</code> carry the current on the wire axis; next to a more conductive
+  layer the solid wire's current crowds to its near side.</p>
+<p><strong>How large:</strong> against the solid torus a ring of <span class="arithmatex">\(a\)</span> = 5 mm over a layer
+33 times more conductive reads +0.59 % at 4 radii, +1.2 % at 3, +3.6 %
+at 2, +8.6 % at 1.5, +32 % at 1.1 and +89 % when the interface cuts the
+wire at 0.99 radii; under a more resistive layer up to +2.6 %. The 3-D
+<code>fem</code> reads +9.2e-3 for a ring with its axis 1.5 cm above
+1000 / 30 Ω·m, and a rod tip on such an interface +43 %.</p>
+<p><strong>Instead:</strong> keep horizontal wires outside the reach below, or solve
+rings with the axisymmetric <code>fem</code>, which takes them as solid tori
+(within 5.1e-5 of a boundary-element model down to contact, up to a
+contrast of 1000). Within the reach the solve warns with
+<a href="../warnings/#interfacecontactwarning"><code>InterfaceContactWarning</code></a>
+(<code>diagnose()</code> category <code>interface_contact</code>).</p>
+<p>Reach of the interface, wire axis to interface, in wire radii <span class="arithmatex">\(a\)</span>
+(values in brackets interpolated; the warning holds the last value
+beyond 1000):</p>
+<table>
+<thead>
+<tr>
+<th>contrast</th>
+<th>more conductive beyond</th>
+<th>more resistive beyond</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1.4</td>
+<td>1.0 a</td>
+<td>1.0 a</td>
+</tr>
+<tr>
+<td>2</td>
+<td>1.3 a</td>
+<td>(1.14 a)</td>
+</tr>
+<tr>
+<td>3</td>
+<td>1.9 a</td>
+<td>1.3 a</td>
+</tr>
+<tr>
+<td>5.5</td>
+<td>2.7 a</td>
+<td>(1.60 a)</td>
+</tr>
+<tr>
+<td>10</td>
+<td>3.3 a</td>
+<td>1.9 a</td>
+</tr>
+<tr>
+<td>18</td>
+<td>3.7 a</td>
+<td>(2.05 a)</td>
+</tr>
+<tr>
+<td>33</td>
+<td>3.9 a</td>
+<td>2.2 a</td>
+</tr>
+<tr>
+<td>100</td>
+<td>4.1 a</td>
+<td>2.2 a</td>
+</tr>
+<tr>
+<td>1000</td>
+<td>4.3 a</td>
+<td>2.3 a</td>
+</tr>
+</tbody>
+</table>
+<p>(1.0 a: only a wire the interface cuts; below a contrast of 1.3 nothing
+is reported, a cut wire is within 0.96 % there.) Measured on rings with
+<span class="arithmatex">\(r_0/a \ge 18\)</span>; a thicker wire on a smaller ring, and straight wires
+against a solid reference, are not covered. No generated network and no
+world of the AP1 soils is reported.</p>
+<details class="note">
+<summary>Details and audit trail</summary>
+<p>The solid torus is the axisymmetric <code>fem</code>; a Hankel thin ring plus
+the exact 2-D proximity correction agrees with it to 5e-4. The
++2.6 % under a more resistive layer is a 55 mm wire on a 1 m ring at
+1.01 radii, contrast 1000. The 3-D <code>fem</code> is a thin wire too: its
++9.2e-3 for the ring (<span class="arithmatex">\(r\)</span> = 1 m) at 1.5 cm lies above its error
+estimate. The reach is the largest distance at which the thin wire
+is 1 % off in five ring geometries (<span class="arithmatex">\(r_0/a\)</span> = 18 … 400, the layer
+beyond below and above the wire), rounded up to 0.1 a, plus 0.1 a
+between the nodes; no measured point 1 % or more off lies outside it
+(the thin wire converged in its segment length). The full
+measurement is under
+<a href="../warnings/#interfacecontactwarning"><code>InterfaceContactWarning</code></a>.
+Audits W4A-07, W4B-02, W4R2A-03, W4R2A-04, W4R3A-02.</p>
+</details>
+</li>
+<li>
+<p><strong>High layer contrast.</strong> The Tagg/Sunde series converges like
+  <span class="arithmatex">\(\lvert K\rvert^n\)</span>; the default cap of 300 terms covers
+  <span class="arithmatex">\(\lvert K\rvert = 0.94\)</span> and warns
+  (<a href="../warnings/#seriestruncationwarning"><code>SeriesTruncationWarning</code></a>)
+  beyond. <code>mom_sommerfeld</code> may not converge for <span class="arithmatex">\(\lvert K\rvert \to 1\)</span>
+  (<a href="../warnings/#sommerfeldconvergencewarning"><code>SommerfeldConvergenceWarning</code></a>).</p>
+<p><strong>Instead:</strong> raise <code>Engine.image_max_terms</code>; use <code>image_2layer</code> for two
+layers.</p>
+</li>
+<li>
+<p><strong>Effective resistivity</strong> (<code>effective_resistivity</code>, the <code>rho</code> of a
+  BusType in layered soil) is an empirical calibration on the LV networks
+  of the AP1 catalogue (<span class="arithmatex">\(h_1\)</span> = 5 … 30 m, <span class="arithmatex">\(\rho_1\)</span> = 30 … 1000 Ω·m,
+  <span class="arithmatex">\(\rho_2\)</span> = 30 … 200 Ω·m), defined for homogeneous and two-layer soil only
+  (three distinct layers raise <code>ValueError</code>).</p>
+<p><strong>How large:</strong> its weight is limited to <span class="arithmatex">\([0, 1]\)</span>, so an upper layer
+thinner than 0.28 … 1.34 m, depending on the preset (0.78 m with the
+default), gives <span class="arithmatex">\(\rho_2\)</span>. A preset holds for its class only (the AP1
+station with <code>"lv_group_4_p40"</code>: rms 39.9 %); even <code>"station"</code> leaves up
+to 15.7 % at <span class="arithmatex">\(h_1\)</span> = 5 m. The presets are not yet re-derived for this
+release, which changes LV-network results against 0.15.0 alone by up to
++13.6 % in the input impedance and +42 % in a house's <span class="arithmatex">\(Z_G\)</span> diagonal.</p>
+<p><strong>Instead:</strong> name the preset of your bus (<code>rho_preset</code>) and check
+<code>max_relative</code> of a fit over <span class="arithmatex">\(\rho_\text{eff}\)</span> (see
+<a href="../api/soil/#effective-resistivity">Soil</a>); a mismatch of presets warns
+with <a href="../warnings/#rhopresetmismatchwarning"><code>RhoPresetMismatchWarning</code></a>.</p>
+<details class="note">
+<summary>Details and audit trail</summary>
+<p>The weight presets per electrode class
+(<code>groundfield.soil.EFFECTIVE_RESISTIVITY_PRESETS</code>) are the q50
+values of the AP2 hand-over, derived from the catalogue computed with
+groundfield 0.14.0 and not yet re-derived for this release, which
+changes LV-network results against 0.15.0 alone by up to +13.6 % in
+the input impedance and +42 % in a house's <span class="arithmatex">\(Z_G\)</span> diagonal at
+<span class="arithmatex">\(\rho_1\)</span> = 30 Ω·m (concrete shell, line kernel; <em>Numbers that
+change</em> in the changelog). Even <code>"station"</code> leaves up to 15.7 % at
+<span class="arithmatex">\(h_1\)</span> = 5 m, where the station rods end 0.4 m above the interface.
+A BusType records the preset you name (<code>rho_preset</code>, user decision
+Q39): the JSON document in <code>metadata["rho_preset"]</code>, the live
+<code>groundinsight.BusType</code> and the groundinsight database in the last
+line of the description, <code>groundfield rho_preset: &lt;name&gt;</code>
+(<code>bustype_rho_preset</code> reads it back; audit W3B-06; a document's
+<code>metadata["rho_preset"]</code> must be a preset name or null, as the
+exporters write it, and only the exact line is the record, audit
+W3R2B-06); <code>evaluate_spec</code> and <code>bustype_from_spec</code> warn when the bus
+uses another one, nothing checks <code>rho_at_fit</code> against it, and a
+document without a recorded preset is not checked.</p>
+</details>
+</li>
+<li>
+<p><strong>Penetration depth of layered soil.</strong> <code>penetration_depth</code> matches the
+  layered earth return to second order in the horizontal wavenumber; it is
+  exact only in limits (homogeneous soil, very thin or thick top layers,
+  large separations).</p>
+<p><strong>How large:</strong> in between, the earth-return correction of two wires is
+off by up to 28 % / 33 % (overhead / buried, AP1 soils, separations near
+<span class="arithmatex">\(\lvert p\rvert\)</span>), on top of the complex-depth formula's own error (up
+to 13 % in homogeneous soil); three layers up to 46 %, four layers up to
+77 % at 1 km, 1 kHz (37 % at 50 Hz).</p>
+<p><strong>Instead:</strong> the reference integral <code>per_metre_mutual_impedance</code>, within
+6e-8 of the earth-return correction up to 300 m and 7e-7 at 1 km for
+buried pairs.</p>
+<details class="note">
+<summary>Details and audit trail</summary>
+<p>Measured in audit W3B-08.</p>
+</details>
+</li>
+</ul>
+<h2 id="backends">Backends<a class="headerlink" href="#backends" title="Permanent link">&para;</a></h2>
+<p>The limits that belong to one backend: the <code>fem</code> engine and the concrete
+shells of every backend. The limits of the integral engines' current model
+and kernels are under <a href="#current-ansatz-and-source-kernels">current ansatz and source kernels</a>,
+those at layer interfaces under <a href="#soil-layers">soil layers</a>.</p>
+<h3 id="the-fem-engine">The <code>fem</code> engine<a class="headerlink" href="#the-fem-engine" title="Permanent link">&para;</a></h3>
+<ul>
+<li>
+<p><strong><code>fem</code> is experimental</strong> (<code>ExperimentalBackendWarning</code> once per
+  process). It has two conforming models (ADR-0016);
+  <code>FemOptions.model = "auto"</code> takes the axisymmetric one wherever it
+  applies and the three-dimensional one (optional extra <code>fem3d</code>; without it
+  <code>ImportError</code>) for every other world. <code>fem</code> is a reference for single
+  clusters and small groups, not for networks. Like every backend,
+  <code>FieldResult.potential</code> of a <code>fem</code> result supports homogeneous and
+  two-layer soil only.</p>
+<details class="note">
+<summary>Details and audit trail</summary>
+<p>The automatic choice of the model is user decision Q37.</p>
+</details>
+</li>
+<li>
+<p><strong>Axisymmetric model.</strong> Rods on one vertical axis and horizontal rings
+  centred on it, solved as the solid bodies they are in any horizontally
+  layered soil, bare or encased. A concrete shell enters as the surface
+  conductance <span class="arithmatex">\(1/(2\pi r_b C)\)</span> (exact for a cylindrical shell). A ring wire
+  must lie 5 % of its radius below the surface (the thin-wire engines
+  accept <span class="arithmatex">\(2z &gt; a\)</span>).</p>
+<p><strong>How large:</strong> port resistances agree with independent references to
+about 1e-4 at the default (within 5.1e-5 for a ring wire within 1.05
+radii of an interface up to a contrast of 1000, −8.5e-4 at 10 000).
+Eight rings with a central rod need about a million nodes and 17 s
+(1.2 million nodes and 26 s when one ring lies on an interface).</p>
+<p><strong>Instead:</strong> raise <code>FemOptions.refinement</code> for a smaller error;
+<code>FemOptions.max_nodes</code> (2 million, about 8 GB at about 4 GB per million
+nodes) refuses larger meshes, raise it on purpose.</p>
+<details class="note">
+<summary>Details and audit trail</summary>
+<p>The error estimate is about the finer level's error (0.94 … 1.07 of
+it next to an interface) and 10 … 130 times that of the extrapolated
+value. Audits W4A-01, W4R2A-02 (accuracy next to an interface),
+W4A-05 (mesh size).</p>
+</details>
+</li>
+<li>
+<p><strong>3-D model: accuracy.</strong> The wires are thin wires like those of the
+  integral engines (a smoothed line source with an analytic radius
+  correction: uniform around the wire, no end faces), the soil an isotropic
+  tetrahedral mesh with immersed layer interfaces.</p>
+<p><strong>How large:</strong> away from layer interfaces it agrees with the
+axisymmetric model to 2e-3 for rods and rings in one to three layers.
+Its two mesh levels are not asymptotic for every geometry (error ratios
+3.0 … 4.4): the reported error estimate (3 … 5e-3;
+<code>fem_error_estimate_transfer</code> for the transfer entries) bounds the error
+while the ratio is at least 2.5, and differences below about 2e-3 are
+not resolved. Next to a strongly contrasting interface the thin-wire
+error applies (see <em>A horizontal wire within a few wire radii of an
+interface</em>).</p>
+<p><strong>Instead:</strong> check a 3-D result with an integral engine as the second
+method; solve rods on one axis and rings around it with the
+axisymmetric model.</p>
+<details class="note">
+<summary>Details and audit trail</summary>
+<p>For rings the estimate is 2.1 … 4.4 times the error. Audits W4B-01,
+W4B-02.</p>
+</details>
+</li>
+<li>
+<p><strong>3-D model: wires beside each other.</strong> Wires that do not meet but run
+  beside each other (side by side within 30° of parallel, a folded arm, a
+  small ring around a rod head) are kept at least <span class="arithmatex">\(1.5\,R\)</span> apart (<span class="arithmatex">\(R\)</span> =
+  <code>source_radius</code>, 6 cm), two wires end to end in line with a gap, such as
+  stacked rods of two electrodes, at least <span class="arithmatex">\(5\,R\)</span>. The model takes a
+  smaller <span class="arithmatex">\(R\)</span> for the whole world, and the nodes grow as <span class="arithmatex">\(1/R\)</span>.</p>
+<p><strong>How large:</strong> coaxial rings 4.5 cm apart need 1.0 million nodes,
+stacked 8 mm rods 10 cm apart 0.47 million; coaxial rings 4.5 … 10 cm
+apart lie within 1.8e-3 of the solid tori. The model refuses, before
+meshing, wires closer than 3.3 radii of the thickest bare wire of the
+world, axis to axis (end to end 11, so stacked 8 mm rods up to 8.8 cm
+apart; <code>BackendCapabilityError</code>).</p>
+<p><strong>Instead:</strong> an integral engine for such wires (the refusal names them),
+or the axisymmetric model where the world allows it.</p>
+<details class="note">
+<summary>Details and audit trail</summary>
+<p>End to end, the transfer entry's error falls with <span class="arithmatex">\(R\)</span> / gap; at
+<span class="arithmatex">\(3\,R\)</span> it was still up to 1.18 times its estimate. Wires that meet
+at 10° or more are left alone, so a V or a branch of 10 … 30° is
+solved; wires that meet at less than 10°, nearly parallel or
+touching along their length, count as running beside each other
+(audit W4R3B-02). Two encased wires of different ports whose shells
+touch count as one conductor in the radius correction, so their
+separate port entries are not resolved. Audits W4R2B-03, W4R2A-01,
+W4R3B-01, W4R3B-05.</p>
+</details>
+</li>
+<li>
+<p><strong>3-D model: layer contrast.</strong> Its conjugate gradients are tested up to a
+  layer contrast of about 300.</p>
+<p><strong>How large:</strong> at 1000 they do not converge and the solve raises
+<code>BackendCapabilityError</code>.</p>
+<p><strong>Instead:</strong> the axisymmetric model (any contrast) where it takes the
+world, otherwise an integral engine.</p>
+<details class="note">
+<summary>Details and audit trail</summary>
+<p>Audit W4B-03.</p>
+</details>
+</li>
+<li>
+<p><strong>3-D model: wires near the surface or an interface.</strong> A horizontal wire
+  within <span class="arithmatex">\(R/0.8\)</span> of the soil surface or a layer interface (<span class="arithmatex">\(R\)</span> =
+  <code>source_radius</code>, 6 cm) gets a smaller disc and a finer mesh.</p>
+<p><strong>How large:</strong> a bare one within about 2.8 wire radii is refused
+(<code>BackendCapabilityError</code>); an encased one is solved.</p>
+<p><strong>Instead:</strong> an integral engine (the refusal names them).</p>
+</li>
+<li>
+<p><strong>3-D model: size, time and ports.</strong> The finer mesh and the number of
+  ports set the cost.</p>
+<p><strong>How large:</strong> the AP1 station (28 m of wire) takes 1.5 … 3 minutes and
+4.1 … 4.3 GB. <code>FemOptions.max_nodes_3d</code> (2 million nodes of the finer
+mesh; the solve adds about 2.9 GB per million) refuses larger meshes
+before they are built, the house mesh of the generators (60 m) at the
+defaults included (it solves at <code>source_radius = 0.1</code>, <code>growth = 0.6</code>:
+1.5 million nodes, 1.5 minutes, 4.6 GB). More than
+<code>FemOptions.max_ports_3d</code> ports (100; every leaking piece of a galvanic
+distributed conductor is one) are refused before meshing
+(<code>ResourceLimitError</code>).</p>
+<p><strong>Instead:</strong> raise the option to solve such a world on purpose, or use
+an integral engine for networks.</p>
+<details class="note">
+<summary>Details and audit trail</summary>
+<p>The port limit is audit W4B-08.</p>
+</details>
+</li>
+<li>
+<p><strong>3-D model: resolved concrete</strong> (<code>concrete_resistivity</code>) needs straight
+  axis-parallel encased wires and converges at first order. It serves
+  differences on one mesh, not the shell term itself.</p>
+<p><strong>How large:</strong> its per-metre shell conductance reads 2.8 … 4.6 % high at
+the default levels: the square prism's concrete is 3.8 % less resistive
+than the circular shell in the shell-dominated limit, and its faces
+converge at first order; its error estimate is no bound. A cover so thin
+that the smoothed source does not reach beyond the metal (a 5 mm bar
+with 5 mm cover) is refused before meshing.</p>
+<p><strong>Instead:</strong> the per-wire shell coefficient (the default of both
+models) for absolute values.</p>
+<details class="note">
+<summary>Details and audit trail</summary>
+<p>Resolved concrete is user decision Q40; audits W4B-04 (accuracy) and
+W4R2B-04 (thin cover).</p>
+</details>
+</li>
+</ul>
+<h3 id="concrete-shells">Concrete shells<a class="headerlink" href="#concrete-shells" title="Permanent link">&para;</a></h3>
+<ul>
+<li>
+<p><strong>Overlapping shells at junctions.</strong> Concrete shells
+  (<code>concrete_shell_coefficient_ohm_m</code>) are represented by the image
+  family, <code>solve_mutual_*</code>, <code>mom</code> and <code>mom_sommerfeld</code>, and <code>fem</code> (each
+  wire its own shell; the axisymmetric model as a surface conductance, the
+  3-D model as a radial resistance per length). Each wire carries its own
+  radial shell; where wires meet — the corners of a ring, the crossings and
+  T-joints of a mesh foundation, whose braces are encased since 2026.11 —
+  the shells overlap within about <span class="arithmatex">\(r_b\)</span> of the junction and each wire
+  counts the shared concrete as its own.</p>
+<p><strong>How large:</strong> against the concrete resolved as a volume in the
+three-dimensional <code>fem</code> model a junction acts like a few cm of wire, at
+most about <span class="arithmatex">\(2\,r_b\)</span>, sign not settled; the house mesh of the generators
+(60 m, nine junctions) changes by about 1 % or less (0.35 … 0.85 % with
+every sign aligned).</p>
+<p><strong>Instead:</strong> no correction is applied, because the junction numbers are
+not converged (<a href="../../explanation/concrete-shells/">concrete shells</a>).</p>
+<details class="note">
+<summary>Details and audit trail</summary>
+<p>The volume model is user decision Q40 (5 mm bar, 5 cm cover, 1 000
+and 5 000 Ω·m concrete in 100 Ω·m soil). The junction numbers are
+not converged — one refinement of the prism faces moved the corner
+by about 5 cm, and two decompositions of the same runs differ in
+sign (audit W4B-05) — so no correction is applied.</p>
+</details>
+</li>
+</ul>
+<h2 id="earth-return-and-conductors">Earth return and conductors<a class="headerlink" href="#earth-return-and-conductors" title="Permanent link">&para;</a></h2>
+<ul>
+<li>
+<p><strong><code>carson_series</code></strong> is a per-metre approximation for long parallel
+  conductors over homogeneous soil; in layered soil it uses <span class="arithmatex">\(\rho_1\)</span>
+  (with a warning), and it rejects conductor segments in the soil-surface
+  plane. It tiles only near-parallel pairs of segments inclined by less
+  than 8.1° and hands every other pair to the Sommerfeld kernel.</p>
+<p><strong>How large:</strong> at that boundary the result steps by the error of the
+per-metre model (13 % for two 1 km leads 2 m apart at 1 kHz, 42 % for
+two 300 m leads at 50 Hz; <a href="../../explanation/earth-return/">earth return</a>).
+It overstates the earth return of LV networks of short service drops
+(shorter than the skin depth): the generated star, radial and grid
+networks of 5 … 100 houses read X 4 … 21 % and R up to 11 % high at
+1 kHz and X 21 … 50 % and R up to 0.9 % high at 50 Hz against
+<code>sommerfeld</code>.</p>
+<p><strong>Instead:</strong> use the default <code>sommerfeld</code> for numbers and for networks.</p>
+<details class="note">
+<summary>Details and audit trail</summary>
+<p>The 80-house radial network reads +50 % at 50 Hz; the default
+<code>sommerfeld</code> agrees with a refined discretisation to 1e-3 for the
+5-house radial network and 4e-5 for the 80- and 100-house ones. At
+50 Hz <code>carson_series</code> is no closer than <code>perfect_mirror</code> for the
+10-house radial network, the 30-house star and the 80- and 100-house
+radial networks, but closer for the 5-house radial network (+31 %
+against +45 %; audits W3B-02, W3R2B-03). The error changes with the
+geometry, so a geometry change can move the two models in opposite
+directions (the 100-house star across the cabinet fix: +1.2 %
+against −3.5 %). Under <code>carson_series</code> the stretch rule of tilted
+pairs (audit W1R3-07) moves generated networks by up to 3e-7 (the
+10-house star with 5 small and 2 medium sites 2.8e-7, the 80-house
+radial network 3.4e-8; the 30-house star and radial networks are
+bit-identical; audit W3B-07).</p>
+</details>
+</li>
+<li>
+<p><strong><code>perfect_mirror</code></strong> is a frequency-independent diagnostic baseline, not
+  a model of buried conductors below 1 kHz.</p>
+<p><strong>How large:</strong> across the soil surface its additive image has no
+physical basis (a lead 1 m above a PEN 0.7 m deep: 2.28 / 2.77 times
+the mutual reactance of <code>sommerfeld</code> at 50 Hz / 1 kHz), and such a
+solve warns.</p>
+<p><strong>Instead:</strong> use the default <code>sommerfeld</code> for numbers.</p>
+</li>
+<li>
+<p><strong>Sommerfeld segment rules.</strong> Under <code>sommerfeld</code> the self term of every
+  segment is integrated exactly in one dimension and close pairs along
+  their line of closest approach. Pairs of long segments that are not
+  close keep a composite 16×16 rule (pieces of a quarter skin depth, at
+  most 512 per segment, then a <code>SommerfeldResolutionWarning</code>). The spectral
+  quadrature resolves the most distant points of a conductor up to
+  2^17 · 2π (z + z′)/30 — 38 km for a conductor at 0.7 m, 33 km from a rod
+  head at 0.5 m to a junction at 0.7 m.</p>
+<p><strong>How large:</strong> the self terms are within 1.1e-9 of a refined rule from
+1 m and 0.01 skin depths to 3 km (up to 3.4e-9 in high-contrast soils),
+close pairs within about 4e-8. A longer conductor than the spectral
+range warns (<code>SommerfeldResolutionWarning</code>) and is not converged (a
+lumped 100 km conductor solves in 10.6 s but warns).</p>
+<p><strong>Instead:</strong> treat a result that carries
+<a href="../warnings/#sommerfeldresolutionwarning"><code>SommerfeldResolutionWarning</code></a>
+as not converged.</p>
+<details class="note">
+<summary>Details and audit trail</summary>
+<p>The segment rules are user decision Q34: within 1.1e-9 of a refined
+rule from 1 m and 0.01 skin depths to 3 km for the soils tested
+(100, 1000, 30 over 1000 and 300/50/2000 Ω·m; up to 3.4e-9 in
+high-contrast soils: 10 over 10 000 Ω·m, 1.8e-9 under a 0.3 m top
+layer; independent references, audits W3B-01, W3R2B-08), close
+pairs within about 4e-8 (3.5e-8 for 1 m wires 1 mm apart in 30 over
+1000 Ω·m at 1 kHz), continuous in the length. The spectral range is
+audit W3B-10. Two long close conductors (two lumped cables 1 m
+apart) cost a few seconds (1.2 / 4.8 s at 1 / 5 km).</p>
+</details>
+</li>
+<li>
+<p><strong>Cost of the Sommerfeld assembly</strong> grows with the number of segment
+  pairs and frequencies. The default <code>sommerfeld_assembly="tabulated"</code>
+  shares one table of the spectral integral per pair of depth groups and
+  frequency (17–25× less CPU than the per-pair rule on TN networks of 8
+  and 30 houses); blocks of fewer than 64 sub-segment pairs and
+  conductors in the surface plane keep the per-pair rule (<code>"exact"</code>),
+  whose cost grows with every pair.</p>
+</li>
+<li>
+<p><strong>Skin effect</strong> is opt-in (<code>resistance_model="skin"</code>, solid round
+  conductors); the proximity effect between conductors is not modelled.</p>
+</li>
+<li>
+<p><strong>Concentric cables</strong> are read only with the marker: a thinner conductor
+  parallel inside a conductor with <code>conductor_type="cable_shield"</code> is its
+  core and couples at the shield radius, at every axial offset (so a shield
+  of several conductors and a cable in sections add up); the shield has no
+  internal inductance of a solid wire. The skin effect of a shield (a tube)
+  is not modelled (<code>resistance_model="skin"</code> raises for a shield); a
+  three-core cable in one shield is three cores at the shield radius each.</p>
+<p><strong>Instead:</strong> mark the shield with <code>conductor_type="cable_shield"</code>; any
+two other conductors drawn on one axis are separate cables touching each
+other.</p>
+<details class="note">
+<summary>Details and audit trail</summary>
+<p>The marker and the coupling at the shield radius are user decisions
+Q32 and Q33. Any two other conductors drawn on one axis are separate
+cables touching each other; their sub-pieces add up to the lumped
+pair. Two unmarked cables in <em>sections</em> couple as filaments on the
+axis between sections that do not overlap, and a core tilted against
+the shield axis, or crossing it, is read the same way at any angle
+and in pieces of any length (they add up to the lumped pair within
+3e-12; audits W1R2-01, W1R3-01). Under <code>carson_series</code> a tilted pair
+that comes close within its overlap is tiled per stretch, so a
+lumped pair and its pieces add up within 8e-6 of the loop reactance
+(audit W1R3-07; 5.2e-2 apart before at 4e-2 rad); a pair whose
+distance stays above 30 times its change keeps the mid-point value
+(within 5e-5 of that entry).</p>
+</details>
+</li>
+</ul>
+<h2 id="post-processing-and-export">Post-processing and export<a class="headerlink" href="#post-processing-and-export" title="Permanent link">&para;</a></h2>
+<ul>
+<li>
+<p><strong>EN 50522 permissible touch voltage</strong> (EN 50522:2022) is interpolated in
+  Table B.4 for fault durations from 50 ms to 10 s and clamped to 725 V
+  below 50 ms; every duration beyond 10 s, including an uncleared fault
+  (<code>math.inf</code>), gets 80 V (the curve of Figure 8 ends at 10 s), so the value
+  steps from 85 V at 10 s to 80 V just above.</p>
+</li>
+<li>
+<p><strong>Touch-voltage envelope</strong> samples 24 equally spaced directions around
+  the electrode's footprint and nine feet on the arc around every corner of
+  the footprint's convex hull (<code>corners=True</code>), a proxy for touched parts
+  that are not known. Re-entrant corners of a non-convex outline get no
+  corner feet; there the equally spaced directions apply. Up to the final
+  documentation pass of 2026.11.0 the directions alone were sampled, and
+  they miss the corners of a non-square grid: a 60 m × 40 m grid read
+  12 … 28 % low (case study E03; <code>corners=False</code> reproduces it). With the
+  corner feet every probed outline (rectangles from 1 cm to 10 km, rotated,
+  L- and U-shaped outlines, stars, at the origin and at projected
+  coordinates) lies within 0.001 % of dense sampling. It
+  samples nothing inside the footprint unless asked: <code>interior="meshes"</code>
+  adds the centres of the meshes of grids, of rings and of the generated
+  mesh foundations (bonded wires, one per wire line), <code>interior=True</code> also
+  the inside of a closed polyline. The modes cannot see buildings.</p>
+<p><strong>Instead:</strong> define the accessible metal parts with
+<code>touch_voltage_at_part</code> where they are known; use the interior modes
+where the inside is accessible open ground (a substation yard), not for
+foundations or a ring around a housing or a mast.</p>
+</li>
+<li>
+<p><strong>Touch points</strong> (<code>touch_voltage_at_part</code>) take the part's potential
+  from the electrode or junction it is bonded to.</p>
+<p><strong>Instead:</strong> a part bonded to a point along a distributed conductor
+between two nodes needs a junction there.</p>
+</li>
+<li>
+<p><strong>Reduced models.</strong> The standard form is a fixed ansatz; a vector fit
+  belongs to one soil (<code>rho_at_fit</code>); passivity is checked from 0 Hz to
+  twice the highest fitted frequency only.</p>
+<p><strong>Instead:</strong> check <code>max_relative</code> (warning above 5 %,
+<a href="../warnings/#rhofstandardqualitywarning"><code>RhoFStandardQualityWarning</code></a>).</p>
+</li>
+</ul>
+<h2 id="generators-and-osm">Generators and OSM<a class="headerlink" href="#generators-and-osm" title="Permanent link">&para;</a></h2>
+<ul>
+<li>
+<p><strong>Foundation outline.</strong> By default a footprint becomes its oriented
+  minimum bounding rectangle; <code>foundation_outline="polygon"</code> follows the
+  outline (ring-style specs only). Outlines smaller than 1 m are widened
+  with a warning. Every <code>building=*</code> object is a footprint unless excluded
+  with <code>exclude_building_tags</code>. A rectangle is one owner per side and so is
+  a building outline (one owner per straight side): a rectangular outline
+  equals the same rectangle given by its size. The connection point of a
+  rectangular foundation is the start of its local −y side, a corner (also
+  at multiples of 90°, which are exact rotations), that of an outline its
+  first vertex; conductors attached by name and
+  <code>anchor="connection_point"</code> use it. The generators end their cables and
+  service drops at the point of the foundation nearest to each conductor
+  instead.</p>
+<details class="note">
+<summary>Details and audit trail</summary>
+<p>One owner per side is user decision Q38 for rectangles and user
+decisions Q30 and Q44 for building outlines. The twelve outlines of
+the tutorial T06 layout moved by at most −0.004 % each with that
+decision, the layout with an AP1-like station by −0.03 … −0.40 %.
+The nearest-point rule of the generators is user decision Q41.</p>
+</details>
+</li>
+<li>
+<p><strong>Generated service drops</strong> are straight conductors from the closest
+  point of the feeding cable to the closest point of the building's
+  foundation (horizontal at the PEN depth in <code>TnNetworkGenerator</code>). Drops
+  keep the shortest connection and are not routed around foundations, so a
+  drop to a house behind another runs 0.2 m above that house's side wire
+  (PEN 0.6 m, foundations 0.8 m). The field model has no inductive coupling
+  between a drop and an electrode; a bare PEN couples through the soil.</p>
+<p><strong>How large:</strong> moved 1 m aside as a whole, those drops change
+<span class="arithmatex">\(\lvert Z\rvert\)</span> by at most 0.006 % with an insulated PEN and by up to
+−0.40 % with a bare one (default grids of 30 and 150 houses, 50 Hz and
+1 kHz, <code>carson_series</code> and <code>sommerfeld</code>).</p>
+<details class="note">
+<summary>Details and audit trail</summary>
+<p>A cable parallel to the facing side meets it at the corner where
+that side's wire starts (the tie rule). A building that a cable of
+its feeding path crosses is joined to it and fed by it without a
+drop (radial: any trunk; star: the main that crosses it, whose
+cabinet then feeds it), and no drop runs along a cable farther than
+one minimum section (1 cm; "along" means both ends of a cable
+section within 1 cm of the drop's line, so a drop that leaves a node
+at a small angle to a cable and stays within 1 cm of it only over
+part of the section keeps its route; a foundation that touches the
+end node of its cable from beyond is tapped 1 cm before the node and
+its drop shares that 1 cm).</p>
+<p>The shortest connection is user decision Q42: since the contact lies
+at the corner of the side facing the cable, a drop to a house behind
+another runs over that house's side wire — with the cabinets per
+building group 0 … 100 % of the drops of the default grids of 10 to
+200 houses (star, 30 houses: all 20 drops, 5 m each over the
+middle-row house next to the main, 100 m; star 50, 150, 200: none;
+radial 150: 87 of 140, 1 805 m).</p>
+<p>Every site with a horizontal earth electrode — foundation,
+<code>RingElectrodeSpec</code> circle, strip — is met at its nearest point
+(Q41, Q43); only sites with rods alone keep the head of their first
+rod. A house whose horizontal electrode touches or crosses the
+substation's (e.g. 10 m houses 5 m from the default 4 m ring) gets a
+drop of no length: the star topology feeds it from its main instead
+(drops of 2.39 / 1.61 m in the touching / crossing cases of audit
+W1B), the radial topology raises and names both sites.</p>
+<p>The following values were measured before user decisions Q22, Q35
+and Q43 (see the release notes for the change they bring): with an
+isolated PEN the end of a drop changes the resistive model only
+through its length (radial default grid with 2 ring houses, 50 Hz:
+−0.025 %); the joints and the star reassignment of user decision
+Q41 move it by −0.12 … +0.13 % (star 50 houses −0.117 %, radial
+30 / 50 houses +0.118 / +0.125 %). A galvanic (bare) PEN leaks along
+its drops, so their route moves its earthing too (the radial default
+grid with 2 ring houses, 50 Hz: Re +7.8 % against −0.025 %
+isolated). The inductive coupling of drops and cables depends on
+where the drops end: with a Neumann PEN at 1 kHz (seed 1, default
+grid, <code>sommerfeld</code> default and <code>carson_series</code>) the reactance moved
+by −3.1 … +16.3 % (star) and −8.6 … +37.7 % (radial) between the
+anchor corner and the nearest point, and lies −10.8 … +14.0 % from
+drops to the centre as in 0.15.0 (12 m × 8 m ring houses
++5.7 … +14.0 %; default 10 m ring houses: star +1.2 … +2.1 % for the
+30-house network — the networks of 1 … 5 houses have no drop, all on
+the main, and move by +0.6 … +10.4 % through the joint and the Q38
+owner —, radial −10.8 … −1.1 %).</p>
+<p>A layout cable is joined to the substation and to every cabinet
+whose closed earth electrode it passes through, not only at its
+ends; a cable through a house foundation is not joined to it (the
+house keeps its drop, of no length in plan there).
+<code>LvNetworkLayout.plot(world=...)</code> draws the drops as built; without
+a world it draws the layout's stubs (centroid to tap).</p>
+</details>
+</li>
+<li>
+<p><strong>Cabinets per building group.</strong> The star topology groups the buildings
+  by bearing around the substation and puts each cabinet on the ray
+  through its group's centroid, 1 m beyond the group; a cabinet that would
+  stand there farther than <code>CabinetConfig.max_far_end_gap_m</code> (20 m) from
+  its houses stands on the ray through the group's far-end building
+  instead. The threshold is a step, and the results jump where a group
+  crosses it. The houses share their group's main (a tree), so results of
+  default <code>TnNetworkGenerator</code> networks depend on this topology choice.</p>
+<p><strong>How large:</strong> with the house columns of the 50-house grid 32.0 /
+32.2 m apart one cabinet moves 141.8 m, the drops by −19 %, the input
+resistance at 50 Hz by −0.14 % beyond the smooth trend and, with an
+inductive PEN, the reactance at 1 kHz by −21.6 / −18.9 %
+(<code>carson_series</code> / <code>sommerfeld</code>). With an inductive PEN the network
+reactance at 1 kHz is +55 … +64 % above the former cabinet strip with
+its parallel drops.</p>
+<p><strong>Instead:</strong> read per cabinet which rule placed it and its distance on
+the centroid ray (<code>PlannedSite.cabinet_rule</code>,
+<code>PlannedSite.centroid_ray_gap_m</code>) to see where a group crosses; a given
+<code>CabinetConfig.placement</code> fixes the cabinets.</p>
+<details class="note">
+<summary>Details and audit trail</summary>
+<p>The groups have equal sizes, starting from the widest gap. A group
+of about 180°, e.g. 10 houses and one small commercial building,
+would put its cabinet 50.4 m from its houses on the centroid ray.
+The threshold is a step, not a separation of two populations (kept
+for 2026.11, user decision D7): groups lie on both sides of it — on
+the centroid ray the groups of the default 50-house grid stand
+8.8 … 12.8 m from their houses (a wide group there, 206 … 341°,
+still has drops up to 113 m to its outer houses), those of the
+100-house grid 10.05 … 23.01 m (15 / 20 / 25 m put four / two / none
+of its five groups on the far-end ray), and over the 80 AP1 mixes
+the 118 groups beyond 20 m stand 20.21 … 53.56 m from their houses
+while the largest gap kept is 18.84 m. The 100-house grid across
+22.95 m moves two cabinets by 65.6 m (X at 1 kHz +1.5 / −3.1 %), and
+80 houses with 5 medium commercial buildings (a group at 20.21 m)
+move one by 31.4 m when the threshold is 20.5 m (X +1.5 / +1.1 %).</p>
+<p>A single group around the substation (one cabinet for a row through
+it) has its cabinet on one side only. A cabinet whose electrodes
+would come closer than <code>end_clearance_m</code> to another site raises (3
+of 100 random 200-house layouts 12 m apart); a given
+<code>CabinetConfig.placement</code> avoids it. The +55 … +64 % of the tree
+topology are the default star of 30 houses (<code>sommerfeld</code> /
+<code>carson_series</code>). Planning 8 000 default star houses takes about
+14 s (6.9 s with the former strip). Audits W1R2-02, W1R2-04.</p>
+</details>
+</li>
+<li>
+<p><strong>Measurement leads</strong> of the in-line set-up are laid side by side; their
+  mutual inductance depends on the logarithm of that spacing, which is a
+  modelling choice, not a measured value.</p>
+</li>
+<li>
+<p><strong>Overpass</strong> answers are capped at 16 MiB; live queries need network
+  access (tests and tutorials use stored answers).</p>
+</li>
+<li>
+<p><strong>Service drops of one tap.</strong> The service drops that leave one tap in
+  one direction lie side by side at the touching distance, as cables in one
+  trench; a wider spacing is not modelled.</p>
+<p><strong>How large:</strong> 5 cm apart the 5-house radial network's X at 1 kHz is
+12.5 / 14.6 % lower (<code>carson_series</code> / <code>sommerfeld</code>).</p>
+<details class="note">
+<summary>Details and audit trail</summary>
+<p>The touching distance is user decision D9. Drops that are not
+exactly parallel (placement jitter) lie along one common normal,
+and a drop that would come closer than touching to a drop of a row
+joins it, also a drop of a tap 1 … 4 cm away on the same trunk. No
+generated network reports an overlap in <code>diagnose()</code>, also with
+<code>jitter_m</code> 0 … 0.1 m (audit W3R2B-01). A drop of a row starts up to
+(n − 1)/2 touching distances off its tap (2 cm in a row of five).
+With a bare PEN, <code>diagnose()</code> without an engine warns about those
+starts as "interpenetrating" against the substation ring (the
+10-house radial network: 9 pairs at 0.5 … 5.0 mm) and about the row
+neighbours as "close"; with the default line kernel all of these are
+information (audit W3R2B-07).</p>
+</details>
+</li>
+<li>
+<p><strong>Ties of the star topology under placement jitter.</strong> Two ties of the
+  10-house star move its reactance by steps.</p>
+<p><strong>How large:</strong> from about 1e-7 m of jitter the cabinet main joins
+<code>residential_4</code> at another foundation wire (−0.24 % at 1 kHz), and from
+1e-6 m it runs to the other side (−x → +x, −11.8 % <code>carson_series</code>,
+−12.1 % <code>sommerfeld</code>).</p>
+<p><strong>Instead:</strong> expect these steps in a Monte Carlo study over the jitter.</p>
+</li>
+</ul>
+<h2 id="diagnostics-and-problem-size">Diagnostics and problem size<a class="headerlink" href="#diagnostics-and-problem-size" title="Permanent link">&para;</a></h2>
+<ul>
+<li>
+<p><strong>Problem size.</strong> More segments or nodal unknowns than the engine's
+  limit (<code>Engine.max_segments</code>, default <code>HARD_LIMIT</code> = 20 000) raise
+  <a href="../warnings/#resourcelimiterror"><code>ResourceLimitError</code></a> before any
+  allocation; the dense system grows like <span class="arithmatex">\(N^2\)</span> in memory and work per
+  excitation. The notice that a solve may take minutes comes from
+  <code>Engine.solve</code> (not from <code>solve_mutual_*</code>, which enforce the limit but
+  emit no notice) from <code>Engine.warn_segments</code> on (default <code>SOFT_LIMIT</code> =
+  5 000); it is not checked against <code>max_segments</code>, so a notice size above
+  the hard limit never shows.</p>
+<p><strong>Instead:</strong> raise the limit per engine to solve a larger world on
+purpose.</p>
+</li>
+<li>
+<p><strong>Touching electrodes.</strong> <code>diagnose</code> reports wires of different
+  electrodes that are closer than five times the sum of their radii, but
+  not two electrodes that meet at a common segment end point (for example
+  a rod through a node of a separate grid).</p>
+<p><strong>Instead:</strong> metal in contact is one galvanic cluster: bond such
+electrodes with a conductor.</p>
+</li>
+<li>
+<p><strong>Aliases.</strong> <code>cim</code>, <code>bem</code> and <code>image_nlayer</code> run <code>image</code> and <code>mom</code>;
+  comparing them with their targets adds no independent information.</p>
+</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 Christian Ehlert
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/Ce1ectric/groundfield" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tabs", "navigation.sections", "navigation.top", "navigation.indexes", "content.code.copy", "content.code.annotate", "toc.follow", "search.highlight", "search.share"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"alias": true, "default": "latest", "provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="../../javascripts/vendor/mathjax/tex-mml-chtml.js"></script>
+      
+    
+  <script data-mkdocs-jupyter-mathjax="{&quot;url&quot;: &quot;javascripts/vendor/mathjax/tex-mml-chtml.js&quot;, &quot;version&quot;: 3}">
+/* Shared by full pages and Material's instant navigation. */
+(() => {
+  const config = JSON.parse(document.currentScript.dataset.mkdocsJupyterMathjax);
+  if (window.mkdocsJupyterMathJax) return;
+
+  let loading;
+  let queue = Promise.resolve();
+  let previous = [];
+
+  const ready = async () => {
+    if (!loading) {
+      loading = (async () => {
+        let math = window.MathJax;
+        if (!math?.typesetPromise) {
+          const url = new URL(config.url, document.baseURI).href;
+          const existing = Array.from(document.scripts).find(script =>
+            script.src && (script.src === url || script.id === 'MathJax-script' ||
+              (/mathjax/i.test(script.src) &&
+               /\/(?:MathJax|latest|(?:tex|mml)(?:-mml)?-(?:chtml|svg))\.js(?:[?#]|$)/i.test(script.src))));
+          if (existing) {
+            if (!math?.startup?.promise) {
+              await new Promise((resolve, reject) => {
+                existing.addEventListener('load', resolve, { once: true });
+                existing.addEventListener('error', reject, { once: true });
+              });
+            }
+          } else {
+            // Keep site macros, delimiters and startup hooks when supplied.
+            const options = math || {};
+            window.MathJax = {
+              ...options,
+              loader: {
+                ...options.loader,
+                load: Array.from(new Set(['ui/safe', ...(options.loader?.load || [])]))
+              },
+              startup: { typeset: false, ...options.startup },
+              tex: {
+                tags: 'ams',
+                useLabelIds: true,
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                processEscapes: true,
+                processEnvironments: true,
+                ...options.tex
+              }
+            };
+            await new Promise((resolve, reject) => {
+              const script = document.createElement('script');
+              script.src = config.url;
+              script.id = 'MathJax-script';
+              script.async = true;
+              script.onload = resolve;
+              script.onerror = reject;
+              document.head.appendChild(script);
+            });
+          }
+        }
+        math = window.MathJax;
+        await math.startup.promise;
+        return math;
+      })();
+    }
+    const math = await loading;
+    // A site owner can extend the v3 queue again on each navigation.
+    await math.startup.promise;
+    return math;
+  };
+
+  const unrendered = node => {
+    if (node.matches('mjx-container')) return [];
+    if (!node.querySelector('mjx-container')) return [node];
+    // In v3, scanning generated assistive MathML again produces nested output.
+    return Array.from(node.children).flatMap(unrendered);
+  };
+
+  const refresh = () => {
+    // A separate chain also serializes v3, without changing v4's startup promise.
+    queue = queue.then(async () => {
+      const notebooks = Array.from(document.querySelectorAll('.jupyter-wrapper'));
+      if (!notebooks.length && !previous.length) return;
+      if (notebooks.length === previous.length &&
+          notebooks.every((node, index) => node === previous[index])) return;
+      const math = await ready();
+      if (previous.length) {
+        math.typesetClear(previous);
+        math.texReset();
+      }
+      previous = notebooks.filter(node => node.isConnected);
+      const pending = previous.flatMap(unrendered);
+      if (pending.length) await math.typesetPromise(pending);
+    }).catch(error => console.error('mkdocs-jupyter: MathJax rendering failed', error));
+    return queue;
+  };
+
+  window.mkdocsJupyterMathJax = { refresh };
+  const start = () => {
+    if (typeof document$ !== 'undefined') document$.subscribe(refresh);
+    else refresh();
+  };
+  // Theme bundles and user-provided MathJax scripts can follow notebook content.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start, { once: true });
+  } else start();
+})();
+
+</script>
+</body>
+</html>

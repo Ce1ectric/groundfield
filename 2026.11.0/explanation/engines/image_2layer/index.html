@@ -1,0 +1,5378 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Numerical field computation for grounding systems.">
+      
+      
+      
+        <link rel="canonical" href="https://ce1ectric.github.io/groundfield/2026.11.0/explanation/engines/image_2layer/">
+      
+      
+        <link rel="prev" href="../image/">
+      
+      
+        <link rel="next" href="../mom/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+    
+    
+      
+        <title>image_2layer - groundfield</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#image_2layer-two-layer-soil" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="groundfield" class="md-header__button md-logo" aria-label="groundfield" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            groundfield
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              image_2layer
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Ce1ectric/groundfield" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Ce1ectric/groundfield
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../getting-started/installation/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Getting started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../tutorials/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Tutorials
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../examples/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Examples
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../how-to/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  How-to guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../../" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Explanation
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../reference/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../changelog/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Project
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="groundfield" class="md-nav__button md-logo" aria-label="groundfield" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    groundfield
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Ce1ectric/groundfield" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Ce1ectric/groundfield
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../getting-started/quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quickstart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../tutorials/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorials/T01_first_grounding_impedance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T01 First grounding impedance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorials/T02_layered_soil/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T02 Layered soil
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorials/T03_interconnected_systems_and_impedances/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T03 Interconnected systems and impedances
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorials/T04_frequency_response_and_rho_f/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T04 Frequency response and rho-f
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorials/T05_export_to_groundinsight/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T05 Export to groundinsight
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorials/T06_tn_network_synthetic_and_osm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T06 TN network, synthetic and OSM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorials/T07_fall_of_potential_measurement/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T07 Fall-of-potential measurement
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorials/T08_touch_and_step_assessment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T08 Touch and step voltage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorials/T09_choosing_an_engine_and_convergence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T09 Choosing an engine, convergence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorials/T10_reproducible_studies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T10 Reproducible studies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../examples/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Examples
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../examples/E01_secondary_substation_and_lv_network/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    E01 Secondary substation and LV network
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../examples/E02_single_family_house/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    E02 Single-family house
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../examples/E03_hv_substation_grid_two_layer_soil/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    E03 HV substation grid in two-layer soil
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../how-to/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-to guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../how-to/install-extras/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install the optional extras
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../how-to/sweeps-and-monte-carlo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Run sweeps and Monte Carlo studies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../how-to/speed-up-large-studies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Speed up large studies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../how-to/plot-results/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plot results
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../how-to/inductive-coupling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Model the inductive coupling of cables and leads
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../how-to/assess-touch-voltages/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Assess touch voltages
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../how-to/export-csv-vtk-paraview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Export to CSV, VTK and ParaView
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../how-to/osm-offline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Work with OpenStreetMap offline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../how-to/warnings-and-diagnostics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Read and act on warnings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../how-to/contribute-to-the-docs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contribute to the documentation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Explanation
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Explanation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_3" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engines
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6_3" id="__nav_6_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Engines
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../image/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    image
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    image_2layer
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    image_2layer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-it-solves" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it solves
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mathematical-and-physical-context" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mathematical and physical context
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Mathematical and physical context">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reflection-at-the-interface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reflection at the interface
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#from-the-sommerfeld-integral-to-the-image-series" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        From the Sommerfeld integral to the image series
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#electrodes-in-the-top-layer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Electrodes in the top layer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#electrodes-that-reach-the-interface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Electrodes that reach the interface
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#numerics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Numerics
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Numerics">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#truncation-of-the-series" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Truncation of the series
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#convergence-with-the-segment-length" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Convergence with the segment length
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#far-images-in-point-form" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Far images in point form
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cost" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cost
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Validation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#validity-range" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Validity range
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Validity range">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rod-ends-at-the-interface-a-limit-of-the-thin-wire-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rod ends at the interface: a limit of the thin-wire model
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#horizontal-wires-next-to-the-interface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Horizontal wires next to the interface
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#point-kernel-next-to-the-interface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Point kernel next to the interface
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#literature" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Literature
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#audit-trail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Audit trail
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mom/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    mom
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mom_sommerfeld/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    mom_sommerfeld
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../fem/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    fem (experimental)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kernels/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Source kernels
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../earth-return/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Earth return
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concrete-shells/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concrete shells
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../sources-and-measurement/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sources and measurement
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Performance and scaling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_10" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_10" id="__nav_6_10_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture decisions
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture decisions
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../adr/0001-two-layer-method/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0001 Two-layer method
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../adr/0002-engine-family/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0002 Engine family
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../adr/0003-distributed-conductor-model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0003 Distributed conductor
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../adr/0004-inductive-coupling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0004 Inductive coupling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../adr/0005-carson-earth-return/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0005 Carson earth return
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../adr/0006-sommerfeld-earth-return/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0006 Sommerfeld earth return
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../adr/0007-cross-layer-electrodes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0007 Cross-layer electrodes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../adr/0008-groundinsight-bridge/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0008 groundinsight bridge
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../adr/0009-world-generators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0009 World generators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../adr/0010-tier0-performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0010 Tier-0 performance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../adr/0011-osm-building-footprints/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0011 OSM building footprints
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../adr/0012-foundation-concrete-encasement/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0012 Foundation concrete encasement
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../adr/0013-calendar-versioning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0013 Calendar versioning
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../adr/0014-backend-registry-and-pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0014 Backend registry and pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../adr/0015-line-source-kernel-default/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0015 Line-source kernel default
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../adr/0016-conforming-fem/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0016 Conforming fem
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../reference/api/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7_2" id="__nav_7_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/api/factories/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Factories
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/api/world/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    World
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/api/soil/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Soil
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/api/geometry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Geometry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/api/conductors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conductors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/api/sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/api/boundary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Boundary
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/api/solver/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Solver
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/api/registry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backend registry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/api/coupling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Coupling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/api/postprocess/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Postprocess
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/api/diagnostics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diagnostics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/api/validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/api/results-io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Result files
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/api/io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    IO and groundinsight
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/api/geo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Geo / OSM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/api/generators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Generators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/api/references/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    References
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/api/utils/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Utilities
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/glossary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Glossary (EN / DE)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/units-and-conventions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Units and conventions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/warnings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Warnings and errors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/known-limitations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Known limitations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/deprecations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deprecations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../roadmap/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Roadmap
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../audit/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audit history
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8_3" id="__nav_8_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_8_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Audit history
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../audit/pass-01/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pass 1
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../audit/pass-02/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pass 2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../audit/pass-03/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pass 3
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../audit/pass-04/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pass 4
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../audit/pass-05/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pass 5
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../audit/pass-06/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pass 6
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../audit/pass-07/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pass 7
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../audit/pass-08/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pass 8
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../audit/audit-2026-07-08/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audit of 2026-07-08
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../audit/pass-09/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pass 9
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../audit/pass-10/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pass 10
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../graphify/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Knowledge graph (graphify)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-it-solves" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it solves
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mathematical-and-physical-context" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mathematical and physical context
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Mathematical and physical context">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reflection-at-the-interface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reflection at the interface
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#from-the-sommerfeld-integral-to-the-image-series" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        From the Sommerfeld integral to the image series
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#electrodes-in-the-top-layer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Electrodes in the top layer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#electrodes-that-reach-the-interface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Electrodes that reach the interface
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#numerics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Numerics
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Numerics">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#truncation-of-the-series" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Truncation of the series
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#convergence-with-the-segment-length" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Convergence with the segment length
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#far-images-in-point-form" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Far images in point form
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cost" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cost
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Validation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#validity-range" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Validity range
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Validity range">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rod-ends-at-the-interface-a-limit-of-the-thin-wire-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rod ends at the interface: a limit of the thin-wire model
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#horizontal-wires-next-to-the-interface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Horizontal wires next to the interface
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#point-kernel-next-to-the-interface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Point kernel next to the interface
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#literature" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Literature
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#audit-trail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Audit trail
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="image_2layer-two-layer-soil"><code>image_2layer</code> — two-layer soil<a class="headerlink" href="#image_2layer-two-layer-soil" title="Permanent link">&para;</a></h1>
+<p>This page explains the default engine for two-layer soil: how the layer
+interface enters the Green's function, how electrodes in, at and through
+the interface are treated, how accurate the results are and which
+geometries next to the interface need care. Read the <a href="../image/"><code>image</code></a>
+page first; everything said there about the current model, the network
+solve and the field-grade limits applies here too.</p>
+<div class="admonition abstract">
+<p class="admonition-title">At a glance</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Soil</td>
+<td><code>TwoLayerSoil</code>, or a <code>MultiLayerSoil</code> whose canonical stack has two layers; <code>backend="image"</code> forwards here</td>
+</tr>
+<tr>
+<td>Green's function</td>
+<td>Tagg / Sunde image series inside a layer; the two-layer Sommerfeld kernel of ADR-0007 once an electrode reaches the interface</td>
+</tr>
+<tr>
+<td>Current model</td>
+<td>one uniform leakage current per straight wire and soil layer (user decision Q30)</td>
+</tr>
+<tr>
+<td>Kernel</td>
+<td>exact line source (default); <code>kernel="point"</code> reproduces 0.15.0</td>
+</tr>
+<tr>
+<td>Accuracy</td>
+<td>exact for its model; the current-model error of <a href="../image/#field-quantities-and-the-uniform-current-ansatz"><code>image</code></a>; thin-wire limits right at the interface</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>default for two-layer soil</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h2 id="what-it-solves">What it solves<a class="headerlink" href="#what-it-solves" title="Permanent link">&para;</a></h2>
+<p>The two-layer soil is an upper layer of resistivity <span class="arithmatex">\(\rho_1\)</span> and thickness
+<span class="arithmatex">\(h_1\)</span> over a half-space of resistivity <span class="arithmatex">\(\rho_2\)</span>. It is the simplest soil
+that captures the first-order effect of stratification — a dry or frozen
+top layer over wet ground, weathered soil over rock — without the
+identification problem of more layers, and it is the soil model of the AP1
+catalogue. <code>image_2layer</code> solves it with the classical image series and
+the uniform-current model of <code>image</code>:</p>
+<ul>
+<li><strong>Soil.</strong> Two homogeneous, isotropic layers with a horizontal interface
+  at depth <span class="arithmatex">\(h_1\)</span>, insulating air above; depth <span class="arithmatex">\(z\)</span> counts positive
+  downwards.</li>
+<li><strong>Quasi-static field</strong>, thin wires and average potential as for
+  <a href="../image/#what-it-solves"><code>image</code></a>.</li>
+<li><strong>Current model.</strong> One uniform leakage current per straight wire, and
+  per soil layer for a wire that crosses the interface: a rod driven
+  through <span class="arithmatex">\(h_1\)</span> is <strong>one owner per layer</strong>, so its current density may
+  differ above and below the interface.</li>
+<li><strong>Electrodes anywhere in the soil</strong>: in the top layer (image series), at
+  or below the interface (Sommerfeld kernel).</li>
+</ul>
+<h2 id="mathematical-and-physical-context">Mathematical and physical context<a class="headerlink" href="#mathematical-and-physical-context" title="Permanent link">&para;</a></h2>
+<h3 id="reflection-at-the-interface">Reflection at the interface<a class="headerlink" href="#reflection-at-the-interface" title="Permanent link">&para;</a></h3>
+<p>The interface reflects the current field with the coefficient</p>
+<div class="arithmatex">\[
+K = \frac{\rho_2 - \rho_1}{\rho_2 + \rho_1} \in (-1, 1).
+\]</div>
+<p><span class="arithmatex">\(K &lt; 0\)</span> (a conductive subsoil) draws current downwards and lowers the
+grounding impedance; <span class="arithmatex">\(K &gt; 0\)</span> (a resistive subsoil) pushes current into the
+top layer and raises it. For <span class="arithmatex">\(K = 0\)</span> the soil is homogeneous.</p>
+<h3 id="from-the-sommerfeld-integral-to-the-image-series">From the Sommerfeld integral to the image series<a class="headerlink" href="#from-the-sommerfeld-integral-to-the-image-series" title="Permanent link">&para;</a></h3>
+<p>For a point current <span class="arithmatex">\(I\)</span> at depth <span class="arithmatex">\(z_s\)</span> and a field point at depth <span class="arithmatex">\(z\)</span> and
+horizontal distance <span class="arithmatex">\(s\)</span>, both in the top layer, the potential is the
+Sommerfeld integral (the static limit of Sommerfeld's half-space problem;
+the general stack is on the <a href="../mom_sommerfeld/"><code>mom_sommerfeld</code></a> page)</p>
+<div class="arithmatex">\[
+\varphi = \frac{\rho_1 I}{4\pi}\int_0^\infty
+\frac{e^{-\lambda\lvert z-z_s\rvert} + e^{-\lambda(z+z_s)}
++ K\bigl[e^{-\lambda(2h_1-\lvert z-z_s\rvert)} + e^{-\lambda(2h_1-z-z_s)}\bigr]}
+{1 - K\,e^{-2\lambda h_1}}\,J_0(\lambda s)\,\mathrm d\lambda ,
+\]</div>
+<p>with the spatial frequency <span class="arithmatex">\(\lambda\)</span> (in 1/m) and the Bessel function
+<span class="arithmatex">\(J_0\)</span>. The numerator holds the direct field, its air image and the first
+reflection at the interface; the denominator sums the reflections back and
+forth between the surface and the interface. For two layers the
+reflection coefficient is the constant <span class="arithmatex">\(K\)</span>, so three steps give a closed
+form:</p>
+<ol>
+<li>expand the denominator in a geometric series,
+   <span class="arithmatex">\(1/(1 - K e^{-2\lambda h_1}) = \sum_{m\ge0} K^m e^{-2m\lambda h_1}\)</span>;</li>
+<li>multiply out: every term is <span class="arithmatex">\(K^n e^{-\lambda d}J_0(\lambda s)\)</span> with a
+   vertical distance <span class="arithmatex">\(d\)</span> of <span class="arithmatex">\(2nh_1 \pm (z - z_s)\)</span>, <span class="arithmatex">\(2nh_1 + z + z_s\)</span> or
+   <span class="arithmatex">\(2nh_1 - z - z_s\)</span>;</li>
+<li>integrate each term with Lipschitz' integral
+   <span class="arithmatex">\(\int_0^\infty e^{-\lambda d}J_0(\lambda s)\,\mathrm d\lambda = 1/\sqrt{s^2+d^2}\)</span>,
+   which is the potential of a point source at distance
+   <span class="arithmatex">\(\sqrt{s^2 + d^2}\)</span>.</li>
+</ol>
+<p>The result is the image series</p>
+<div class="arithmatex">\[
+\varphi = \frac{\rho_1 I}{4\pi}\Biggl[\frac{1}{r_0^+} + \frac{1}{r_0^-}
++ \sum_{n=1}^{\infty} K^n\Bigl(\frac{1}{r_n^{++}} + \frac{1}{r_n^{+-}}
++ \frac{1}{r_n^{-+}} + \frac{1}{r_n^{--}}\Bigr)\Biggr],
+\qquad
+r_n^{\sigma\tau} = \sqrt{s^2 + (z - \sigma\,2nh_1 - \tau z_s)^2},
+\]</div>
+<p>with <span class="arithmatex">\(\sigma, \tau \in \{+1, -1\}\)</span> and <span class="arithmatex">\(r_0^{\pm} = \sqrt{s^2 + (z \mp z_s)^2}\)</span>:
+the source and its air image, plus four images of weight <span class="arithmatex">\(K^n\)</span> per order
+<span class="arithmatex">\(n\)</span> at the depths <span class="arithmatex">\(\pm 2nh_1 \pm z_s\)</span> (Stefanescu 1930; Tagg 1964; Sunde
+1968). Each order is one more round trip of the current field between the
+surface and the interface. For <span class="arithmatex">\(K = 0\)</span> only the <span class="arithmatex">\(n = 0\)</span> pair remains and
+the result is that of <code>image</code> bit for bit.</p>
+<h3 id="electrodes-in-the-top-layer">Electrodes in the top layer<a class="headerlink" href="#electrodes-in-the-top-layer" title="Permanent link">&para;</a></h3>
+<p>Every segment carries the source, the air image and the image series.
+With the exact line kernel (default) all of them are line sources, treated
+like the direct pairs of the <a href="../../kernels/">kernels page</a>:</p>
+<ul>
+<li>image pairs closer than six segment lengths are exact Galerkin
+  integrals, blended into the far form up to 7.5 segment lengths;</li>
+<li>beyond, the point form with the quadrupole term of the segment average,
+  tapered off between 60 and 120 segment lengths of vertical distance,
+  where it falls below the remainder of the far form;</li>
+<li>the exact integral of an image pair takes the image's potential at the
+  transverse distance <span class="arithmatex">\(\max(\rho_\perp, a)\)</span> of the wire from the image's
+  axis (<span class="arithmatex">\(\rho_\perp\)</span> the distance of the two axes, <span class="arithmatex">\(a\)</span> the wire radius):
+  its average over the wire's circumference.</li>
+</ul>
+<p>A straight wire then reproduces its uniform-current resistance at any
+segment length (<a href="#numerics">Numerics</a>). The point kernel sits about
+1–2 % low, as in homogeneous soil.</p>
+<h3 id="electrodes-that-reach-the-interface">Electrodes that reach the interface<a class="headerlink" href="#electrodes-that-reach-the-interface" title="Permanent link">&para;</a></h3>
+<p>A rod driven through <span class="arithmatex">\(h_1\)</span>, or any wire at or below the interface, needs
+the Green's function with source and field point in different layers. As
+soon as one segment reaches the interface, <code>image_2layer</code> evaluates every
+pair with the two-layer Sommerfeld kernel of
+<code>groundfield.coupling.layered_green</code> (ADR-0007):</p>
+<ul>
+<li>segments are first split at <span class="arithmatex">\(h_1\)</span>;</li>
+<li>the reaction matrix is the homogeneous kernel scaled with the
+  resistivity of the source layer, plus a layered correction <span class="arithmatex">\(\Delta Z\)</span>
+  evaluated by spectral quadrature, grouped by depth;</li>
+<li>for a pair in different layers the direct term carries the transmitted
+  resistivity <span class="arithmatex">\(2\rho_1\rho_2/(\rho_1+\rho_2)\)</span>, which keeps the matrix
+  reciprocal;</li>
+<li>with the line kernel <span class="arithmatex">\(\Delta Z\)</span> is in line form as well: in two-layer
+  soil it is an exact superposition of images in every layer combination
+  (Sunde), and its images get the treatment of the Tagg / Sunde images
+  above — the far quadrupole term over all pairs, the Galerkin integral for
+  pairs within six segment lengths blended up to 7.5, the Galerkin self
+  images on the diagonal — on top of the spectral values between
+  midpoints.</li>
+</ul>
+<p>Physically the leakage current density of a rod through the interface
+scales roughly with the conductivity of the layer it is in. Such an
+electrode is therefore <strong>one owner per layer</strong>, all in the electrode's
+cluster — the same model as two rods bonded at <span class="arithmatex">\(h_1\)</span>: the current density
+may differ above and below the interface, and the reported potential is
+the length-weighted average over the whole electrode. Every interface cut
+is kept, however short the piece beyond it: the Galerkin self term and the
+line kernel's parallel-pair integral are evaluated without cancellation
+for such pieces, so the impedance is continuous in the depth of a rod
+tip.</p>
+<p>The diagonal entry of a segment is the layered correction at the wire
+radius, <span class="arithmatex">\(s = a\)</span>, with the interface image exchanged for its Galerkin
+integral; its closed-form <span class="arithmatex">\(1/R\)</span> terms are evaluated at that radius (the
+default regularisation of <code>layered_green</code>, a clamp at <span class="arithmatex">\(h_1/200\)</span>, is meant
+for coincident points). The diagonal then equals the image solution to
+<span class="arithmatex">\(10^{-13}\)</span>, a ring is continuous through <span class="arithmatex">\(h_1\)</span> (4.1826 Ω 1 µm above,
+4.1805 Ω at <span class="arithmatex">\(h_1\)</span>), and pairs closer than <span class="arithmatex">\(h_1/200\)</span> are regularised at the
+1 mm of the point forms they combine with.</p>
+<h2 id="numerics">Numerics<a class="headerlink" href="#numerics" title="Permanent link">&para;</a></h2>
+<h3 id="truncation-of-the-series">Truncation of the series<a class="headerlink" href="#truncation-of-the-series" title="Permanent link">&para;</a></h3>
+<p>The weights decay geometrically, so the neglected tail after order <span class="arithmatex">\(n\)</span> is
+bounded by <span class="arithmatex">\(\lvert K\rvert^{n+1}/(1 - \lvert K\rvert)\)</span>. The series (one
+<code>ImageSeries</code> object shared by the solver, <code>FieldResult.potential</code> and
+<code>solve_mutual_*</code>) stops at the first <span class="arithmatex">\(n\)</span> whose tail bound is below
+<code>Engine.image_series_tol</code> (default <span class="arithmatex">\(10^{-6}\)</span>), or at
+<code>Engine.image_max_terms</code> (default 300) with a <code>SeriesTruncationWarning</code>.
+The number of terms depends only on <span class="arithmatex">\(\lvert K\rvert\)</span>, about
+<span class="arithmatex">\(\ln(\text{tol})/\ln\lvert K\rvert\)</span>; the generated table in the
+<a href="#validation">validation section</a> lists it for typical contrasts — the
+default cap covers the AP1 corner soil 1000 / 30 Ω·m.
+<code>metadata["series"]</code> records the controls of the solve, and the post-solve
+field evaluation uses the same controls.</p>
+<h3 id="convergence-with-the-segment-length">Convergence with the segment length<a class="headerlink" href="#convergence-with-the-segment-length" title="Permanent link">&para;</a></h3>
+<p>With the line kernel a straight wire reproduces its exact uniform-current
+resistance at any segment length:</p>
+<ul>
+<li>a 10 m strip at 0.5 m in 1000 / 50 Ω·m with <span class="arithmatex">\(h_1\)</span> = 1 m: within 3.6e-6
+  from 2 m to 0.125 m segments, not monotonically; 0.1 m above <span class="arithmatex">\(h_1\)</span>
+  within 3.8e-6;</li>
+<li>a ring 1 cm above a 1000 / 30 Ω·m interface: within 0.004 % of its exact
+  thin ring;</li>
+<li>the surface potential above the strip: within 8e-6 of the closed-form
+  image sum;</li>
+<li>a 75 m strip below a 0.5 m top layer: within 1.1e-5 at every segment
+  length from 0.5 to 37.5 m in 500 / 100 and 1000 / 30 Ω·m (within 4.1e-6
+  from 1 m); over a more resistive lower layer, 100 / 500 Ω·m, +1.2e-4 at
+  0.5 m and +4.8e-5 at 1 m (the far terms of an image series that does not
+  alternate);</li>
+<li>a 6 m rod from 0.6 m through <span class="arithmatex">\(h_1\)</span> = 5 m in 500 / 100, 1000 / 30
+  and 30 / 1000 Ω·m: within 6.7e-7 from 2 m to 0.125 m segments, and
+  within 1.4e-6 of the exact two-owner value;</li>
+<li>for wires in the upper layer, where both paths apply, the cross-layer
+  path reproduces the series to 1.8e-7.</li>
+</ul>
+<p>About 2e-6 of the strip's rest is the reduced kernel that the soil-surface
+image keeps. The point kernel converges to a value 1–2 % low.</p>
+<h3 id="far-images-in-point-form">Far images in point form<a class="headerlink" href="#far-images-in-point-form" title="Permanent link">&para;</a></h3>
+<p><code>Engine(image_far_field="point")</code> (the author's decision of 2026-11-15)
+leaves out the dense far term: the far Tagg / Sunde images and the far
+images of the layered correction are point sources, while the near image
+pairs — within 7.5 segment lengths, a segment's own images included — stay
+Galerkin integrals blended into the point form, on the series and the
+cross-layer path alike. It saves the far-image work (cost on the
+<a href="../../kernels/#cost">kernels page</a>) and against the default moves</p>
+<ul>
+<li>networks by 3e-6 … 4.3e-4 (16 house grids 0.4 m above a 1000 / 10 Ω·m
+  interface: 4.3e-4; 16 house grids with a 75 m bare conductor in two
+  pieces below a 0.5 m top layer: within 4e-6),</li>
+<li>single wires near the interface by up to 4e-4 and the surface potential
+  above them by up to 0.8 %.</li>
+</ul>
+<p>A wire on the interface is up to 3e-4 apart on the two paths in this form
+(the default: 1.3e-6), because the far terms the point form leaves out are
+split differently between the two decompositions. The continuous switch
+and the transverse distance of near image pairs stay, so <code>"point"</code> is not
+the result of the earlier code: within the upper layer it differs from it
+by up to 2.3e-4. <code>metadata["series"]</code> records the form, the post-solve
+field evaluation and <code>solve_mutual_*</code> use it, and any value other than
+<code>"quadrupole"</code> or <code>"point"</code> raises <code>ValueError</code>.</p>
+<h3 id="cost">Cost<a class="headerlink" href="#cost" title="Permanent link">&para;</a></h3>
+<p>The series path costs the image terms of every pair: their number grows
+with the contrast (table below). The cross-layer path costs one spectral
+evaluation per pair of segment depths. Large depth groups (all house grids
+at one depth, for example) are planned once and evaluated in row chunks,
+so the path needs the memory of the series path — the reaction matrix,
+<span class="arithmatex">\(16N^2\)</span> bytes, within the budget and row blocks beyond it. The
+boundary-value system of the spectral amplitudes is eliminated in closed
+form, vectorised over the quadrature nodes. Timings: <a href="../../kernels/#cost">kernels</a>
+and <a href="../../performance/">performance</a>.</p>
+<h2 id="validation">Validation<a class="headerlink" href="#validation" title="Permanent link">&para;</a></h2>
+<p>Against <code>mom</code> on the same segments, electrodes in the top layer agree to
+0.37 % (B6) and a rod through the interface to 0.38 % (B7): the difference
+is the uniform-current ansatz (both run with the point kernel in that
+comparison). For straight wires the line kernel reproduces the exact
+uniform-current resistance (kernel check at the end of the generated
+block). The field-grade limits of the ansatz next to grids and stars are
+those of <a href="../image/#field-quantities-and-the-uniform-current-ansatz"><code>image</code></a>.
+Next to the interface the thin-wire model itself has limits, measured
+against a solid-rod and a solid-torus model (<a href="#validity-range">Validity range</a>).</p>
+<!-- generated:begin image_2layer -->
+<p>Generated from the benchmark run measured on 2026-11-16 with groundfield 2026.11.0 (Python 3.12.16, NumPy 2.4.4, SciPy 1.17.1, numba installed: yes; Darwin arm64); bounds from <code>tests/benchmarks/tolerances.py</code>. Details and all cases: <a href="../../validation/">Validation and benchmarks</a>.</p>
+<table>
+<thead>
+<tr>
+<th>Benchmark</th>
+<th>Measure</th>
+<th>Bound</th>
+<th>Worst measured</th>
+<th>Cases</th>
+<th>Status</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>B6 Top-layer electrodes, two-layer soil</td>
+<td>abs(Z/Z_ref - 1)</td>
+<td>1 %</td>
+<td>0.37 %</td>
+<td>10</td>
+<td>pass</td>
+<td>uniform-current ansatz</td>
+</tr>
+<tr>
+<td>B7 Rod through the layer interface</td>
+<td>abs(Z/Z_ref - 1)</td>
+<td>2 %</td>
+<td>0.38 %</td>
+<td>2</td>
+<td>pass</td>
+<td>one uniform current across the interface (F02); bound met since the fix of 10.15</td>
+</tr>
+<tr>
+<td>B8 Two-port reciprocity</td>
+<td>abs(Z_AB/Z_BA - 1)</td>
+<td>1e-7</td>
+<td>7.3e-9</td>
+<td>2</td>
+<td>pass</td>
+<td></td>
+</tr>
+<tr>
+<td>B9 Limits of the layered kernels (<code>equal_rho_integral</code>)</td>
+<td>abs(Z/Z_ref - 1)</td>
+<td>1e-10</td>
+<td>4.4e-16</td>
+<td>2</td>
+<td>pass</td>
+<td>image_2layer, mom, mom_sommerfeld, cim, bem</td>
+</tr>
+<tr>
+<td>B9 Limits of the layered kernels (<code>layer_limit_integral</code>)</td>
+<td>abs(Z/Z_ref - 1)</td>
+<td>0.1 %</td>
+<td>5.1e-4</td>
+<td>2</td>
+<td>pass</td>
+<td>physical limit</td>
+</tr>
+<tr>
+<td>B11 Grid refinement</td>
+<td>abs(Z(ds)/Z(ds/2) - 1)</td>
+<td>0.6 %</td>
+<td>0.54 %</td>
+<td>2</td>
+<td>pass</td>
+<td>not monotone (point kernel); 0.43 % / 0.39 % with one owner for the grid before user decision Q30</td>
+</tr>
+</tbody>
+</table>
+<p>Length of the image series (independent of h₁: the number of terms depends only on |K| and the tolerance):</p>
+<table>
+<thead>
+<tr>
+<th>ρ₁ / ρ₂ in Ω·m</th>
+<th>K</th>
+<th>terms for a tail bound below 1e-6</th>
+<th>within the default cap of 300 terms</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>300 / 100</td>
+<td>-0.5000</td>
+<td>20</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>100 / 400</td>
+<td>+0.6000</td>
+<td>28</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>1000 / 100</td>
+<td>-0.8182</td>
+<td>77</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>500 / 30</td>
+<td>-0.8868</td>
+<td>133</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>1000 / 30</td>
+<td>-0.9417</td>
+<td>277</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>2000 / 30</td>
+<td>-0.9704</td>
+<td>577</td>
+<td>no — SeriesTruncationWarning</td>
+</tr>
+</tbody>
+</table>
+<p>Kernel check — signed deviation from the exact uniform-current resistance:</p>
+<table>
+<thead>
+<tr>
+<th>Case</th>
+<th>Exact uniform-current R</th>
+<th>Kernel</th>
+<th>ds = 2 m</th>
+<th>ds = 0.5 m</th>
+<th>ds = 0.25 m</th>
+<th>ds = 0.125 m</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>strip 10 m at 0.5 m, a = 5 mm, two-layer 1000/30 Ω·m, h₁ = 5 m</td>
+<td>129.9464 Ω</td>
+<td><code>point</code></td>
+<td>+0.88 %</td>
+<td>−1.1 %</td>
+<td></td>
+<td>−1.3 %</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td><code>line</code></td>
+<td>−2.2e-7</td>
+<td>−9.3e-7</td>
+<td></td>
+<td>−1.1e-6</td>
+</tr>
+</tbody>
+</table>
+<!-- generated:end image_2layer -->
+
+<h2 id="validity-range">Validity range<a class="headerlink" href="#validity-range" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Condition</th>
+<th>Limit</th>
+<th>Behaviour outside</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Soil</td>
+<td>two distinct layers; <span class="arithmatex">\(\rho_1 = \rho_2\)</span> is solved as homogeneous</td>
+<td><code>BackendCapabilityError</code> for three distinct layers (use <code>mom_sommerfeld</code>)</td>
+</tr>
+<tr>
+<td>Contrast</td>
+<td><span class="arithmatex">\(\lvert K\rvert &lt; 1\)</span>; terms grow like <span class="arithmatex">\(\ln(\text{tol}) / \ln\lvert K\rvert\)</span></td>
+<td><code>SeriesTruncationWarning</code> at <code>image_max_terms</code></td>
+</tr>
+<tr>
+<td>Electrodes</td>
+<td>anywhere in the soil; at or through <span class="arithmatex">\(h_1\)</span> via the slower Sommerfeld path</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Rod ends</td>
+<td>head and tip more than one wire radius from <span class="arithmatex">\(h_1\)</span></td>
+<td><code>InterfaceContactWarning</code></td>
+</tr>
+<tr>
+<td>Horizontal wires next to <span class="arithmatex">\(h_1\)</span></td>
+<td>axis outside the reach of the interface (3.9 wire radii at contrast 33)</td>
+<td><code>InterfaceContactWarning</code></td>
+</tr>
+<tr>
+<td>Point kernel near <span class="arithmatex">\(h_1\)</span></td>
+<td>horizontal wires at least 0.6 segment lengths from <span class="arithmatex">\(h_1\)</span></td>
+<td><code>PointKernelInterfaceWarning</code>; within 0.387: <code>BackendCapabilityError</code></td>
+</tr>
+<tr>
+<td>Thin wire, burial, shallow segments</td>
+<td>as for <a href="../image/#validity-range"><code>image</code></a></td>
+<td><code>ValueError</code> / <code>ShallowSegmentWarning</code></td>
+</tr>
+<tr>
+<td>Field quantities near grids, stars, strip ends</td>
+<td>uniform-current ansatz, see <a href="../image/#field-quantities-and-the-uniform-current-ansatz"><code>image</code></a></td>
+<td><code>UniformCurrentFieldWarning</code></td>
+</tr>
+<tr>
+<td>Frequency</td>
+<td>quasi-static, <span class="arithmatex">\(f &lt; 1\)</span> kHz</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>The two thin-wire limits at the interface and the point-kernel limit are
+explained below. What to do instead, and the other limits of the family:
+known limitations of the <a href="../../../reference/known-limitations/#current-ansatz-and-source-kernels">current ansatz and kernels</a>
+and of the <a href="../../../reference/known-limitations/#soil-layers">soil layers</a>;
+the warnings and their reach: <a href="../../../reference/warnings/#interfacecontactwarning">warnings reference</a>.</p>
+<h3 id="rod-ends-at-the-interface-a-limit-of-the-thin-wire-model">Rod ends at the interface: a limit of the thin-wire model<a class="headerlink" href="#rod-ends-at-the-interface-a-limit-of-the-thin-wire-model" title="Permanent link">&para;</a></h3>
+<p>The thin wire has no end face. A rod that ends exactly at <span class="arithmatex">\(h_1\)</span> is a wire
+entirely in the upper layer; one that reaches past it by a fraction of its
+radius touches the lower layer through a short piece only. The solid rod
+is continuous in between, because its flat end face carries the contact.
+Against an axisymmetric finite-volume model of the solid rod (4.5 m,
+<span class="arithmatex">\(a\)</span> = 8 mm, 1000 / 30 Ω·m) the line kernel reads:</p>
+<table>
+<thead>
+<tr>
+<th>Tip below <span class="arithmatex">\(h_1\)</span></th>
+<th>Solid rod</th>
+<th>Thin wire</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>−16 mm</td>
+<td>190.2 Ω</td>
+<td>+3.3 %</td>
+</tr>
+<tr>
+<td>−8 mm</td>
+<td>188.9 Ω</td>
+<td>+3.9 %</td>
+</tr>
+<tr>
+<td>−1 mm</td>
+<td>182.8 Ω</td>
+<td>+7.2 %</td>
+</tr>
+<tr>
+<td>0</td>
+<td>161.4 Ω</td>
+<td>+21.4 %</td>
+</tr>
+<tr>
+<td>+1 mm</td>
+<td>156.3 Ω</td>
+<td>−4.6 %</td>
+</tr>
+<tr>
+<td>+4 mm</td>
+<td>148.5 Ω</td>
+<td>−1.2 %</td>
+</tr>
+<tr>
+<td>+8 mm</td>
+<td>141.2 Ω</td>
+<td>+0.7 %</td>
+</tr>
+<tr>
+<td>+16 mm</td>
+<td>130.2 Ω</td>
+<td>+2.1 %</td>
+</tr>
+</tbody>
+</table>
+<p>The point kernel and <code>mom</code> behave alike (+19.0 … +20.5 % at 0). Every
+segment backend therefore warns with <code>InterfaceContactWarning</code> when a rod
+head or tip lies within one wire radius of an interface, and <code>diagnose()</code>
+lists it under <code>interface_contact</code>. <strong>Keep rod ends a few wire radii from
+an interface</strong>, or bracket the result by moving the end by ±2 wire radii;
+<code>fem</code> models the solid rod.</p>
+<h3 id="horizontal-wires-next-to-the-interface">Horizontal wires next to the interface<a class="headerlink" href="#horizontal-wires-next-to-the-interface" title="Permanent link">&para;</a></h3>
+<p>A horizontal wire has the same kind of limit: next to a more conductive
+layer the solid wire's current crowds to its near side, which the current
+on the axis cannot follow. A ring (<span class="arithmatex">\(a\)</span> = 5 mm) reads +1.2 % at 3 wire
+radii, +3.6 % at 2 and +8.6 % at 1.5 radii above a layer 33 times more
+conductive, against the solid torus of the axisymmetric <code>fem</code>. Within the
+reach of the interface — 3.9 radii at that contrast, tabulated under
+<code>InterfaceContactWarning</code> in the
+<a href="../../../reference/warnings/">warnings reference</a> — the solve warns with
+<code>InterfaceContactWarning</code> as well.</p>
+<h3 id="point-kernel-next-to-the-interface">Point kernel next to the interface<a class="headerlink" href="#point-kernel-next-to-the-interface" title="Permanent link">&para;</a></h3>
+<p>With <code>kernel="point"</code> (and in the <code>mom</code> family, which shares the point
+form) a horizontal wire just below or above <span class="arithmatex">\(h_1\)</span> needs segments much
+shorter than twice its distance to the interface:</p>
+<ul>
+<li>5 cm below <span class="arithmatex">\(h_1\)</span>, a ring of radius 3 m gives 29.7 Ω at ds = 0.5 m
+  against 54.7 Ω at ds = 0.025 m, while the line kernel gives
+  55.6–55.7 Ω at every segment length
+  (<code>tests/test_cross_layer_line_kernel.py</code>);</li>
+<li>above <span class="arithmatex">\(h_1\)</span> the point form takes the image of a segment in the
+  interface as a point source: a ring 1 µm / 1 cm above <span class="arithmatex">\(h_1 = 5\)</span> m read
+  −1931 / −57.9 Ω (line kernel 4.18 / 15.18 Ω).</li>
+</ul>
+<p>On either side of the interface a wire closer than 0.387 segment lengths
+therefore raises <code>BackendCapabilityError</code>, and one within 0.6 segment
+lengths warns with <code>PointKernelInterfaceWarning</code>. The default line kernel
+needs no such care.</p>
+<h2 id="literature">Literature<a class="headerlink" href="#literature" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Stefanescu, S. S., &amp; Schlumberger, C. (1930). Sur la distribution
+  électrique potentielle autour d'une prise de terre ponctuelle dans un
+  terrain à couches horizontales, homogènes et isotropes. <em>Journal de
+  Physique et le Radium</em> 1.</li>
+<li>Tagg, G. F. (1964). <em>Earth Resistances</em>. George Newnes, London, ch. 5
+  (the image series in engineering form).</li>
+<li>Sunde, E. D. (1968). <em>Earth Conduction Effects in Transmission Systems</em>.
+  Dover, New York, sect. 3.5 (Sommerfeld integral of the layered earth and
+  its two-layer reduction).</li>
+<li>Dawalibi, F. P., &amp; Barbeito, N. (1991). Measurements and computations of
+  the performance of grounding systems buried in multilayer soils. <em>IEEE
+  Transactions on Power Delivery</em> 6(4).</li>
+<li>Colominas, I., París, J., Navarrina, F., &amp; Casteleiro, M. (2012).
+  Improvement of computer methods for grounding analysis in layered soils
+  by using high-efficient convergence acceleration techniques. <em>Advances in
+  Engineering Software</em> 44 (acceleration of the series for
+  <span class="arithmatex">\(\lvert K\rvert \to 1\)</span>, not used here).</li>
+</ul>
+<p>Architecture decisions: <a href="../../../adr/0001-two-layer-method/">ADR-0001</a>,
+<a href="../../../adr/0007-cross-layer-electrodes/">ADR-0007</a>,
+<a href="../../../adr/0015-line-source-kernel-default/">ADR-0015</a>. API:
+<code>groundfield.solver.image_2layer.solve_image_2layer</code>.</p>
+<h2 id="audit-trail">Audit trail<a class="headerlink" href="#audit-trail" title="Permanent link">&para;</a></h2>
+<details class="note">
+<summary>Line-source images (wave 3 of the 2026.11 work, audit W3A-02)</summary>
+<p>Before wave 3 of the 2026.11 work, far images were point sources (which
+<code>Engine.image_far_field = "point"</code> offers in its own form today), and
+on the cross-layer path only the interface image of near pairs in one
+layer was a Galerkin integral. The reduced kernel of direct pairs,
+applied to images, left out <span class="arithmatex">\(a^2/(2d^2)\)</span> of an image <span class="arithmatex">\(d\)</span> away; audit
+W3A-02 replaced it by the transverse distance. Measured before against
+now:</p>
+<ul>
+<li>the 10 m strip at 0.5 m in 1000 / 50 Ω·m: up to +5.1e-4 before;
+  0.1 m above <span class="arithmatex">\(h_1\)</span>: +6.8e-5 with the reduced kernel on the images;</li>
+<li>the ring 1 cm above a 1000 / 30 Ω·m interface: +1.60 % against its
+  exact thin ring before (now −0.004 %); the point-kernel example ring
+  1 cm above <span class="arithmatex">\(h_1 = 5\)</span> m: line kernel 15.42 Ω before audit W3A-02,
+  15.18 Ω now;</li>
+<li>the surface potential above the strip: up to 0.94 % before (the
+  alternating series of a more conductive lower layer amplifies the
+  error of its far images);</li>
+<li>the rod through the interface: 1.3e-4 … 2.4e-4 over the segment
+  lengths before; the cross-layer path against the series in the upper
+  layer: up to 6.2e-4 before.</li>
+</ul>
+</details>
+<details class="note">
+<summary>Point form of the far images (audits W3R2A-01, W3R2A-02, user decision D2)</summary>
+<p>Up to audit W3R2A-01 the cross-layer path kept the line form of the
+interface image only, as before wave 3; the own surface and transmitted
+images of a segment below the interface were point sources, and the
+75 m strip below a 0.5 m top layer read −1.0e-3 at a segment length of
+2.5 m and −58 % at 37.5 m (16 house grids with a 75 m bare conductor in
+two pieces: +1.1 % against the default). The point form keeps the
+continuous switch of user decision D2, which blends up to 7.5 segment
+lengths where the base switched at six in one step; hence its
+difference of up to 2.3e-4 from the code before wave 3. Audit W3R2A-02
+added the <code>ValueError</code> for other values of <code>image_far_field</code>.</p>
+</details>
+<details class="note">
+<summary>Series length and memory (findings 10.25, 10.56)</summary>
+<p>Up to 0.15.0 the post-solve field evaluation capped the series at 100
+terms (finding 10.25); it now uses the controls of the solve. Before
+finding 10.56 the cross-layer path needed 41 instead of 18 bytes per
+segment pair for 16 house grids below <span class="arithmatex">\(h_1\)</span>, and had no row blocks; one
+LAPACK solve per quadrature node took half the time of the path before
+the closed-form elimination.</p>
+</details>
+<details class="note">
+<summary>Rods through the interface (finding 10.15, audits A2S-01, A3S-01)</summary>
+<p>Up to 0.15.0 one uniform density ran across the interface, which put a
+12 m rod through <span class="arithmatex">\(h_1 = 5\)</span> m in 1000 / 30 Ω·m soil 566 % above the
+per-segment <code>mom</code> solution (<code>tests/test_cross_layer_owners.py</code>); since
+2026.11 the electrode is one owner per layer (finding 10.15).</p>
+<p>Earlier in 2026.11, cuts that would leave a piece shorter than the wire
+diameter were dropped, which ignored the contact with the other layer:
+a 4.5 m rod in 1000 / 30 Ω·m read 195.0 Ω with its tip 15.9 mm into the
+lower layer and 128.6 Ω at 16.1 mm (second adversarial audit, A2S-01).</p>
+<p>The default regularisation of <code>layered_green</code> clamps the closed-form
+<span class="arithmatex">\(1/R\)</span> terms at <span class="arithmatex">\(h_1/200\)</span> (25 mm for <span class="arithmatex">\(h_1 = 5\)</span> m). On the diagonal it
+took 68–84 % of the layered correction of every piece within <span class="arithmatex">\(h_1/400\)</span>
+of the interface: a ring of radius 3 m at <span class="arithmatex">\(h_1 = 5\)</span> m read −5.29 Ω, and
+the contact values of a rod tip were 10–32 % low (third adversarial
+audit, A3S-01). The diagonal is now evaluated at the wire radius.</p>
+</details>
+<details class="note">
+<summary>Horizontal wires next to the interface (audits W4A-07, W4R2A-04)</summary>
+<p>The ring next to a layer 33 times more conductive was measured against
+the solid torus of the axisymmetric <code>fem</code> in audit W4A-07; the reach of
+the interface, 3.9 radii at that contrast, comes from audit W4R2A-04.</p>
+</details>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 Christian Ehlert
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/Ce1ectric/groundfield" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.instant", "navigation.tabs", "navigation.sections", "navigation.top", "navigation.indexes", "content.code.copy", "content.code.annotate", "toc.follow", "search.highlight", "search.share"], "search": "../../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"alias": true, "default": "latest", "provider": "mike"}}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
+      
+        <script src="../../../javascripts/mathjax.js"></script>
+      
+        <script src="../../../javascripts/vendor/mathjax/tex-mml-chtml.js"></script>
+      
+    
+  <script data-mkdocs-jupyter-mathjax="{&quot;url&quot;: &quot;javascripts/vendor/mathjax/tex-mml-chtml.js&quot;, &quot;version&quot;: 3}">
+/* Shared by full pages and Material's instant navigation. */
+(() => {
+  const config = JSON.parse(document.currentScript.dataset.mkdocsJupyterMathjax);
+  if (window.mkdocsJupyterMathJax) return;
+
+  let loading;
+  let queue = Promise.resolve();
+  let previous = [];
+
+  const ready = async () => {
+    if (!loading) {
+      loading = (async () => {
+        let math = window.MathJax;
+        if (!math?.typesetPromise) {
+          const url = new URL(config.url, document.baseURI).href;
+          const existing = Array.from(document.scripts).find(script =>
+            script.src && (script.src === url || script.id === 'MathJax-script' ||
+              (/mathjax/i.test(script.src) &&
+               /\/(?:MathJax|latest|(?:tex|mml)(?:-mml)?-(?:chtml|svg))\.js(?:[?#]|$)/i.test(script.src))));
+          if (existing) {
+            if (!math?.startup?.promise) {
+              await new Promise((resolve, reject) => {
+                existing.addEventListener('load', resolve, { once: true });
+                existing.addEventListener('error', reject, { once: true });
+              });
+            }
+          } else {
+            // Keep site macros, delimiters and startup hooks when supplied.
+            const options = math || {};
+            window.MathJax = {
+              ...options,
+              loader: {
+                ...options.loader,
+                load: Array.from(new Set(['ui/safe', ...(options.loader?.load || [])]))
+              },
+              startup: { typeset: false, ...options.startup },
+              tex: {
+                tags: 'ams',
+                useLabelIds: true,
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                processEscapes: true,
+                processEnvironments: true,
+                ...options.tex
+              }
+            };
+            await new Promise((resolve, reject) => {
+              const script = document.createElement('script');
+              script.src = config.url;
+              script.id = 'MathJax-script';
+              script.async = true;
+              script.onload = resolve;
+              script.onerror = reject;
+              document.head.appendChild(script);
+            });
+          }
+        }
+        math = window.MathJax;
+        await math.startup.promise;
+        return math;
+      })();
+    }
+    const math = await loading;
+    // A site owner can extend the v3 queue again on each navigation.
+    await math.startup.promise;
+    return math;
+  };
+
+  const unrendered = node => {
+    if (node.matches('mjx-container')) return [];
+    if (!node.querySelector('mjx-container')) return [node];
+    // In v3, scanning generated assistive MathML again produces nested output.
+    return Array.from(node.children).flatMap(unrendered);
+  };
+
+  const refresh = () => {
+    // A separate chain also serializes v3, without changing v4's startup promise.
+    queue = queue.then(async () => {
+      const notebooks = Array.from(document.querySelectorAll('.jupyter-wrapper'));
+      if (!notebooks.length && !previous.length) return;
+      if (notebooks.length === previous.length &&
+          notebooks.every((node, index) => node === previous[index])) return;
+      const math = await ready();
+      if (previous.length) {
+        math.typesetClear(previous);
+        math.texReset();
+      }
+      previous = notebooks.filter(node => node.isConnected);
+      const pending = previous.flatMap(unrendered);
+      if (pending.length) await math.typesetPromise(pending);
+    }).catch(error => console.error('mkdocs-jupyter: MathJax rendering failed', error));
+    return queue;
+  };
+
+  window.mkdocsJupyterMathJax = { refresh };
+  const start = () => {
+    if (typeof document$ !== 'undefined') document$.subscribe(refresh);
+    else refresh();
+  };
+  // Theme bundles and user-provided MathJax scripts can follow notebook content.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start, { once: true });
+  } else start();
+})();
+
+</script>
+</body>
+</html>
